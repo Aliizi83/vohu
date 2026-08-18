@@ -3,7 +3,7 @@ package logging
 import (
 	"sync"
 
-	"github.com/Aliizi83/vohu/internal/config"
+	"github.com/Aliizi83/vohu/config"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
