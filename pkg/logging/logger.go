@@ -1,6 +1,6 @@
 package logging
 
-import "github.com/Aliizi83/vohu/internal/config"
+import "github.com/Aliizi83/vohu/config"
 
 type Logger interface {
 	Init()

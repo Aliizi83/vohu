@@ -3,7 +3,7 @@ package logging
 import (
 	"os"
 
-	"github.com/Aliizi83/vohu/internal/config"
+	"github.com/Aliizi83/vohu/config"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/pkgerrors"
 )
