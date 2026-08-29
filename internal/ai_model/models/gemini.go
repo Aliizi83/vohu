@@ -5,14 +5,14 @@ import (
 	"maps"
 
 	"github.com/Aliizi83/vohu/internal/ai_model"
-	"github.com/google/uuid"
 	"google.golang.org/genai"
 )
 
 type ModelName string
 
 const (
-	GeminiFlash ModelName = "gemini-3.7-flash"
+	GeminiFlash      ModelName = "gemini-3.7-flash"
+	GeminiFlashLight35 ModelName = "gemini-3.5-flash-lite"
 )
 
 type GeminiAgent struct {
@@ -66,6 +66,7 @@ func (agent *GeminiAgent) Chat(
 
 	for _, message := range request.Messages {
 
+		// Normal text message
 		if message.Content != "" {
 
 			var role genai.Role
@@ -83,53 +84,65 @@ func (agent *GeminiAgent) Chat(
 			)
 		}
 
-		// Tool calls
 		if message.ToolCalls != nil && len(*message.ToolCalls) > 0 {
+
+			parts := make([]*genai.Part, 0, len(*message.ToolCalls))
 
 			for _, call := range *message.ToolCalls {
 
-				id := uuid.New().String()
+				var thoughtSignature []byte
 
-				contents = append(
-					contents,
-					&genai.Content{
-						Role: genai.RoleModel,
-						Parts: []*genai.Part{
-							{
-								FunctionCall: &genai.FunctionCall{
-									ID:   id,
-									Name: call.Name,
-									Args: call.Arguments,
-								},
-							},
-						},
+				if call.Metadata != nil {
+					if googleMetadata, ok := call.Metadata["google"].(map[string]any); ok {
+						if signature, ok := googleMetadata["thought_signature"].([]byte); ok {
+							thoughtSignature = signature
+						}
+					}
+				}
+
+				parts = append(parts, &genai.Part{
+					FunctionCall: &genai.FunctionCall{
+						ID:   call.ID,
+						Name: call.Name,
+						Args: call.Arguments,
 					},
-				)
+					ThoughtSignature: thoughtSignature,
+				})
 			}
+
+			contents = append(
+				contents,
+				&genai.Content{
+					Role:  genai.RoleModel,
+					Parts: parts,
+				},
+			)
 		}
 
-		// Tool results
 		if message.ToolResults != nil && len(*message.ToolResults) > 0 {
+
+			parts := make([]*genai.Part, 0, len(*message.ToolResults))
 
 			for _, result := range *message.ToolResults {
 
-				contents = append(
-					contents,
-					&genai.Content{
-						Role: genai.RoleUser,
-						Parts: []*genai.Part{
-							{
-								FunctionResponse: &genai.FunctionResponse{
-									Name: result.Name,
-									Response: map[string]any{
-										"result": result.Result,
-									},
-								},
-							},
+				parts = append(parts, &genai.Part{
+					FunctionResponse: &genai.FunctionResponse{
+						ID:   result.ToolCallID,
+						Name: result.Name,
+						Response: map[string]any{
+							"result": result.Result,
 						},
 					},
-				)
+				})
 			}
+
+			contents = append(
+				contents,
+				&genai.Content{
+					Role:  genai.RoleUser,
+					Parts: parts,
+				},
+			)
 		}
 	}
 
@@ -143,7 +156,6 @@ func (agent *GeminiAgent) Chat(
 		contents,
 		config,
 	)
-
 	if err != nil {
 		return response, err
 	}
@@ -163,15 +175,22 @@ func (agent *GeminiAgent) Chat(
 			if part.FunctionCall != nil {
 
 				args := make(map[string]any)
-
 				maps.Copy(args, part.FunctionCall.Args)
+
+				toolCall := ai_model.ToolCall{
+					ID:        part.FunctionCall.ID,
+					Name:      part.FunctionCall.Name,
+					Arguments: args,
+					Metadata: map[string]any{
+						"google": map[string]any{
+							"thought_signature": part.ThoughtSignature,
+						},
+					},
+				}
 
 				response.ToolCalls = append(
 					response.ToolCalls,
-					ai_model.ToolCall{
-						Name:      part.FunctionCall.Name,
-						Arguments: args,
-					},
+					toolCall,
 				)
 			}
 		}
