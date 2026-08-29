@@ -10,6 +10,7 @@ import (
 
 	"github.com/Aliizi83/vohu/internal/ai_model"
 	"github.com/Aliizi83/vohu/internal/ai_model/models"
+	"github.com/Aliizi83/vohu/internal/tools"
 )
 
 func main() {
@@ -22,10 +23,16 @@ func main() {
 
 	agent := models.NewGeminiAgent(
 		apiKey,
-		models.GeminiFlash,
 	)
 
 	messages := make([]ai_model.Message, 0)
+
+	toolDefinitions := []ai_model.ToolDefinition{
+		{
+			Name:        "get_current_system_time",
+			Description: "Returns the current system date and time.",
+		},
+	}
 
 	scanner := bufio.NewScanner(os.Stdin)
 
@@ -57,6 +64,8 @@ func main() {
 
 		response, err := agent.Chat(ctx, ai_model.ChatRequest{
 			Messages: messages,
+			Model:    string(models.GeminiFlash),
+			Tools:    toolDefinitions,
 		})
 		if err != nil {
 			fmt.Printf("Error: %v\n\n", err)
@@ -69,6 +78,46 @@ func main() {
 			Role:    "assistant",
 			Content: response.Content,
 		})
+
+		for _, call := range response.ToolCalls {
+
+			currentTime := &tools.CurrentSystemTime{}
+
+			if call.Name != currentTime.Name() {
+				fmt.Printf("Unknown tool: %s\n", call.Name)
+				continue
+			}
+
+			result, err := currentTime.Execute(
+				ctx,
+				call.Arguments,
+			)
+
+			if err != nil {
+				fmt.Printf("Tool error: %v\n", err)
+				continue
+			}
+
+			fmt.Printf("Tool result: %v\n", result)
+
+			// Add assistant tool call to conversation
+			messages = append(messages, ai_model.Message{
+				Role: "assistant",
+				ToolCalls: &[]ai_model.ToolCall{
+					call,
+				},
+			})
+
+			// Add tool result to conversation
+			messages = append(messages, ai_model.Message{
+				Role: "tool",
+				ToolResults: &[]ai_model.ToolResult{
+					{ToolCallID: call.ID, Name: call.Name, Result: result},
+				},
+			})
+		}
+
+		fmt.Println()
 	}
 
 	if err := scanner.Err(); err != nil {
