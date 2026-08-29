@@ -13,8 +13,8 @@ type ChatRequest struct {
 }
 
 type Message struct {
-	Role       string
-	Content    string
+	Role        string
+	Content     string
 	ToolCalls   *[]ToolCall
 	ToolResults *[]ToolResult
 }
@@ -34,6 +34,7 @@ type ToolCall struct {
 	ID        string         `json:"id"`
 	Name      string         `json:"name"`
 	Arguments map[string]any `json:"arguments"`
+	Metadata  map[string]any `json:"metadata"`
 }
 
 type ToolResult struct {

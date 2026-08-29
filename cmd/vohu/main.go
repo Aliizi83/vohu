@@ -21,9 +21,7 @@ func main() {
 		log.Fatal("GEMINI_API_KEY environment variable is not set")
 	}
 
-	agent := models.NewGeminiAgent(
-		apiKey,
-	)
+	agent := models.NewGeminiAgent(apiKey)
 
 	messages := make([]ai_model.Message, 0)
 
@@ -62,62 +60,98 @@ func main() {
 			Content: input,
 		})
 
-		response, err := agent.Chat(ctx, ai_model.ChatRequest{
-			Messages: messages,
-			Model:    string(models.GeminiFlash),
-			Tools:    toolDefinitions,
-		})
-		if err != nil {
-			fmt.Printf("Error: %v\n\n", err)
-			continue
-		}
-
-		fmt.Printf("Gemini: %s\n\n", response.Content)
-
-		messages = append(messages, ai_model.Message{
-			Role:    "assistant",
-			Content: response.Content,
-		})
-
-		for _, call := range response.ToolCalls {
-
-			currentTime := &tools.CurrentSystemTime{}
-
-			if call.Name != currentTime.Name() {
-				fmt.Printf("Unknown tool: %s\n", call.Name)
-				continue
-			}
-
-			result, err := currentTime.Execute(
-				ctx,
-				call.Arguments,
-			)
-
+		// Agent loop
+		for {
+			response, err := agent.Chat(ctx, ai_model.ChatRequest{
+				Messages: messages,
+				Model:    string(models.GeminiFlashLight35),
+				Tools:    toolDefinitions,
+			})
 			if err != nil {
-				fmt.Printf("Tool error: %v\n", err)
-				continue
+				fmt.Printf("Error: %v\n\n", err)
+				break
 			}
 
-			fmt.Printf("Tool result: %v\n", result)
+			if len(response.ToolCalls) == 0 {
 
-			// Add assistant tool call to conversation
+				fmt.Printf("Gemini: %s\n\n", response.Content)
+
+				messages = append(messages, ai_model.Message{
+					Role:    "assistant",
+					Content: response.Content,
+				})
+
+				break
+			}
+
 			messages = append(messages, ai_model.Message{
-				Role: "assistant",
-				ToolCalls: &[]ai_model.ToolCall{
-					call,
-				},
+				Role:      "assistant",
+				ToolCalls: &response.ToolCalls,
 			})
 
-			// Add tool result to conversation
-			messages = append(messages, ai_model.Message{
-				Role: "tool",
-				ToolResults: &[]ai_model.ToolResult{
-					{ToolCallID: call.ID, Name: call.Name, Result: result},
-				},
-			})
+			for _, call := range response.ToolCalls {
+
+				currentTime := &tools.CurrentSystemTime{}
+
+				if call.Name != currentTime.Name() {
+					fmt.Printf("Unknown tool: %s\n", call.Name)
+
+					messages = append(messages, ai_model.Message{
+						Role: "tool",
+						ToolResults: &[]ai_model.ToolResult{
+							{
+								ToolCallID: call.ID,
+								Name:       call.Name,
+								Result: fmt.Sprintf(
+									"Unknown tool: %s",
+									call.Name,
+								),
+							},
+						},
+					})
+
+					continue
+				}
+
+				result, err := currentTime.Execute(
+					ctx,
+					call.Arguments,
+				)
+
+				if err != nil {
+					fmt.Printf("Tool error: %v\n", err)
+
+					messages = append(messages, ai_model.Message{
+						Role: "tool",
+						ToolResults: &[]ai_model.ToolResult{
+							{
+								ToolCallID: call.ID,
+								Name:       call.Name,
+								Result: fmt.Sprintf(
+									"Tool execution failed: %v",
+									err,
+								),
+							},
+						},
+					})
+
+					continue
+				}
+
+				fmt.Printf("Tool result: %v\n", result)
+
+				messages = append(messages, ai_model.Message{
+					Role: "tool",
+					ToolResults: &[]ai_model.ToolResult{
+						{
+							ToolCallID: call.ID,
+							Name:       call.Name,
+							Result:     result,
+						},
+					},
+				})
+			}
 		}
-
-		fmt.Println()
 	}
 
 	if err := scanner.Err(); err != nil {
