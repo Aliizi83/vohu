@@ -8,11 +8,15 @@ type LLM interface {
 
 type ChatRequest struct {
 	Messages []Message
+	Model    string
+	Tools    []ToolDefinition
 }
 
 type Message struct {
-	Role    string
-	Content string
+	Role       string
+	Content    string
+	ToolCalls   *[]ToolCall
+	ToolResults *[]ToolResult
 }
 
 type ChatResponse struct {
@@ -21,7 +25,20 @@ type ChatResponse struct {
 	// Usage     Usage
 }
 
+type ToolDefinition struct {
+	Name        string
+	Description string
+}
+
 type ToolCall struct {
-	Name      string
-	Arguments map[string]any
+	ID        string         `json:"id"`
+	Name      string         `json:"name"`
+	Arguments map[string]any `json:"arguments"`
+}
+
+type ToolResult struct {
+	ToolCallID string
+	Name       string
+	Result     any
+	Error      error
 }
