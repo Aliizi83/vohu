@@ -11,6 +11,8 @@ import (
 	"github.com/Aliizi83/vohu/internal/ai_model"
 	"github.com/Aliizi83/vohu/internal/ai_model/models"
 	"github.com/Aliizi83/vohu/internal/tools"
+	"github.com/Aliizi83/vohu/internal/tools/command"
+	"github.com/Aliizi83/vohu/internal/tools/system_tools"
 )
 
 func main() {
@@ -23,14 +25,47 @@ func main() {
 
 	agent := models.NewGeminiAgent(apiKey)
 
-	messages := make([]ai_model.Message, 0)
-
-	toolDefinitions := []ai_model.ToolDefinition{
-		{
-			Name:        "get_current_system_time",
-			Description: "Returns the current system date and time.",
+	policy := command.NewCommandPolicy(
+		command.PolicyModeAccept,
+		[]command.Rule{
+			{
+				Program: "pwd",
+				Allowed: true,
+			},
+			{
+				Program: "ls",
+				Allowed: true,
+			},
+			{
+				Program: "whoami",
+				Allowed: true,
+			},
+			{
+				Program: "git",
+				ArgsPrefixes: [][]string{
+					{"status"},
+					{"log"},
+				},
+				Allowed: true,
+			},
+			{
+				Program: "docker",
+				ArgsPrefixes: [][]string{
+					{"ps"},
+					{"logs"},
+				},
+				Allowed: true,
+			},
 		},
-	}
+	)
+
+	executor := command.NewLocalExecutor(policy)
+
+	toolRegistry := tools.NewRegistry()
+	toolRegistry.Register(system_tools.NewCurrentSystemTime())
+	toolRegistry.Register(command.NewTool(executor))
+
+	messages := make([]ai_model.Message, 0)
 
 	scanner := bufio.NewScanner(os.Stdin)
 
@@ -65,7 +100,7 @@ func main() {
 			response, err := agent.Chat(ctx, ai_model.ChatRequest{
 				Messages: messages,
 				Model:    string(models.GeminiFlashLight35),
-				Tools:    toolDefinitions,
+				Tools:    toolRegistry.Definitions(),
 			})
 			if err != nil {
 				fmt.Printf("Error: %v\n\n", err)
@@ -73,7 +108,6 @@ func main() {
 			}
 
 			if len(response.ToolCalls) == 0 {
-
 				fmt.Printf("Gemini: %s\n\n", response.Content)
 
 				messages = append(messages, ai_model.Message{
@@ -91,9 +125,9 @@ func main() {
 
 			for _, call := range response.ToolCalls {
 
-				currentTime := &tools.CurrentSystemTime{}
+				tool, ok := toolRegistry.Get(call.Name)
 
-				if call.Name != currentTime.Name() {
+				if !ok {
 					fmt.Printf("Unknown tool: %s\n", call.Name)
 
 					messages = append(messages, ai_model.Message{
@@ -113,7 +147,7 @@ func main() {
 					continue
 				}
 
-				result, err := currentTime.Execute(
+				result, err := tool.Execute(
 					ctx,
 					call.Arguments,
 				)
@@ -138,7 +172,7 @@ func main() {
 					continue
 				}
 
-				fmt.Printf("Tool result: %v\n", result)
+				fmt.Printf("Tool result: %+v\n", result)
 
 				messages = append(messages, ai_model.Message{
 					Role: "tool",
@@ -157,4 +191,5 @@ func main() {
 	if err := scanner.Err(); err != nil {
 		log.Printf("input error: %v", err)
 	}
+
 }
