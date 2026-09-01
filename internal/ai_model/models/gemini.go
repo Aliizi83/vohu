@@ -43,13 +43,27 @@ func (agent *GeminiAgent) Chat(
 	var functionDeclarations []*genai.FunctionDeclaration
 
 	for _, tool := range request.Tools {
-		functionDeclarations = append(
-			functionDeclarations,
-			&genai.FunctionDeclaration{
-				Name:        tool.Name,
-				Description: tool.Description,
-			},
-		)
+
+		declaration := &genai.FunctionDeclaration{
+			Name:        tool.Name,
+			Description: tool.Description,
+		}
+
+		if properties := jsonSchemaProperties(tool.Parameters); properties != nil {
+
+			schema := map[string]any{
+				"type":       "object",
+				"properties": properties,
+			}
+
+			if len(tool.Parameters.Required) > 0 {
+				schema["required"] = tool.Parameters.Required
+			}
+
+			declaration.ParametersJsonSchema = schema
+		}
+
+		functionDeclarations = append(functionDeclarations, declaration)
 	}
 
 	var geminiTools []*genai.Tool

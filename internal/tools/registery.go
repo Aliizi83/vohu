@@ -38,6 +38,7 @@ func (r *Registry) Definitions() []ai_model.ToolDefinition {
 		result = append(result, ai_model.ToolDefinition{
 			Name:        tool.Name(),
 			Description: tool.Description(),
+			Parameters:  tool.Parameters(),
 		})
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/Aliizi83/vohu/internal/ai_model"
 	"github.com/Aliizi83/vohu/internal/tools"
 )
 
@@ -23,6 +24,23 @@ func (t *Tool) Name() string {
 
 func (t *Tool) Description() string {
 	return "Execute an operating system command."
+}
+
+func (t *Tool) Parameters() ai_model.ToolParameters {
+	return ai_model.ToolParameters{
+		Properties: map[string]ai_model.ToolProperty{
+			"program": {
+				Type:        "string",
+				Description: "The program or executable to run, e.g. \"git\" or \"ls\".",
+			},
+			"args": {
+				Type:        "array",
+				Description: "Arguments to pass to the program, e.g. [\"status\"] for \"git status\".",
+				Items:       &ai_model.ToolProperty{Type: "string"},
+			},
+		},
+		Required: []string{"program"},
+	}
 }
 
 func (t *Tool) Execute(

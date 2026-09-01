@@ -36,6 +36,18 @@ type ChatResponse struct {
 type ToolDefinition struct {
 	Name        string
 	Description string
+	Parameters  ToolParameters
+}
+
+type ToolParameters struct {
+	Properties map[string]ToolProperty
+	Required   []string
+}
+
+type ToolProperty struct {
+	Type        string
+	Description string
+	Items *ToolProperty
 }
 
 type ToolCall struct {

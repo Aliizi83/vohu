@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/Aliizi83/vohu/internal/ai_model"
 	"github.com/Aliizi83/vohu/internal/tools"
 )
 
@@ -22,6 +23,10 @@ func (t *CurrentSystemTime) Name() string {
 
 func (t *CurrentSystemTime) Description() string {
 	return toolDescription
+}
+
+func (t *CurrentSystemTime) Parameters() ai_model.ToolParameters {
+	return ai_model.ToolParameters{}
 }
 
 func (t *CurrentSystemTime) Execute(
