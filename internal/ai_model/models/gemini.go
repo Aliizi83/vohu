@@ -71,7 +71,7 @@ func (agent *GeminiAgent) Chat(
 
 			var role genai.Role
 
-			if message.Role == "assistant" {
+			if message.Role == ai_model.RoleAssistant {
 				role = genai.RoleModel
 			}
 
