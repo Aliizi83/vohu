@@ -186,7 +186,13 @@ func main() {
 
 		turnStart := len(messages)
 
-		updated, err := vohuAgent.Run(ctx, messages)
+		fmt.Print("Assistant: ")
+
+		updated, err := vohuAgent.Run(ctx, messages, func(chunk string) {
+			fmt.Print(chunk)
+		})
+		fmt.Println()
+
 		if err != nil {
 			fmt.Printf("Error: %v\n\n", err)
 			continue
@@ -194,15 +200,13 @@ func main() {
 
 		messages = updated
 
+		fmt.Println()
+
 		for _, m := range messages[turnStart:] {
-			switch {
-			case m.Role == ai_model.RoleTool && m.ToolResults != nil:
+			if m.Role == ai_model.RoleTool && m.ToolResults != nil {
 				for _, result := range *m.ToolResults {
 					fmt.Printf("Tool result: %+v\n", result.Result)
 				}
-
-			case m.Role == ai_model.RoleAssistant && m.ToolCalls == nil:
-				fmt.Printf("Assistant: %s\n\n", m.Content)
 			}
 		}
 	}

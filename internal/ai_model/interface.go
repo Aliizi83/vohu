@@ -4,6 +4,13 @@ import "context"
 
 type LLM interface {
 	Chat(ctx context.Context, request ChatRequest) (ChatResponse, error)
+
+	// StreamChat behaves like Chat, but calls onChunk with each piece of
+	// assistant text as it arrives instead of only returning the final
+	// response once the model is done. onChunk is never called with tool
+	// call data — the returned ChatResponse still carries the complete,
+	// assembled ToolCalls once streaming finishes.
+	StreamChat(ctx context.Context, request ChatRequest, onChunk func(text string)) (ChatResponse, error)
 }
 
 type ChatRequest struct {
@@ -47,7 +54,7 @@ type ToolParameters struct {
 type ToolProperty struct {
 	Type        string
 	Description string
-	Items *ToolProperty
+	Items       *ToolProperty
 }
 
 type ToolCall struct {
