@@ -40,19 +40,19 @@ func (a *Agent) Run(
 
 		if len(response.ToolCalls) == 0 {
 			return append(messages, ai_model.Message{
-				Role:    "assistant",
+				Role:    ai_model.RoleAssistant,
 				Content: response.Content,
 			}), nil
 		}
 
 		messages = append(messages, ai_model.Message{
-			Role:      "assistant",
+			Role:      ai_model.RoleAssistant,
 			ToolCalls: &response.ToolCalls,
 		})
 
 		for _, call := range response.ToolCalls {
 			messages = append(messages, ai_model.Message{
-				Role:        "tool",
+				Role:        ai_model.RoleTool,
 				ToolResults: &[]ai_model.ToolResult{a.executeTool(ctx, call)},
 			})
 		}

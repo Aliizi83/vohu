@@ -12,8 +12,16 @@ type ChatRequest struct {
 	Tools    []ToolDefinition
 }
 
+type Role string
+
+const (
+	RoleUser      Role = "user"
+	RoleAssistant Role = "assistant"
+	RoleTool      Role = "tool"
+)
+
 type Message struct {
-	Role        string
+	Role        Role
 	Content     string
 	ToolCalls   *[]ToolCall
 	ToolResults *[]ToolResult
