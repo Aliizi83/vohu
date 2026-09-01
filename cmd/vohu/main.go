@@ -89,36 +89,61 @@ func main() {
 
 	llm := newLLM(choice)
 
+	// TESTING ONLY: prohibited-mode (deny-list) policy — everything is
+	// allowed except what's explicitly blocked below. Switch back to
+	// PolicyModeAccept (allow-list) before using this for anything beyond
+	// local, throwaway testing.
 	policy := command.NewCommandPolicy(
-		command.PolicyModeAccept,
+		command.PolicyModeProhibited,
 		[]command.Rule{
-			{
-				Program: "pwd",
-				Allowed: true,
-			},
-			{
-				Program: "ls",
-				Allowed: true,
-			},
-			{
-				Program: "whoami",
-				Allowed: true,
-			},
+			{Program: "rm", Allowed: false},
+			{Program: "rmdir", Allowed: false},
+			{Program: "dd", Allowed: false},
+			{Program: "mkfs", Allowed: false},
+			{Program: "fdisk", Allowed: false},
+			{Program: "parted", Allowed: false},
+			{Program: "shutdown", Allowed: false},
+			{Program: "reboot", Allowed: false},
+			{Program: "poweroff", Allowed: false},
+			{Program: "halt", Allowed: false},
+			{Program: "init", Allowed: false},
+			{Program: "systemctl", Allowed: false},
+			{Program: "service", Allowed: false},
+			{Program: "kill", Allowed: false},
+			{Program: "killall", Allowed: false},
+			{Program: "pkill", Allowed: false},
+			{Program: "passwd", Allowed: false},
+			{Program: "useradd", Allowed: false},
+			{Program: "userdel", Allowed: false},
+			{Program: "usermod", Allowed: false},
+			{Program: "groupadd", Allowed: false},
+			{Program: "groupdel", Allowed: false},
+			{Program: "chown", Allowed: false},
+			{Program: "chmod", Allowed: false},
+			{Program: "iptables", Allowed: false},
+			{Program: "ufw", Allowed: false},
+			{Program: "crontab", Allowed: false},
+			{Program: "sudo", Allowed: false},
+			{Program: "su", Allowed: false},
+			{Program: "visudo", Allowed: false},
 			{
 				Program: "git",
 				ArgsPrefixes: [][]string{
-					{"status"},
-					{"log"},
+					{"push", "--force"},
+					{"push", "-f"},
+					{"reset", "--hard"},
+					{"clean", "-f"},
 				},
-				Allowed: true,
+				Allowed: false,
 			},
 			{
 				Program: "docker",
 				ArgsPrefixes: [][]string{
-					{"ps"},
-					{"logs"},
+					{"rm"},
+					{"rmi"},
+					{"system", "prune"},
 				},
-				Allowed: true,
+				Allowed: false,
 			},
 		},
 	)

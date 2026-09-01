@@ -41,9 +41,17 @@ func (agent *AnthropicAgent) Chat(
 	var tools []anthropic.ToolUnionParam
 
 	for _, tool := range request.Tools {
+
 		toolParam := anthropic.ToolParam{
 			Name:        tool.Name,
 			Description: anthropic.String(tool.Description),
+		}
+
+		if properties := jsonSchemaProperties(tool.Parameters); properties != nil {
+			toolParam.InputSchema = anthropic.ToolInputSchemaParam{
+				Properties: properties,
+				Required:   tool.Parameters.Required,
+			}
 		}
 
 		tools = append(
@@ -94,7 +102,6 @@ func (agent *AnthropicAgent) Chat(
 
 	return response, nil
 }
-
 
 func buildAnthropicMessages(
 	messages []ai_model.Message,
