@@ -38,9 +38,85 @@ func (agent *AnthropicAgent) Chat(
 		option.WithAPIKey(agent.ApiKey),
 	)
 
+	messages, err := buildAnthropicMessages(request.Messages)
+	if err != nil {
+		return response, err
+	}
+
+	result, err := client.Messages.New(ctx, anthropic.MessageNewParams{
+		Model:     request.Model,
+		MaxTokens: anthropicMaxTokens,
+		Messages:  messages,
+		Tools:     buildAnthropicTools(request.Tools),
+	})
+	if err != nil {
+		return response, err
+	}
+
+	if err := accumulateAnthropicResponse(&response, result.Content); err != nil {
+		return response, err
+	}
+
+	return response, nil
+}
+
+func (agent *AnthropicAgent) StreamChat(
+	ctx context.Context,
+	request ai_model.ChatRequest,
+	onChunk func(text string),
+) (ai_model.ChatResponse, error) {
+
+	var response ai_model.ChatResponse
+
+	client := anthropic.NewClient(
+		option.WithAPIKey(agent.ApiKey),
+	)
+
+	messages, err := buildAnthropicMessages(request.Messages)
+	if err != nil {
+		return response, err
+	}
+
+	stream := client.Messages.NewStreaming(ctx, anthropic.MessageNewParams{
+		Model:     request.Model,
+		MaxTokens: anthropicMaxTokens,
+		Messages:  messages,
+		Tools:     buildAnthropicTools(request.Tools),
+	})
+
+	message := anthropic.Message{}
+
+	for stream.Next() {
+
+		event := stream.Current()
+
+		if err := message.Accumulate(event); err != nil {
+			return response, err
+		}
+
+		if delta, ok := event.AsAny().(anthropic.ContentBlockDeltaEvent); ok {
+			if delta.Delta.Text != "" && onChunk != nil {
+				onChunk(delta.Delta.Text)
+			}
+		}
+	}
+
+	if err := stream.Err(); err != nil {
+		return response, err
+	}
+
+	if err := accumulateAnthropicResponse(&response, message.Content); err != nil {
+		return response, err
+	}
+
+	return response, nil
+}
+
+func buildAnthropicTools(definitions []ai_model.ToolDefinition) []anthropic.ToolUnionParam {
+
 	var tools []anthropic.ToolUnionParam
 
-	for _, tool := range request.Tools {
+	for _, tool := range definitions {
 
 		toolParam := anthropic.ToolParam{
 			Name:        tool.Name,
@@ -60,22 +136,18 @@ func (agent *AnthropicAgent) Chat(
 		)
 	}
 
-	messages, err := buildAnthropicMessages(request.Messages)
-	if err != nil {
-		return response, err
-	}
+	return tools
+}
 
-	result, err := client.Messages.New(ctx, anthropic.MessageNewParams{
-		Model:     request.Model,
-		MaxTokens: anthropicMaxTokens,
-		Messages:  messages,
-		Tools:     tools,
-	})
-	if err != nil {
-		return response, err
-	}
+// accumulateAnthropicResponse folds a message's content blocks (from either
+// the non-streaming response or the fully-accumulated streamed message)
+// into response.
+func accumulateAnthropicResponse(
+	response *ai_model.ChatResponse,
+	content []anthropic.ContentBlockUnion,
+) error {
 
-	for _, block := range result.Content {
+	for _, block := range content {
 		switch variant := block.AsAny().(type) {
 
 		case anthropic.TextBlock:
@@ -86,7 +158,7 @@ func (agent *AnthropicAgent) Chat(
 			args := make(map[string]any)
 
 			if err := json.Unmarshal(variant.Input, &args); err != nil {
-				return response, err
+				return err
 			}
 
 			response.ToolCalls = append(
@@ -100,7 +172,7 @@ func (agent *AnthropicAgent) Chat(
 		}
 	}
 
-	return response, nil
+	return nil
 }
 
 func buildAnthropicMessages(

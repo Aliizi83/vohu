@@ -11,7 +11,7 @@ import (
 type ModelName string
 
 const (
-	GeminiFlash      ModelName = "gemini-3.7-flash"
+	GeminiFlash        ModelName = "gemini-3.7-flash"
 	GeminiFlashLight35 ModelName = "gemini-3.5-flash-lite"
 )
 
@@ -40,9 +40,70 @@ func (agent *GeminiAgent) Chat(
 		return response, err
 	}
 
+	config := &genai.GenerateContentConfig{
+		Tools: buildGeminiTools(request.Tools),
+	}
+
+	contents := buildGeminiContents(request.Messages)
+
+	result, err := client.Models.GenerateContent(
+		ctx,
+		request.Model,
+		contents,
+		config,
+	)
+	if err != nil {
+		return response, err
+	}
+
+	accumulateGeminiResponse(&response, result, nil)
+
+	return response, nil
+}
+
+func (agent *GeminiAgent) StreamChat(
+	ctx context.Context,
+	request ai_model.ChatRequest,
+	onChunk func(text string),
+) (ai_model.ChatResponse, error) {
+
+	var response ai_model.ChatResponse
+
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey:  agent.ApiKey,
+		Backend: genai.BackendGeminiAPI,
+	})
+	if err != nil {
+		return response, err
+	}
+
+	config := &genai.GenerateContentConfig{
+		Tools: buildGeminiTools(request.Tools),
+	}
+
+	contents := buildGeminiContents(request.Messages)
+
+	for chunk, err := range client.Models.GenerateContentStream(
+		ctx,
+		request.Model,
+		contents,
+		config,
+	) {
+		if err != nil {
+			return response, err
+		}
+
+		accumulateGeminiResponse(&response, chunk, onChunk)
+	}
+
+	return response, nil
+}
+
+func buildGeminiTools(definitions []ai_model.ToolDefinition) []*genai.Tool {
+
 	var functionDeclarations []*genai.FunctionDeclaration
 
-	for _, tool := range request.Tools {
+	for _, tool := range definitions {
 
 		declaration := &genai.FunctionDeclaration{
 			Name:        tool.Name,
@@ -66,19 +127,22 @@ func (agent *GeminiAgent) Chat(
 		functionDeclarations = append(functionDeclarations, declaration)
 	}
 
-	var geminiTools []*genai.Tool
-
-	if len(functionDeclarations) > 0 {
-		geminiTools = []*genai.Tool{
-			{
-				FunctionDeclarations: functionDeclarations,
-			},
-		}
+	if len(functionDeclarations) == 0 {
+		return nil
 	}
+
+	return []*genai.Tool{
+		{
+			FunctionDeclarations: functionDeclarations,
+		},
+	}
+}
+
+func buildGeminiContents(messages []ai_model.Message) []*genai.Content {
 
 	var contents []*genai.Content
 
-	for _, message := range request.Messages {
+	for _, message := range messages {
 
 		// Normal text message
 		if message.Content != "" {
@@ -160,19 +224,18 @@ func (agent *GeminiAgent) Chat(
 		}
 	}
 
-	config := &genai.GenerateContentConfig{
-		Tools: geminiTools,
-	}
+	return contents
+}
 
-	result, err := client.Models.GenerateContent(
-		ctx,
-		request.Model,
-		contents,
-		config,
-	)
-	if err != nil {
-		return response, err
-	}
+// accumulateGeminiResponse folds one GenerateContentResponse (the whole
+// response in the non-streaming case, or a single chunk when streaming)
+// into response. onChunk, if non-nil, is called with each piece of text as
+// it's encountered.
+func accumulateGeminiResponse(
+	response *ai_model.ChatResponse,
+	result *genai.GenerateContentResponse,
+	onChunk func(text string),
+) {
 
 	for _, candidate := range result.Candidates {
 
@@ -184,6 +247,10 @@ func (agent *GeminiAgent) Chat(
 
 			if part.Text != "" {
 				response.Content += part.Text
+
+				if onChunk != nil {
+					onChunk(part.Text)
+				}
 			}
 
 			if part.FunctionCall != nil {
@@ -191,24 +258,20 @@ func (agent *GeminiAgent) Chat(
 				args := make(map[string]any)
 				maps.Copy(args, part.FunctionCall.Args)
 
-				toolCall := ai_model.ToolCall{
-					ID:        part.FunctionCall.ID,
-					Name:      part.FunctionCall.Name,
-					Arguments: args,
-					Metadata: map[string]any{
-						"google": map[string]any{
-							"thought_signature": part.ThoughtSignature,
-						},
-					},
-				}
-
 				response.ToolCalls = append(
 					response.ToolCalls,
-					toolCall,
+					ai_model.ToolCall{
+						ID:        part.FunctionCall.ID,
+						Name:      part.FunctionCall.Name,
+						Arguments: args,
+						Metadata: map[string]any{
+							"google": map[string]any{
+								"thought_signature": part.ThoughtSignature,
+							},
+						},
+					},
 				)
 			}
 		}
 	}
-
-	return response, nil
 }
