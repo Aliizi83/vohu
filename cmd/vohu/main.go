@@ -21,6 +21,7 @@ type modelOption struct {
 	label    string
 	provider string
 	model    string
+	baseURL  string
 }
 
 var modelOptions = []modelOption{
@@ -29,14 +30,21 @@ var modelOptions = []modelOption{
 	{label: "Claude Opus 5", provider: "anthropic", model: string(models.ClaudeOpus5)},
 	{label: "Claude Sonnet 5", provider: "anthropic", model: string(models.ClaudeSonnet5)},
 	{label: "Claude Haiku 4.5", provider: "anthropic", model: string(models.ClaudeHaiku45)},
+	{label: "OpenAI-compatible (custom URL + model)", provider: "openai-compatible"},
 }
 
 func chooseModel(scanner *bufio.Scanner) modelOption {
 	fmt.Println("Which model would you like to use?")
 
 	for i, option := range modelOptions {
-		fmt.Printf("  %d. %s (%s)\n", i+1, option.label, option.model)
+		if option.model != "" {
+			fmt.Printf("  %d. %s (%s)\n", i+1, option.label, option.model)
+		} else {
+			fmt.Printf("  %d. %s\n", i+1, option.label)
+		}
 	}
+
+	var choice modelOption
 
 	for {
 		fmt.Print("Choice: ")
@@ -45,16 +53,38 @@ func chooseModel(scanner *bufio.Scanner) modelOption {
 			log.Fatal("no model selected")
 		}
 
-		choice := strings.TrimSpace(scanner.Text())
+		input := strings.TrimSpace(scanner.Text())
 
-		index, err := strconv.Atoi(choice)
+		index, err := strconv.Atoi(input)
 		if err != nil || index < 1 || index > len(modelOptions) {
 			fmt.Printf("Please enter a number between 1 and %d.\n", len(modelOptions))
 			continue
 		}
 
-		return modelOptions[index-1]
+		choice = modelOptions[index-1]
+		break
 	}
+
+	// OpenAI-compatible providers (OpenAI itself, DeepSeek, Groq, a local
+	// Ollama server, ...) all speak the same wire format — they only differ
+	// by base URL and model name, so ask for those directly instead of
+	// hardcoding an entry per provider.
+	if choice.provider == "openai-compatible" {
+		choice.baseURL = promptLine(scanner, "Base URL (leave empty for OpenAI itself): ")
+		choice.model = promptLine(scanner, "Model name (e.g. gpt-4o, deepseek-chat): ")
+	}
+
+	return choice
+}
+
+func promptLine(scanner *bufio.Scanner, prompt string) string {
+	fmt.Print(prompt)
+
+	if !scanner.Scan() {
+		log.Fatal("no input provided")
+	}
+
+	return strings.TrimSpace(scanner.Text())
 }
 
 func newLLM(choice modelOption) ai_model.LLM {
@@ -72,7 +102,24 @@ func newLLM(choice modelOption) ai_model.LLM {
 		if apiKey == "" {
 			log.Fatal("ANTHROPIC_API_KEY environment variable is not set")
 		}
-		return models.NewAnthropicAgent(apiKey)
+		// Optional: only needed if ApiKey is an identity-linked key tied to
+		// an organization with more than one workspace.
+		workspaceID := os.Getenv("ANTHROPIC_WORKSPACE_ID")
+		return models.NewAnthropicAgent(apiKey, workspaceID)
+
+	case "openai":
+		apiKey := os.Getenv("OPENAI_API_KEY")
+		if apiKey == "" {
+			log.Fatal("OPENAI_API_KEY environment variable is not set")
+		}
+		return models.NewOpenAIAgent(apiKey, choice.baseURL)
+
+	case "deepseek":
+		apiKey := os.Getenv("DEEPSEEK_API_KEY")
+		if apiKey == "" {
+			log.Fatal("DEEPSEEK_API_KEY environment variable is not set")
+		}
+		return models.NewOpenAIAgent(apiKey, choice.baseURL)
 
 	default:
 		log.Fatalf("unknown provider: %s", choice.provider)
