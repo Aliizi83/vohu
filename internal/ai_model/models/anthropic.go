@@ -19,12 +19,34 @@ const anthropicMaxTokens = 16000
 
 type AnthropicAgent struct {
 	ApiKey string
+	// WorkspaceID is optional. It's only required when ApiKey is an
+	// identity-linked key tied to an organization with more than one
+	// workspace — Anthropic then needs the anthropic-workspace-id header
+	// to know which workspace the request should act in.
+	WorkspaceID string
 }
 
-func NewAnthropicAgent(apiKey string) *AnthropicAgent {
+func NewAnthropicAgent(apiKey string, workspaceID string) *AnthropicAgent {
 	return &AnthropicAgent{
-		ApiKey: apiKey,
+		ApiKey:      apiKey,
+		WorkspaceID: workspaceID,
 	}
+}
+
+func (agent *AnthropicAgent) newClient() anthropic.Client {
+
+	options := []option.RequestOption{
+		option.WithAPIKey(agent.ApiKey),
+	}
+
+	if agent.WorkspaceID != "" {
+		options = append(
+			options,
+			option.WithHeader("anthropic-workspace-id", agent.WorkspaceID),
+		)
+	}
+
+	return anthropic.NewClient(options...)
 }
 
 func (agent *AnthropicAgent) Chat(
@@ -34,9 +56,7 @@ func (agent *AnthropicAgent) Chat(
 
 	var response ai_model.ChatResponse
 
-	client := anthropic.NewClient(
-		option.WithAPIKey(agent.ApiKey),
-	)
+	client := agent.newClient()
 
 	messages, err := buildAnthropicMessages(request.Messages)
 	if err != nil {
@@ -68,9 +88,7 @@ func (agent *AnthropicAgent) StreamChat(
 
 	var response ai_model.ChatResponse
 
-	client := anthropic.NewClient(
-		option.WithAPIKey(agent.ApiKey),
-	)
+	client := agent.newClient()
 
 	messages, err := buildAnthropicMessages(request.Messages)
 	if err != nil {
