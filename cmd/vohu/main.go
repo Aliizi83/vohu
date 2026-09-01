@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Aliizi83/vohu/internal/agent"
 	"github.com/Aliizi83/vohu/internal/ai_model"
 	"github.com/Aliizi83/vohu/internal/ai_model/models"
 	"github.com/Aliizi83/vohu/internal/tools"
@@ -23,7 +24,7 @@ func main() {
 		log.Fatal("GEMINI_API_KEY environment variable is not set")
 	}
 
-	agent := models.NewGeminiAgent(apiKey)
+	llm := models.NewGeminiAgent(apiKey)
 
 	policy := command.NewCommandPolicy(
 		command.PolicyModeAccept,
@@ -65,6 +66,8 @@ func main() {
 	toolRegistry.Register(system_tools.NewCurrentSystemTime())
 	toolRegistry.Register(command.NewTool(executor))
 
+	vohuAgent := agent.New(llm, toolRegistry, string(models.GeminiFlashLight35))
+
 	messages := make([]ai_model.Message, 0)
 
 	scanner := bufio.NewScanner(os.Stdin)
@@ -95,95 +98,25 @@ func main() {
 			Content: input,
 		})
 
-		// Agent loop
-		for {
-			response, err := agent.Chat(ctx, ai_model.ChatRequest{
-				Messages: messages,
-				Model:    string(models.GeminiFlashLight35),
-				Tools:    toolRegistry.Definitions(),
-			})
-			if err != nil {
-				fmt.Printf("Error: %v\n\n", err)
-				break
-			}
+		turnStart := len(messages)
 
-			if len(response.ToolCalls) == 0 {
-				fmt.Printf("Gemini: %s\n\n", response.Content)
+		updated, err := vohuAgent.Run(ctx, messages)
+		if err != nil {
+			fmt.Printf("Error: %v\n\n", err)
+			continue
+		}
 
-				messages = append(messages, ai_model.Message{
-					Role:    "assistant",
-					Content: response.Content,
-				})
+		messages = updated
 
-				break
-			}
-
-			messages = append(messages, ai_model.Message{
-				Role:      "assistant",
-				ToolCalls: &response.ToolCalls,
-			})
-
-			for _, call := range response.ToolCalls {
-
-				tool, ok := toolRegistry.Get(call.Name)
-
-				if !ok {
-					fmt.Printf("Unknown tool: %s\n", call.Name)
-
-					messages = append(messages, ai_model.Message{
-						Role: "tool",
-						ToolResults: &[]ai_model.ToolResult{
-							{
-								ToolCallID: call.ID,
-								Name:       call.Name,
-								Result: fmt.Sprintf(
-									"Unknown tool: %s",
-									call.Name,
-								),
-							},
-						},
-					})
-
-					continue
+		for _, m := range messages[turnStart:] {
+			switch {
+			case m.Role == "tool" && m.ToolResults != nil:
+				for _, result := range *m.ToolResults {
+					fmt.Printf("Tool result: %+v\n", result.Result)
 				}
 
-				result, err := tool.Execute(
-					ctx,
-					call.Arguments,
-				)
-
-				if err != nil {
-					fmt.Printf("Tool error: %v\n", err)
-
-					messages = append(messages, ai_model.Message{
-						Role: "tool",
-						ToolResults: &[]ai_model.ToolResult{
-							{
-								ToolCallID: call.ID,
-								Name:       call.Name,
-								Result: fmt.Sprintf(
-									"Tool execution failed: %v",
-									err,
-								),
-							},
-						},
-					})
-
-					continue
-				}
-
-				fmt.Printf("Tool result: %+v\n", result)
-
-				messages = append(messages, ai_model.Message{
-					Role: "tool",
-					ToolResults: &[]ai_model.ToolResult{
-						{
-							ToolCallID: call.ID,
-							Name:       call.Name,
-							Result:     result,
-						},
-					},
-				})
+			case m.Role == "assistant" && m.ToolCalls == nil:
+				fmt.Printf("Gemini: %s\n\n", m.Content)
 			}
 		}
 	}
