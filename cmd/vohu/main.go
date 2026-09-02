@@ -22,6 +22,7 @@ type modelOption struct {
 	provider string
 	model    string
 	baseURL  string
+	apiKey   string
 }
 
 var modelOptions = []modelOption{
@@ -67,10 +68,11 @@ func chooseModel(scanner *bufio.Scanner) modelOption {
 
 	// OpenAI-compatible providers (OpenAI itself, DeepSeek, Groq, a local
 	// Ollama server, ...) all speak the same wire format — they only differ
-	// by base URL and model name, so ask for those directly instead of
-	// hardcoding an entry per provider.
+	// by base URL, API key, and model name, so ask for those directly
+	// instead of hardcoding an entry per provider.
 	if choice.provider == "openai-compatible" {
 		choice.baseURL = promptLine(scanner, "Base URL (leave empty for OpenAI itself): ")
+		choice.apiKey = promptLine(scanner, "API key: ")
 		choice.model = promptLine(scanner, "Model name (e.g. gpt-4o, deepseek-chat): ")
 	}
 
@@ -107,19 +109,11 @@ func newLLM(choice modelOption) ai_model.LLM {
 		workspaceID := os.Getenv("ANTHROPIC_WORKSPACE_ID")
 		return models.NewAnthropicAgent(apiKey, workspaceID)
 
-	case "openai":
-		apiKey := os.Getenv("OPENAI_API_KEY")
-		if apiKey == "" {
-			log.Fatal("OPENAI_API_KEY environment variable is not set")
+	case "openai-compatible":
+		if choice.apiKey == "" {
+			log.Fatal("no API key entered")
 		}
-		return models.NewOpenAIAgent(apiKey, choice.baseURL)
-
-	case "deepseek":
-		apiKey := os.Getenv("DEEPSEEK_API_KEY")
-		if apiKey == "" {
-			log.Fatal("DEEPSEEK_API_KEY environment variable is not set")
-		}
-		return models.NewOpenAIAgent(apiKey, choice.baseURL)
+		return models.NewOpenAIAgent(choice.apiKey, choice.baseURL)
 
 	default:
 		log.Fatalf("unknown provider: %s", choice.provider)

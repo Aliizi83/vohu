@@ -14,7 +14,7 @@ import (
 const openAIMaxTokens = 16000
 
 type OpenAIAgent struct {
-	ApiKey string
+	ApiKey  string
 	BaseURL string
 }
 
