@@ -15,5 +15,7 @@ func RegisterRoutes(
 	{
 		users.POST("", requirePermission("user:create"), handler.Create)
 		users.GET("/:id", requirePermission("user:read"), handler.Get)
+		users.PUT("/:id", requirePermission("user:update"), handler.Update)
+		users.DELETE("/:id", requirePermission("user:delete"), handler.Delete)
 	}
 }

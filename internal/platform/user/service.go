@@ -15,6 +15,8 @@ type Service interface {
 	Register(ctx context.Context, req CreateUserRequest) (Response, error)
 	GetByUsername(ctx context.Context, username string) (*User, error)
 	GetByID(ctx context.Context, id uint) (*User, error)
+	Update(ctx context.Context, id uint, req UpdateUserRequest) (Response, error)
+	Delete(ctx context.Context, id uint) error
 }
 
 type service struct {
@@ -60,4 +62,28 @@ func (s *service) GetByUsername(ctx context.Context, username string) (*User, er
 
 func (s *service) GetByID(ctx context.Context, id uint) (*User, error) {
 	return s.repo.FindByID(ctx, id)
+}
+
+func (s *service) Update(ctx context.Context, id uint, req UpdateUserRequest) (Response, error) {
+	u, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return Response{}, err
+	}
+
+	if req.Email != "" {
+		u.Email = req.Email
+	}
+	if req.Enabled != nil {
+		u.Enabled = *req.Enabled
+	}
+
+	if err := s.repo.Update(ctx, u); err != nil {
+		return Response{}, err
+	}
+
+	return toResponse(*u), nil
+}
+
+func (s *service) Delete(ctx context.Context, id uint) error {
+	return s.repo.Delete(ctx, id)
 }

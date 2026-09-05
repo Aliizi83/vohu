@@ -56,3 +56,48 @@ func (h *Handler) Get(c *gin.Context) {
 
 	shared.RespondSuccess(c, http.StatusOK, toResponse(*u))
 }
+
+func (h *Handler) Update(c *gin.Context) {
+	id, err := shared.ParseIDParam(c)
+	if err != nil {
+		shared.RespondError(c, http.StatusBadRequest, shared.ResultValidationError, errors.New("invalid id"))
+		return
+	}
+
+	var req UpdateUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		shared.RespondValidationError(c, err)
+		return
+	}
+
+	res, err := h.service.Update(c.Request.Context(), id, req)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			shared.RespondError(c, http.StatusNotFound, shared.ResultNotFoundError, err)
+			return
+		}
+		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, errors.New("internal error"))
+		return
+	}
+
+	shared.RespondSuccess(c, http.StatusOK, res)
+}
+
+func (h *Handler) Delete(c *gin.Context) {
+	id, err := shared.ParseIDParam(c)
+	if err != nil {
+		shared.RespondError(c, http.StatusBadRequest, shared.ResultValidationError, errors.New("invalid id"))
+		return
+	}
+
+	if err := h.service.Delete(c.Request.Context(), id); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			shared.RespondError(c, http.StatusNotFound, shared.ResultNotFoundError, err)
+			return
+		}
+		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, errors.New("internal error"))
+		return
+	}
+
+	shared.RespondSuccess(c, http.StatusOK, nil)
+}

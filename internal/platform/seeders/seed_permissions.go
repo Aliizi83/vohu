@@ -10,10 +10,37 @@ import (
 // KnownPermissions is every permission key the platform currently defines.
 // New modules add their keys here as they're built, and the default admin
 // role is granted all of them.
+//
+// Two families:
+//   - REST resource permissions, "<resource>:<verb>" — one per enforced
+//     route, verb in {create, read, update, delete, manage}. "manage" is
+//     used for a module (like rbac) whose admin surface isn't yet split
+//     into per-action permissions.
+//   - Shell command permissions, "command:<program>" or
+//     "command:<program>:<subcommand>" — mirroring Vohu's own
+//     command.CommandPolicy allow-list (cmd/vohu/main.go: pwd, ls, whoami,
+//     git status/log, docker ps/logs). Nothing in this base enforces these
+//     yet — no command-execution route exists here — but the keys exist
+//     and are manageable via the rbac API now, ready for when this base
+//     merges with Vohu's agent core and its execute_command tool.
 var KnownPermissions = []string{
+	// user
 	"user:create",
 	"user:read",
+	"user:update",
+	"user:delete",
+
+	// rbac
 	"rbac:manage",
+
+	// shell commands (not yet enforced anywhere in this base)
+	"command:pwd",
+	"command:ls",
+	"command:whoami",
+	"command:git:status",
+	"command:git:log",
+	"command:docker:ps",
+	"command:docker:logs",
 }
 
 func seedPermissions(database *gorm.DB) error {
