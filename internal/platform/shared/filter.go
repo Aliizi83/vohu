@@ -111,11 +111,12 @@ func ApplySort[T any](db *gorm.DB, sorts []SortField) (*gorm.DB, error) {
 // column reference. key is either "FieldName" (a direct field on T) or
 // "Relation.FieldName" (one level of association, e.g. "Role.Name") — in
 // the latter case joinRelation is the Go field name to pass to gorm's
-// Joins(), and the returned column is table-qualified using the
-// association's own TableName() method (every entity already implements
-// one — see e.g. internal/platform/rbac/entity.go), not a guessed plural.
-// Anything that doesn't resolve to a real field/association returns
-// ok=false; the caller skips it rather than ever building SQL from it.
+// Joins(), and the returned column is qualified with that same field name
+// (gorm's Joins("Author") aliases the joined table as "Author", the
+// association's Go field name, not its TableName() — so the WHERE clause
+// has to match that alias). Anything that doesn't resolve to a real
+// field/association returns ok=false; the caller skips it rather than
+// ever building SQL from it.
 func resolveColumn(t reflect.Type, key string) (column string, joinRelation string, ok bool) {
 	before, after, hasDot := strings.Cut(key, ".")
 
@@ -145,23 +146,13 @@ func resolveColumn(t reflect.Type, key string) (column string, joinRelation stri
 		return "", "", false
 	}
 
-	table, tableOk := tableNameOf(relationType)
-	if !tableOk {
-		return "", "", false
-	}
-
-	return table + "." + namingStrategy.ColumnName("", targetField.Name), before, true
-}
-
-func tableNameOf(t reflect.Type) (string, bool) {
-	instance := reflect.New(t).Elem().Interface()
-
-	namer, ok := instance.(interface{ TableName() string })
-	if !ok {
-		return "", false
-	}
-
-	return namer.TableName(), true
+	// gorm's Joins(before) aliases the joined table as the association's Go
+	// field name itself (before), not its TableName() — so the WHERE
+	// clause must qualify with that same alias. before is exactly as safe
+	// to use here as a bare column name: it only ever reaches this line
+	// after t.FieldByName(before) succeeded above, so it can only be one
+	// of T's own real field names, never attacker-controlled text.
+	return before + "." + namingStrategy.ColumnName("", targetField.Name), before, true
 }
 
 func buildCondition(column string, f FieldFilter) (string, []any) {
