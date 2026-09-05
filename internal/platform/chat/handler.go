@@ -180,6 +180,7 @@ func (h *Handler) SendMessage(c *gin.Context) {
 
 	registry := tools.NewRegistry()
 	registry.Register(system_tools.NewCurrentSystemTime())
+	registry.Register(NewListSSHConnectionsTool(userID, h.sshconns, h.canAccess))
 	registry.Register(NewSSHTool(userID, h.sshconns, h.canAccess, h.commandPolicy))
 
 	vohuAgent := agent.New(llm, registry, conv.Model)
