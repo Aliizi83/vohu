@@ -94,6 +94,43 @@ export interface TokenPair {
   refreshTokenExpiresAt: number
 }
 
+export interface ConversationDto {
+  id: number
+  title: string
+  provider: string
+  model: string
+}
+
+export interface ToolCallDto {
+  id: string
+  name: string
+  arguments: Record<string, unknown>
+}
+
+export interface ToolResultDto {
+  toolCallId: string
+  name: string
+  result: unknown
+  error?: string
+}
+
+export interface MessageDto {
+  role: "user" | "assistant" | "tool"
+  content?: string
+  toolCalls?: ToolCallDto[]
+  toolResults?: ToolResultDto[]
+}
+
+export interface SSHConnectionDto {
+  id: number
+  name: string
+  host: string
+  port: number
+  username: string
+  authMethod: "password" | "private_key"
+  createdByUserId: number
+}
+
 export interface UserDto {
   id: number
   username: string
@@ -172,4 +209,96 @@ export const api = {
     update: (id: number, key: string) => request<PermissionDto>("PUT", `/permissions/${id}`, { body: { key } }),
     remove: (id: number) => request<null>("DELETE", `/permissions/${id}`),
   },
+
+  conversations: {
+    list: (page?: number, pageSize?: number) =>
+      request<PagedList<ConversationDto>>("GET", "/conversations", { query: listQuery(page, pageSize) }),
+    create: (data: { title: string; provider: string; model: string }) =>
+      request<ConversationDto>("POST", "/conversations", { body: data }),
+    messages: (id: number) => request<MessageDto[]>("GET", `/conversations/${id}/messages`),
+  },
+
+  sshConnections: {
+    list: (page?: number, pageSize?: number) =>
+      request<PagedList<SSHConnectionDto>>("GET", "/ssh-connections", { query: listQuery(page, pageSize) }),
+    create: (data: {
+      name: string
+      host: string
+      port?: number
+      username: string
+      authMethod: "password" | "private_key"
+      secret: string
+    }) => request<SSHConnectionDto>("POST", "/ssh-connections", { body: data }),
+    remove: (id: number) => request<null>("DELETE", `/ssh-connections/${id}`),
+  },
+}
+
+export interface StreamHandlers {
+  onChunk?: (text: string) => void
+  onDone?: (messages: MessageDto[]) => void
+  onError?: (message: string) => void
+}
+
+// streamMessage hand-rolls SSE parsing over a plain fetch (rather than
+// EventSource) because the endpoint is a POST that needs an Authorization
+// header — EventSource only ever issues unauthenticated GETs, and putting
+// the access token in the URL as a query param just to use it would leak
+// the token into logs/history for no real benefit here.
+export async function streamMessage(
+  conversationId: number,
+  content: string,
+  handlers: StreamHandlers,
+): Promise<void> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" }
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`
+
+  const res = await fetch(`${API_BASE}/conversations/${conversationId}/messages`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ content }),
+  })
+
+  if (res.status === 401) {
+    setAccessToken(null)
+    window.dispatchEvent(new Event("vohu:unauthorized"))
+  }
+
+  if (!res.ok || !res.body) {
+    // The server rejected the request before ever switching into SSE mode
+    // (validation, ownership, a missing LLM API key, ...) — a normal
+    // BaseResponse JSON error, not an SSE stream.
+    const json = (await res.json().catch(() => null)) as { error?: string } | null
+    handlers.onError?.(json?.error ?? res.statusText)
+    return
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ""
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+
+    let separatorIndex: number
+    while ((separatorIndex = buffer.indexOf("\n\n")) !== -1) {
+      const frame = buffer.slice(0, separatorIndex)
+      buffer = buffer.slice(separatorIndex + 2)
+
+      let event = "message"
+      let data = ""
+      for (const line of frame.split("\n")) {
+        if (line.startsWith("event: ")) event = line.slice("event: ".length)
+        else if (line.startsWith("data: ")) data = line.slice("data: ".length)
+      }
+      if (!data) continue
+
+      const payload = JSON.parse(data) as unknown
+
+      if (event === "chunk") handlers.onChunk?.(payload as string)
+      else if (event === "done") handlers.onDone?.(payload as MessageDto[])
+      else if (event === "error") handlers.onError?.(payload as string)
+    }
+  }
 }

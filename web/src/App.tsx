@@ -2,10 +2,12 @@ import type { ReactNode } from "react"
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 import { Toaster } from "@/components/ui/sonner"
 import { AuthProvider, useAuth } from "@/lib/auth"
+import ChatPage from "@/pages/ChatPage"
 import Layout from "@/pages/Layout"
 import LoginPage from "@/pages/LoginPage"
 import PermissionsPage from "@/pages/PermissionsPage"
 import RolesPage from "@/pages/RolesPage"
+import SSHConnectionsPage from "@/pages/SSHConnectionsPage"
 import UsersPage from "@/pages/UsersPage"
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -28,7 +30,9 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="/users" replace />} />
+            <Route index element={<Navigate to="/chat" replace />} />
+            <Route path="chat" element={<ChatPage />} />
+            <Route path="ssh-connections" element={<SSHConnectionsPage />} />
             <Route path="users" element={<UsersPage />} />
             <Route path="roles" element={<RolesPage />} />
             <Route path="permissions" element={<PermissionsPage />} />
