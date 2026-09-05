@@ -5,11 +5,14 @@ import (
 
 	"github.com/Aliizi83/vohu/config"
 	"github.com/Aliizi83/vohu/internal/platform/auth"
+	"github.com/Aliizi83/vohu/internal/platform/chat"
+	"github.com/Aliizi83/vohu/internal/platform/conversation"
 	"github.com/Aliizi83/vohu/internal/platform/httpserver"
 	"github.com/Aliizi83/vohu/internal/platform/migrations"
 	"github.com/Aliizi83/vohu/internal/platform/rbac"
 	"github.com/Aliizi83/vohu/internal/platform/sshconn"
 	"github.com/Aliizi83/vohu/internal/platform/user"
+	"github.com/Aliizi83/vohu/internal/tools/command"
 	"github.com/Aliizi83/vohu/pkg/crypto"
 	"github.com/Aliizi83/vohu/pkg/db"
 	"github.com/Aliizi83/vohu/pkg/logging"
@@ -58,6 +61,24 @@ func main() {
 	authService := auth.NewService(cfg, userService)
 	authHandler := auth.NewHandler(authService)
 
+	conversationRepo := conversation.NewRepository(db.GetDB())
+	conversationService := conversation.NewService(conversationRepo)
+
+	// Same allow-list the "command:*" keys in seeders.KnownPermissions
+	// describe — pwd/ls/whoami/git status/git log/docker ps/docker logs —
+	// applied to every SSH connection for now (nothing per-connection
+	// yet). Accept-mode (allow-list), unlike cmd/vohu's own TESTING-ONLY
+	// deny-list, since this runs unattended against user-supplied remote
+	// hosts rather than a developer's own machine.
+	sshCommandPolicy := command.NewCommandPolicy(command.PolicyModeAccept, []command.Rule{
+		{Program: "pwd", Allowed: true},
+		{Program: "ls", Allowed: true},
+		{Program: "whoami", Allowed: true},
+		{Program: "git", ArgsPrefixes: [][]string{{"status"}, {"log"}}, Allowed: true},
+		{Program: "docker", ArgsPrefixes: [][]string{{"ps"}, {"logs"}}, Allowed: true},
+	})
+	chatHandler := chat.NewHandler(conversationService, sshconnService, rbacService.CanAccessResource, sshCommandPolicy)
+
 	engine, v1 := httpserver.NewEngine(logger)
 
 	authMiddleware := authService.Authentication()
@@ -65,6 +86,7 @@ func main() {
 	user.RegisterRoutes(v1, userHandler, authMiddleware, userPolicy)
 	rbac.RegisterRoutes(v1, rbacHandler, authMiddleware, rbacPolicy)
 	sshconn.RegisterRoutes(v1, sshconnHandler, authMiddleware, sshconnPolicy)
+	chat.RegisterRoutes(v1, chatHandler, authMiddleware)
 	auth.RegisterRoutes(v1, authHandler)
 
 	logger.Info(logging.General, logging.Startup, "starting vohu server", nil)
