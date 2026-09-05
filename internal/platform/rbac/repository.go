@@ -4,18 +4,24 @@ import (
 	"context"
 	"errors"
 
+	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"gorm.io/gorm"
 )
 
-var ErrNotFound = errors.New("not found")
-
 type Repository interface {
 	CreateRole(ctx context.Context, r *Role) error
+	FindRoleByID(ctx context.Context, id uint) (*Role, error)
 	FindRoleByName(ctx context.Context, name string) (*Role, error)
+	UpdateRole(ctx context.Context, r *Role) error
+	DeleteRole(ctx context.Context, id uint) error
+	ListRoles(ctx context.Context, filter shared.DynamicFilter, page shared.Pagination) ([]Role, int64, error)
 
 	CreatePermission(ctx context.Context, p *Permission) error
+	FindPermissionByID(ctx context.Context, id uint) (*Permission, error)
 	FindPermissionByKey(ctx context.Context, key string) (*Permission, error)
-	ListAllPermissions(ctx context.Context) ([]Permission, error)
+	UpdatePermission(ctx context.Context, p *Permission) error
+	DeletePermission(ctx context.Context, id uint) error
+	ListPermissions(ctx context.Context, filter shared.DynamicFilter, page shared.Pagination) ([]Permission, int64, error)
 
 	RolePermissionExists(ctx context.Context, roleID, permissionID uint) (bool, error)
 	AssignPermissionToRole(ctx context.Context, roleID, permissionID uint) error
@@ -26,16 +32,48 @@ type Repository interface {
 	GetPermissionKeysForUser(ctx context.Context, userID uint) ([]string, error)
 }
 
+// gormRepository holds one generic repository per entity it manages (named
+// fields, not embedding — Role and Permission would both promote a
+// same-named FindByID/etc, which is ambiguous through embedding) for plain
+// CRUD, plus the hand-written methods for everything beyond that:
+// name/key lookups, the role<->permission and user<->role join tables, and
+// the permission-keys-for-a-user query.
 type gormRepository struct {
-	db *gorm.DB
+	db          *gorm.DB
+	roles       *shared.GenericRepository[Role]
+	permissions *shared.GenericRepository[Permission]
 }
 
 func NewRepository(db *gorm.DB) Repository {
-	return &gormRepository{db: db}
+	return &gormRepository{
+		db:          db,
+		roles:       shared.NewGenericRepository[Role](db),
+		permissions: shared.NewGenericRepository[Permission](db),
+	}
 }
 
 func (r *gormRepository) CreateRole(ctx context.Context, role *Role) error {
-	return r.db.WithContext(ctx).Create(role).Error
+	return r.roles.Create(ctx, role)
+}
+
+func (r *gormRepository) FindRoleByID(ctx context.Context, id uint) (*Role, error) {
+	return r.roles.FindByID(ctx, id)
+}
+
+func (r *gormRepository) UpdateRole(ctx context.Context, role *Role) error {
+	return r.roles.Update(ctx, role)
+}
+
+func (r *gormRepository) DeleteRole(ctx context.Context, id uint) error {
+	return r.roles.Delete(ctx, id)
+}
+
+func (r *gormRepository) ListRoles(
+	ctx context.Context,
+	filter shared.DynamicFilter,
+	page shared.Pagination,
+) ([]Role, int64, error) {
+	return r.roles.List(ctx, filter, page)
 }
 
 func (r *gormRepository) FindRoleByName(ctx context.Context, name string) (*Role, error) {
@@ -43,7 +81,7 @@ func (r *gormRepository) FindRoleByName(ctx context.Context, name string) (*Role
 
 	err := r.db.WithContext(ctx).Where("name = ?", name).First(&role).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, ErrNotFound
+		return nil, shared.ErrNotFound
 	}
 	if err != nil {
 		return nil, err
@@ -53,7 +91,27 @@ func (r *gormRepository) FindRoleByName(ctx context.Context, name string) (*Role
 }
 
 func (r *gormRepository) CreatePermission(ctx context.Context, permission *Permission) error {
-	return r.db.WithContext(ctx).Create(permission).Error
+	return r.permissions.Create(ctx, permission)
+}
+
+func (r *gormRepository) FindPermissionByID(ctx context.Context, id uint) (*Permission, error) {
+	return r.permissions.FindByID(ctx, id)
+}
+
+func (r *gormRepository) UpdatePermission(ctx context.Context, permission *Permission) error {
+	return r.permissions.Update(ctx, permission)
+}
+
+func (r *gormRepository) DeletePermission(ctx context.Context, id uint) error {
+	return r.permissions.Delete(ctx, id)
+}
+
+func (r *gormRepository) ListPermissions(
+	ctx context.Context,
+	filter shared.DynamicFilter,
+	page shared.Pagination,
+) ([]Permission, int64, error) {
+	return r.permissions.List(ctx, filter, page)
 }
 
 func (r *gormRepository) FindPermissionByKey(ctx context.Context, key string) (*Permission, error) {
@@ -61,19 +119,13 @@ func (r *gormRepository) FindPermissionByKey(ctx context.Context, key string) (*
 
 	err := r.db.WithContext(ctx).Where("key = ?", key).First(&permission).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, ErrNotFound
+		return nil, shared.ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
 
 	return &permission, nil
-}
-
-func (r *gormRepository) ListAllPermissions(ctx context.Context) ([]Permission, error) {
-	var permissions []Permission
-	err := r.db.WithContext(ctx).Find(&permissions).Error
-	return permissions, err
 }
 
 func (r *gormRepository) RolePermissionExists(ctx context.Context, roleID, permissionID uint) (bool, error) {

@@ -16,54 +16,93 @@ func NewHandler(service Service) *Handler {
 	return &Handler{service: service}
 }
 
+func mapError(err error) (int, shared.ResultCode) {
+	switch {
+	case errors.Is(err, shared.ErrNotFound):
+		return http.StatusNotFound, shared.ResultNotFoundError
+	case errors.Is(err, ErrRoleExists), errors.Is(err, ErrPermissionExists):
+		return http.StatusConflict, shared.ResultConflictError
+	default:
+		return http.StatusInternalServerError, shared.ResultInternalError
+	}
+}
+
 func (h *Handler) CreateRole(c *gin.Context) {
-	var req CreateRoleRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		shared.RespondValidationError(c, err)
-		return
-	}
+	shared.CreateHandler(c,
+		shared.Identity[CreateRoleRequest],
+		func(r *Role) RoleResponse { return toRoleResponse(*r) },
+		h.service.CreateRole,
+		mapError,
+	)
+}
 
-	role, err := h.service.EnsureRole(c.Request.Context(), req.Name)
-	if err != nil {
-		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, errors.New("internal error"))
-		return
-	}
+func (h *Handler) GetRole(c *gin.Context) {
+	shared.GetByIDHandler(c,
+		func(r *Role) RoleResponse { return toRoleResponse(*r) },
+		h.service.GetRole,
+		mapError,
+	)
+}
 
-	shared.RespondSuccess(c, http.StatusCreated, toRoleResponse(*role))
+func (h *Handler) UpdateRole(c *gin.Context) {
+	shared.UpdateHandler(c,
+		shared.Identity[UpdateRoleRequest],
+		func(r *Role) RoleResponse { return toRoleResponse(*r) },
+		h.service.UpdateRole,
+		mapError,
+	)
+}
+
+func (h *Handler) DeleteRole(c *gin.Context) {
+	shared.DeleteHandler(c, h.service.DeleteRole, mapError)
+}
+
+func (h *Handler) ListRoles(c *gin.Context) {
+	shared.ListHandler(c,
+		func(r Role) RoleResponse { return toRoleResponse(r) },
+		h.service.ListRoles,
+	)
 }
 
 func (h *Handler) CreatePermission(c *gin.Context) {
-	var req CreatePermissionRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		shared.RespondValidationError(c, err)
-		return
-	}
+	shared.CreateHandler(c,
+		shared.Identity[CreatePermissionRequest],
+		func(p *Permission) PermissionResponse { return toPermissionResponse(*p) },
+		h.service.CreatePermission,
+		mapError,
+	)
+}
 
-	permission, err := h.service.EnsurePermission(c.Request.Context(), req.Key)
-	if err != nil {
-		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, errors.New("internal error"))
-		return
-	}
+func (h *Handler) GetPermission(c *gin.Context) {
+	shared.GetByIDHandler(c,
+		func(p *Permission) PermissionResponse { return toPermissionResponse(*p) },
+		h.service.GetPermission,
+		mapError,
+	)
+}
 
-	shared.RespondSuccess(c, http.StatusCreated, toPermissionResponse(*permission))
+func (h *Handler) UpdatePermission(c *gin.Context) {
+	shared.UpdateHandler(c,
+		shared.Identity[UpdatePermissionRequest],
+		func(p *Permission) PermissionResponse { return toPermissionResponse(*p) },
+		h.service.UpdatePermission,
+		mapError,
+	)
+}
+
+func (h *Handler) DeletePermission(c *gin.Context) {
+	shared.DeleteHandler(c, h.service.DeletePermission, mapError)
 }
 
 func (h *Handler) ListPermissions(c *gin.Context) {
-	permissions, err := h.service.ListAllPermissions(c.Request.Context())
-	if err != nil {
-		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, errors.New("internal error"))
-		return
-	}
-
-	responses := make([]PermissionResponse, 0, len(permissions))
-	for _, p := range permissions {
-		responses = append(responses, toPermissionResponse(p))
-	}
-
-	shared.RespondSuccess(c, http.StatusOK, responses)
+	shared.ListHandler(c,
+		func(p Permission) PermissionResponse { return toPermissionResponse(p) },
+		h.service.ListPermissions,
+	)
 }
 
-// GrantPermissionToRole handles POST /roles/:id/permissions — :id is the role ID.
+// GrantPermissionToRole handles POST /roles/:id/permissions — :id is the
+// role ID. More than plain CRUD (a join-table write), so hand-written.
 func (h *Handler) GrantPermissionToRole(c *gin.Context) {
 	roleID, err := shared.ParseIDParam(c)
 	if err != nil {
@@ -86,6 +125,7 @@ func (h *Handler) GrantPermissionToRole(c *gin.Context) {
 }
 
 // AssignRoleToUser handles POST /users/:id/roles — :id is the user ID.
+// More than plain CRUD (a join-table write), so hand-written.
 func (h *Handler) AssignRoleToUser(c *gin.Context) {
 	userID, err := shared.ParseIDParam(c)
 	if err != nil {

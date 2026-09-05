@@ -4,8 +4,16 @@ type CreateRoleRequest struct {
 	Name string `json:"name" binding:"required,min=2,max=50"`
 }
 
+type UpdateRoleRequest struct {
+	Name string `json:"name" binding:"omitempty,min=2,max=50"`
+}
+
 type CreatePermissionRequest struct {
 	Key string `json:"key" binding:"required,min=2,max=100"`
+}
+
+type UpdatePermissionRequest struct {
+	Key string `json:"key" binding:"omitempty,min=2,max=100"`
 }
 
 type GrantPermissionRequest struct {

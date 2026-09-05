@@ -19,6 +19,10 @@ func RegisterRoutes(
 	roles := v1.Group("/roles", authMiddleware)
 	{
 		roles.POST("", manage, handler.CreateRole)
+		roles.GET("", manage, handler.ListRoles)
+		roles.GET("/:id", manage, handler.GetRole)
+		roles.PUT("/:id", manage, handler.UpdateRole)
+		roles.DELETE("/:id", manage, handler.DeleteRole)
 		roles.POST("/:id/permissions", manage, handler.GrantPermissionToRole)
 	}
 
@@ -26,6 +30,9 @@ func RegisterRoutes(
 	{
 		permissions.POST("", manage, handler.CreatePermission)
 		permissions.GET("", manage, handler.ListPermissions)
+		permissions.GET("/:id", manage, handler.GetPermission)
+		permissions.PUT("/:id", manage, handler.UpdatePermission)
+		permissions.DELETE("/:id", manage, handler.DeletePermission)
 	}
 
 	v1.POST("/users/:id/roles", authMiddleware, manage, handler.AssignRoleToUser)

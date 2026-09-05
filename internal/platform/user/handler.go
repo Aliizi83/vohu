@@ -30,7 +30,7 @@ func mapError(err error) (int, shared.ResultCode) {
 func (h *Handler) Create(c *gin.Context) {
 	shared.CreateHandler(c,
 		shared.Identity[CreateUserRequest],
-		shared.Identity[Response],
+		func(u *User) Response { return toResponse(*u) },
 		h.service.Register,
 		mapError,
 	)
@@ -47,7 +47,7 @@ func (h *Handler) Get(c *gin.Context) {
 func (h *Handler) Update(c *gin.Context) {
 	shared.UpdateHandler(c,
 		shared.Identity[UpdateUserRequest],
-		shared.Identity[Response],
+		func(u *User) Response { return toResponse(*u) },
 		h.service.Update,
 		mapError,
 	)

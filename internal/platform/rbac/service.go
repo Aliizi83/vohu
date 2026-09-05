@@ -3,28 +3,34 @@ package rbac
 import (
 	"context"
 	"errors"
-	"net/http"
 
 	"github.com/Aliizi83/vohu/internal/platform/shared"
-	"github.com/gin-gonic/gin"
+)
+
+var (
+	ErrRoleExists       = errors.New("role already exists")
+	ErrPermissionExists = errors.New("permission already exists")
 )
 
 // Service is what other modules (auth, user, and eventually the agent
 // tooling itself) depend on — never Repository directly.
 type Service interface {
-	EnsureRole(ctx context.Context, name string) (*Role, error)
-	EnsurePermission(ctx context.Context, key string) (*Permission, error)
-	ListAllPermissions(ctx context.Context) ([]Permission, error)
+	CreateRole(ctx context.Context, req CreateRoleRequest) (*Role, error)
+	GetRole(ctx context.Context, id uint) (*Role, error)
+	UpdateRole(ctx context.Context, id uint, req UpdateRoleRequest) (*Role, error)
+	DeleteRole(ctx context.Context, id uint) error
+	ListRoles(ctx context.Context, filter shared.DynamicFilter, page shared.Pagination) ([]Role, int64, error)
+
+	CreatePermission(ctx context.Context, req CreatePermissionRequest) (*Permission, error)
+	GetPermission(ctx context.Context, id uint) (*Permission, error)
+	UpdatePermission(ctx context.Context, id uint, req UpdatePermissionRequest) (*Permission, error)
+	DeletePermission(ctx context.Context, id uint) error
+	ListPermissions(ctx context.Context, filter shared.DynamicFilter, page shared.Pagination) ([]Permission, int64, error)
 
 	GrantPermissionToRole(ctx context.Context, roleID, permissionID uint) error
 	AssignRoleToUser(ctx context.Context, userID, roleID uint) error
 
 	HasPermission(ctx context.Context, userID uint, key string) (bool, error)
-
-	// RequirePermission builds Gin middleware that 403s unless the
-	// authenticated user (read from shared.UserIDContextKey, set by the
-	// auth module's middleware) holds the given permission key.
-	RequirePermission(key string) gin.HandlerFunc
 }
 
 type service struct {
@@ -35,19 +41,16 @@ func NewService(repo Repository) Service {
 	return &service{repo: repo}
 }
 
-// EnsureRole/EnsurePermission are idempotent create-if-missing helpers,
-// used by both admin-management handlers and startup seeding.
-
-func (s *service) EnsureRole(ctx context.Context, name string) (*Role, error) {
-	role, err := s.repo.FindRoleByName(ctx, name)
+func (s *service) CreateRole(ctx context.Context, req CreateRoleRequest) (*Role, error) {
+	_, err := s.repo.FindRoleByName(ctx, req.Name)
 	if err == nil {
-		return role, nil
+		return nil, ErrRoleExists
 	}
-	if !errors.Is(err, ErrNotFound) {
+	if !errors.Is(err, shared.ErrNotFound) {
 		return nil, err
 	}
 
-	role = &Role{Name: name}
+	role := &Role{Name: req.Name}
 	if err := s.repo.CreateRole(ctx, role); err != nil {
 		return nil, err
 	}
@@ -55,16 +58,49 @@ func (s *service) EnsureRole(ctx context.Context, name string) (*Role, error) {
 	return role, nil
 }
 
-func (s *service) EnsurePermission(ctx context.Context, key string) (*Permission, error) {
-	permission, err := s.repo.FindPermissionByKey(ctx, key)
-	if err == nil {
-		return permission, nil
-	}
-	if !errors.Is(err, ErrNotFound) {
+func (s *service) GetRole(ctx context.Context, id uint) (*Role, error) {
+	return s.repo.FindRoleByID(ctx, id)
+}
+
+func (s *service) UpdateRole(ctx context.Context, id uint, req UpdateRoleRequest) (*Role, error) {
+	role, err := s.repo.FindRoleByID(ctx, id)
+	if err != nil {
 		return nil, err
 	}
 
-	permission = &Permission{Key: key}
+	if req.Name != "" {
+		role.Name = req.Name
+	}
+
+	if err := s.repo.UpdateRole(ctx, role); err != nil {
+		return nil, err
+	}
+
+	return role, nil
+}
+
+func (s *service) DeleteRole(ctx context.Context, id uint) error {
+	return s.repo.DeleteRole(ctx, id)
+}
+
+func (s *service) ListRoles(
+	ctx context.Context,
+	filter shared.DynamicFilter,
+	page shared.Pagination,
+) ([]Role, int64, error) {
+	return s.repo.ListRoles(ctx, filter, page)
+}
+
+func (s *service) CreatePermission(ctx context.Context, req CreatePermissionRequest) (*Permission, error) {
+	_, err := s.repo.FindPermissionByKey(ctx, req.Key)
+	if err == nil {
+		return nil, ErrPermissionExists
+	}
+	if !errors.Is(err, shared.ErrNotFound) {
+		return nil, err
+	}
+
+	permission := &Permission{Key: req.Key}
 	if err := s.repo.CreatePermission(ctx, permission); err != nil {
 		return nil, err
 	}
@@ -72,8 +108,37 @@ func (s *service) EnsurePermission(ctx context.Context, key string) (*Permission
 	return permission, nil
 }
 
-func (s *service) ListAllPermissions(ctx context.Context) ([]Permission, error) {
-	return s.repo.ListAllPermissions(ctx)
+func (s *service) GetPermission(ctx context.Context, id uint) (*Permission, error) {
+	return s.repo.FindPermissionByID(ctx, id)
+}
+
+func (s *service) UpdatePermission(ctx context.Context, id uint, req UpdatePermissionRequest) (*Permission, error) {
+	permission, err := s.repo.FindPermissionByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if req.Key != "" {
+		permission.Key = req.Key
+	}
+
+	if err := s.repo.UpdatePermission(ctx, permission); err != nil {
+		return nil, err
+	}
+
+	return permission, nil
+}
+
+func (s *service) DeletePermission(ctx context.Context, id uint) error {
+	return s.repo.DeletePermission(ctx, id)
+}
+
+func (s *service) ListPermissions(
+	ctx context.Context,
+	filter shared.DynamicFilter,
+	page shared.Pagination,
+) ([]Permission, int64, error) {
+	return s.repo.ListPermissions(ctx, filter, page)
 }
 
 func (s *service) GrantPermissionToRole(ctx context.Context, roleID, permissionID uint) error {
@@ -113,26 +178,4 @@ func (s *service) HasPermission(ctx context.Context, userID uint, key string) (b
 	}
 
 	return false, nil
-}
-
-func (s *service) RequirePermission(key string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		userID, ok := shared.GetUserID(c)
-		if !ok {
-			shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
-			return
-		}
-
-		allowed, err := s.HasPermission(c.Request.Context(), userID, key)
-		if err != nil {
-			shared.AbortWithError(c, http.StatusInternalServerError, shared.ResultInternalError, errors.New("internal error"))
-			return
-		}
-		if !allowed {
-			shared.AbortWithError(c, http.StatusForbidden, shared.ResultForbiddenError, errors.New("forbidden"))
-			return
-		}
-
-		c.Next()
-	}
 }

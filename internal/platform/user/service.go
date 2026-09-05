@@ -13,10 +13,10 @@ var ErrUsernameTaken = errors.New("username already taken")
 // Service is what other modules (e.g. auth) depend on — never Repository
 // directly.
 type Service interface {
-	Register(ctx context.Context, req CreateUserRequest) (Response, error)
+	Register(ctx context.Context, req CreateUserRequest) (*User, error)
 	GetByUsername(ctx context.Context, username string) (*User, error)
 	GetByID(ctx context.Context, id uint) (*User, error)
-	Update(ctx context.Context, id uint, req UpdateUserRequest) (Response, error)
+	Update(ctx context.Context, id uint, req UpdateUserRequest) (*User, error)
 	Delete(ctx context.Context, id uint) error
 	List(ctx context.Context, filter shared.DynamicFilter, page shared.Pagination) ([]User, int64, error)
 }
@@ -29,19 +29,19 @@ func NewService(repo Repository) Service {
 	return &service{repo: repo}
 }
 
-func (s *service) Register(ctx context.Context, req CreateUserRequest) (Response, error) {
+func (s *service) Register(ctx context.Context, req CreateUserRequest) (*User, error) {
 
 	exists, err := s.repo.ExistsByUsername(ctx, req.Username)
 	if err != nil {
-		return Response{}, err
+		return nil, err
 	}
 	if exists {
-		return Response{}, ErrUsernameTaken
+		return nil, ErrUsernameTaken
 	}
 
 	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		return Response{}, err
+		return nil, err
 	}
 
 	u := &User{
@@ -52,10 +52,10 @@ func (s *service) Register(ctx context.Context, req CreateUserRequest) (Response
 	}
 
 	if err := s.repo.Create(ctx, u); err != nil {
-		return Response{}, err
+		return nil, err
 	}
 
-	return toResponse(*u), nil
+	return u, nil
 }
 
 func (s *service) GetByUsername(ctx context.Context, username string) (*User, error) {
@@ -66,10 +66,10 @@ func (s *service) GetByID(ctx context.Context, id uint) (*User, error) {
 	return s.repo.FindByID(ctx, id)
 }
 
-func (s *service) Update(ctx context.Context, id uint, req UpdateUserRequest) (Response, error) {
+func (s *service) Update(ctx context.Context, id uint, req UpdateUserRequest) (*User, error) {
 	u, err := s.repo.FindByID(ctx, id)
 	if err != nil {
-		return Response{}, err
+		return nil, err
 	}
 
 	if req.Email != "" {
@@ -80,10 +80,10 @@ func (s *service) Update(ctx context.Context, id uint, req UpdateUserRequest) (R
 	}
 
 	if err := s.repo.Update(ctx, u); err != nil {
-		return Response{}, err
+		return nil, err
 	}
 
-	return toResponse(*u), nil
+	return u, nil
 }
 
 func (s *service) Delete(ctx context.Context, id uint) error {
