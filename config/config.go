@@ -14,6 +14,7 @@ type Config struct {
 	Postgres PostgresConfig
 	Logger   LoggerConfig
 	JWT      JWTConfig
+	Secrets  SecretsConfig
 }
 
 type ServerConfig struct {
@@ -50,6 +51,16 @@ type JWTConfig struct {
 	RefreshTokenExpireDuration time.Duration
 	Secret                     string
 	RefreshSecret              string
+}
+
+// SecretsConfig holds keys for encrypting sensitive data at rest (SSH
+// credentials, and anything similar later) — distinct from JWT, which
+// signs tokens rather than encrypting stored data.
+type SecretsConfig struct {
+	// EncryptionKey is a base64-encoded 32-byte AES-256 key, consumed by
+	// pkg/crypto.NewBox. The dev default in config-development.yml is not
+	// safe for any real deployment.
+	EncryptionKey string
 }
 
 func GetConfig() *Config {

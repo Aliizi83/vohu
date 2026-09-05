@@ -33,6 +33,15 @@ var KnownPermissions = []string{
 	// rbac
 	"rbac:manage",
 
+	// ssh connections (who may manage connection rows at all — actual
+	// per-connection usage is gated separately by
+	// rbac.ResourcePermission, granted automatically to a connection's
+	// creator and manageable via the rbac API from there)
+	"ssh:create",
+	"ssh:read",
+	"ssh:update",
+	"ssh:delete",
+
 	// shell commands (not yet enforced anywhere in this base)
 	"command:pwd",
 	"command:ls",

@@ -1,12 +1,16 @@
 package main
 
 import (
+	"context"
+
 	"github.com/Aliizi83/vohu/config"
 	"github.com/Aliizi83/vohu/internal/platform/auth"
 	"github.com/Aliizi83/vohu/internal/platform/httpserver"
 	"github.com/Aliizi83/vohu/internal/platform/migrations"
 	"github.com/Aliizi83/vohu/internal/platform/rbac"
+	"github.com/Aliizi83/vohu/internal/platform/sshconn"
 	"github.com/Aliizi83/vohu/internal/platform/user"
+	"github.com/Aliizi83/vohu/pkg/crypto"
 	"github.com/Aliizi83/vohu/pkg/db"
 	"github.com/Aliizi83/vohu/pkg/logging"
 )
@@ -35,6 +39,22 @@ func main() {
 
 	userPolicy := user.NewPolicy(rbacService.HasPermission)
 
+	secretBox, err := crypto.NewBox(cfg.Secrets.EncryptionKey)
+	if err != nil {
+		logger.Fatal(err, logging.General, logging.Startup, err.Error(), nil)
+	}
+
+	sshconnRepo := sshconn.NewRepository(db.GetDB())
+	// rbac.Effect is a named string type; GrantCreatorAccess takes a plain
+	// string so sshconn never has to import rbac — this closure is the
+	// only place that bridges the two.
+	grantCreatorAccess := func(ctx context.Context, userID uint, resourceType string, resourceID uint, effect string) error {
+		return rbacService.GrantResourceAccess(ctx, userID, resourceType, resourceID, rbac.Effect(effect))
+	}
+	sshconnService := sshconn.NewService(sshconnRepo, secretBox, grantCreatorAccess)
+	sshconnHandler := sshconn.NewHandler(sshconnService)
+	sshconnPolicy := sshconn.NewPolicy(rbacService.HasPermission)
+
 	authService := auth.NewService(cfg, userService)
 	authHandler := auth.NewHandler(authService)
 
@@ -44,6 +64,7 @@ func main() {
 
 	user.RegisterRoutes(v1, userHandler, authMiddleware, userPolicy)
 	rbac.RegisterRoutes(v1, rbacHandler, authMiddleware, rbacPolicy)
+	sshconn.RegisterRoutes(v1, sshconnHandler, authMiddleware, sshconnPolicy)
 	auth.RegisterRoutes(v1, authHandler)
 
 	logger.Info(logging.General, logging.Startup, "starting vohu server", nil)
