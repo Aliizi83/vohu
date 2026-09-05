@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -17,6 +18,7 @@ type Service interface {
 	GetByID(ctx context.Context, id uint) (*User, error)
 	Update(ctx context.Context, id uint, req UpdateUserRequest) (Response, error)
 	Delete(ctx context.Context, id uint) error
+	List(ctx context.Context, filter shared.DynamicFilter, page shared.Pagination) ([]User, int64, error)
 }
 
 type service struct {
@@ -86,4 +88,12 @@ func (s *service) Update(ctx context.Context, id uint, req UpdateUserRequest) (R
 
 func (s *service) Delete(ctx context.Context, id uint) error {
 	return s.repo.Delete(ctx, id)
+}
+
+func (s *service) List(
+	ctx context.Context,
+	filter shared.DynamicFilter,
+	page shared.Pagination,
+) ([]User, int64, error) {
+	return s.repo.List(ctx, filter, page)
 }

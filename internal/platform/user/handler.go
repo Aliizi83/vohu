@@ -16,88 +16,50 @@ func NewHandler(service Service) *Handler {
 	return &Handler{service: service}
 }
 
+func mapError(err error) (int, shared.ResultCode) {
+	switch {
+	case errors.Is(err, shared.ErrNotFound):
+		return http.StatusNotFound, shared.ResultNotFoundError
+	case errors.Is(err, ErrUsernameTaken):
+		return http.StatusConflict, shared.ResultConflictError
+	default:
+		return http.StatusInternalServerError, shared.ResultInternalError
+	}
+}
+
 func (h *Handler) Create(c *gin.Context) {
-	var req CreateUserRequest
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		shared.RespondValidationError(c, err)
-		return
-	}
-
-	res, err := h.service.Register(c.Request.Context(), req)
-	if err != nil {
-		if errors.Is(err, ErrUsernameTaken) {
-			shared.RespondError(c, http.StatusConflict, shared.ResultConflictError, err)
-			return
-		}
-		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, errors.New("internal error"))
-		return
-	}
-
-	shared.RespondSuccess(c, http.StatusCreated, res)
+	shared.CreateHandler(c,
+		shared.Identity[CreateUserRequest],
+		shared.Identity[Response],
+		h.service.Register,
+		mapError,
+	)
 }
 
 func (h *Handler) Get(c *gin.Context) {
-	id, err := shared.ParseIDParam(c)
-	if err != nil {
-		shared.RespondError(c, http.StatusBadRequest, shared.ResultValidationError, errors.New("invalid id"))
-		return
-	}
-
-	u, err := h.service.GetByID(c.Request.Context(), id)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			shared.RespondError(c, http.StatusNotFound, shared.ResultNotFoundError, err)
-			return
-		}
-		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, errors.New("internal error"))
-		return
-	}
-
-	shared.RespondSuccess(c, http.StatusOK, toResponse(*u))
+	shared.GetByIDHandler(c,
+		func(u *User) Response { return toResponse(*u) },
+		h.service.GetByID,
+		mapError,
+	)
 }
 
 func (h *Handler) Update(c *gin.Context) {
-	id, err := shared.ParseIDParam(c)
-	if err != nil {
-		shared.RespondError(c, http.StatusBadRequest, shared.ResultValidationError, errors.New("invalid id"))
-		return
-	}
-
-	var req UpdateUserRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		shared.RespondValidationError(c, err)
-		return
-	}
-
-	res, err := h.service.Update(c.Request.Context(), id, req)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			shared.RespondError(c, http.StatusNotFound, shared.ResultNotFoundError, err)
-			return
-		}
-		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, errors.New("internal error"))
-		return
-	}
-
-	shared.RespondSuccess(c, http.StatusOK, res)
+	shared.UpdateHandler(c,
+		shared.Identity[UpdateUserRequest],
+		shared.Identity[Response],
+		h.service.Update,
+		mapError,
+	)
 }
 
 func (h *Handler) Delete(c *gin.Context) {
-	id, err := shared.ParseIDParam(c)
-	if err != nil {
-		shared.RespondError(c, http.StatusBadRequest, shared.ResultValidationError, errors.New("invalid id"))
-		return
-	}
+	shared.DeleteHandler(c, h.service.Delete, mapError)
+}
 
-	if err := h.service.Delete(c.Request.Context(), id); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			shared.RespondError(c, http.StatusNotFound, shared.ResultNotFoundError, err)
-			return
-		}
-		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, errors.New("internal error"))
-		return
-	}
-
-	shared.RespondSuccess(c, http.StatusOK, nil)
+func (h *Handler) List(c *gin.Context) {
+	shared.ListHandler(c,
+		func(u User) Response { return toResponse(u) },
+		h.service.List,
+	)
 }

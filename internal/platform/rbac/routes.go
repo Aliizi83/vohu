@@ -1,17 +1,20 @@
 package rbac
 
-import "github.com/gin-gonic/gin"
+import (
+	"github.com/Aliizi83/vohu/internal/platform/shared"
+	"github.com/gin-gonic/gin"
+)
 
 // RegisterRoutes wires this module's HTTP routes. Every route here is
-// admin-management surface, so all of it requires the "rbac:manage"
-// permission (granted to the default admin role at seed time).
+// admin-management surface, so all of it requires policy.CanManage
+// ("rbac:manage", granted to the default admin role at seed time).
 func RegisterRoutes(
 	v1 *gin.RouterGroup,
 	handler *Handler,
 	authMiddleware gin.HandlerFunc,
-	requirePermission func(key string) gin.HandlerFunc,
+	policy *Policy,
 ) {
-	manage := requirePermission("rbac:manage")
+	manage := shared.RequirePolicy(policy.CanManage)
 
 	roles := v1.Group("/roles", authMiddleware)
 	{

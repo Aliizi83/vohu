@@ -31,6 +31,9 @@ func main() {
 	rbacRepo := rbac.NewRepository(db.GetDB())
 	rbacService := rbac.NewService(rbacRepo)
 	rbacHandler := rbac.NewHandler(rbacService)
+	rbacPolicy := rbac.NewPolicy(rbacService)
+
+	userPolicy := user.NewPolicy(rbacService.HasPermission)
 
 	authService := auth.NewService(cfg, userService)
 	authHandler := auth.NewHandler(authService)
@@ -39,8 +42,8 @@ func main() {
 
 	authMiddleware := authService.Authentication()
 
-	user.RegisterRoutes(v1, userHandler, authMiddleware, rbacService.RequirePermission)
-	rbac.RegisterRoutes(v1, rbacHandler, authMiddleware, rbacService.RequirePermission)
+	user.RegisterRoutes(v1, userHandler, authMiddleware, userPolicy)
+	rbac.RegisterRoutes(v1, rbacHandler, authMiddleware, rbacPolicy)
 	auth.RegisterRoutes(v1, authHandler)
 
 	logger.Info(logging.General, logging.Startup, "starting vohu server", nil)

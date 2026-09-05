@@ -42,7 +42,7 @@ func NewService(cfg *config.Config, userService user.Service) Service {
 func (s *service) Login(ctx context.Context, username, password string) (TokenPair, error) {
 	u, err := s.userService.GetByUsername(ctx, username)
 	if err != nil {
-		if errors.Is(err, user.ErrNotFound) {
+		if errors.Is(err, shared.ErrNotFound) {
 			return TokenPair{}, ErrInvalidCredentials
 		}
 		return TokenPair{}, err

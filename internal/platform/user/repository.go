@@ -4,30 +4,35 @@ import (
 	"context"
 	"errors"
 
+	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"gorm.io/gorm"
 )
 
-var ErrNotFound = errors.New("user not found")
-
 type Repository interface {
 	Create(ctx context.Context, u *User) error
-	FindByUsername(ctx context.Context, username string) (*User, error)
 	FindByID(ctx context.Context, id uint) (*User, error)
-	ExistsByUsername(ctx context.Context, username string) (bool, error)
 	Update(ctx context.Context, u *User) error
 	Delete(ctx context.Context, id uint) error
+	List(ctx context.Context, filter shared.DynamicFilter, page shared.Pagination) ([]User, int64, error)
+
+	FindByUsername(ctx context.Context, username string) (*User, error)
+	ExistsByUsername(ctx context.Context, username string) (bool, error)
 }
 
+// gormRepository embeds the generic repository for plain CRUD (Create,
+// FindByID, Update, Delete, List come from there — see
+// internal/platform/shared/repository.go) and adds the lookups that are
+// more than CRUD.
 type gormRepository struct {
+	*shared.GenericRepository[User]
 	db *gorm.DB
 }
 
 func NewRepository(db *gorm.DB) Repository {
-	return &gormRepository{db: db}
-}
-
-func (r *gormRepository) Create(ctx context.Context, u *User) error {
-	return r.db.WithContext(ctx).Create(u).Error
+	return &gormRepository{
+		GenericRepository: shared.NewGenericRepository[User](db),
+		db:                db,
+	}
 }
 
 func (r *gormRepository) FindByUsername(ctx context.Context, username string) (*User, error) {
@@ -35,21 +40,7 @@ func (r *gormRepository) FindByUsername(ctx context.Context, username string) (*
 
 	err := r.db.WithContext(ctx).Where("username = ?", username).First(&u).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	return &u, nil
-}
-
-func (r *gormRepository) FindByID(ctx context.Context, id uint) (*User, error) {
-	var u User
-
-	err := r.db.WithContext(ctx).First(&u, id).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, ErrNotFound
+		return nil, shared.ErrNotFound
 	}
 	if err != nil {
 		return nil, err
@@ -62,19 +53,4 @@ func (r *gormRepository) ExistsByUsername(ctx context.Context, username string) 
 	var count int64
 	err := r.db.WithContext(ctx).Model(&User{}).Where("username = ?", username).Count(&count).Error
 	return count > 0, err
-}
-
-func (r *gormRepository) Update(ctx context.Context, u *User) error {
-	return r.db.WithContext(ctx).Save(u).Error
-}
-
-func (r *gormRepository) Delete(ctx context.Context, id uint) error {
-	result := r.db.WithContext(ctx).Delete(&User{}, id)
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return ErrNotFound
-	}
-	return nil
 }
