@@ -1,0 +1,42 @@
+import type { ReactNode } from "react"
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
+import { Toaster } from "@/components/ui/sonner"
+import { AuthProvider, useAuth } from "@/lib/auth"
+import Layout from "@/pages/Layout"
+import LoginPage from "@/pages/LoginPage"
+import PermissionsPage from "@/pages/PermissionsPage"
+import RolesPage from "@/pages/RolesPage"
+import UsersPage from "@/pages/UsersPage"
+
+function ProtectedRoute({ children }: { children: ReactNode }) {
+  const { isAuthenticated } = useAuth()
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  return <>{children}</>
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Navigate to="/users" replace />} />
+            <Route path="users" element={<UsersPage />} />
+            <Route path="roles" element={<RolesPage />} />
+            <Route path="permissions" element={<PermissionsPage />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+      <Toaster />
+    </AuthProvider>
+  )
+}

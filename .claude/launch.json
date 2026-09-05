@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "vohu-web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "export PATH=\"$HOME/.local/node/bin:$PATH\" && cd web && npm run dev -- --host"],
+      "port": 5173
+    }
+  ]
+}
