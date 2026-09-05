@@ -2,6 +2,7 @@ import type { ReactNode } from "react"
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 import { Toaster } from "@/components/ui/sonner"
 import { AuthProvider, useAuth } from "@/lib/auth"
+import ApiKeysPage from "@/pages/ApiKeysPage"
 import ChatPage from "@/pages/ChatPage"
 import Layout from "@/pages/Layout"
 import LoginPage from "@/pages/LoginPage"
@@ -33,6 +34,7 @@ export default function App() {
             <Route index element={<Navigate to="/chat" replace />} />
             <Route path="chat" element={<ChatPage />} />
             <Route path="ssh-connections" element={<SSHConnectionsPage />} />
+            <Route path="provider-keys" element={<ApiKeysPage />} />
             <Route path="users" element={<UsersPage />} />
             <Route path="roles" element={<RolesPage />} />
             <Route path="permissions" element={<PermissionsPage />} />

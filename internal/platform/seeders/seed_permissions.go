@@ -42,6 +42,11 @@ var KnownPermissions = []string{
 	"ssh:update",
 	"ssh:delete",
 
+	// provider keys (LLM API credentials) — gates only the global/default
+	// key an admin sets for everyone; every user manages their own
+	// personal key with no permission needed beyond being authenticated
+	"providerkeys:manage",
+
 	// shell commands (not yet enforced anywhere in this base)
 	"command:pwd",
 	"command:ls",

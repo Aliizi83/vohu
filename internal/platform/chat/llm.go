@@ -1,46 +1,39 @@
 package chat
 
 import (
+	"context"
 	"fmt"
-	"os"
 
 	"github.com/Aliizi83/vohu/internal/ai_model"
 	"github.com/Aliizi83/vohu/internal/ai_model/models"
+	"github.com/Aliizi83/vohu/internal/platform/providerkey"
 )
 
-// buildLLM resolves a conversation's Provider into a concrete client,
-// reading API keys from the same environment variables cmd/vohu's newLLM
-// does. Server-side keys only for now — per-user BYO-key is real future
-// work, out of scope here.
-func buildLLM(provider string) (ai_model.LLM, error) {
+// buildLLM resolves a conversation's Provider into a concrete client.
+// Credential resolution itself (the caller's own key, falling back to the
+// admin-set global key, falling back to the legacy environment variables)
+// lives in providerkey.Service.Resolve — this function only turns the
+// resolved secret into the right ai_model.LLM implementation.
+func buildLLM(ctx context.Context, keys providerkey.Service, userID uint, provider string) (ai_model.LLM, error) {
+	cred, err := keys.Resolve(ctx, userID, providerkey.Provider(provider))
+	if err != nil {
+		return nil, err
+	}
+
 	switch provider {
 	case "gemini":
-		apiKey := os.Getenv("GEMINI_API_KEY")
-		if apiKey == "" {
-			return nil, fmt.Errorf("GEMINI_API_KEY is not set")
-		}
-		return models.NewGeminiAgent(apiKey), nil
+		return models.NewGeminiAgent(cred.APIKey), nil
 
 	case "anthropic":
-		apiKey := os.Getenv("ANTHROPIC_API_KEY")
-		if apiKey == "" {
-			return nil, fmt.Errorf("ANTHROPIC_API_KEY is not set")
-		}
-		// Optional: only needed for an identity-linked key tied to an
-		// organization with more than one workspace.
-		workspaceID := os.Getenv("ANTHROPIC_WORKSPACE_ID")
-		return models.NewAnthropicAgent(apiKey, workspaceID), nil
+		// WorkspaceID is optional — only needed for an identity-linked key
+		// tied to an organization with more than one workspace.
+		return models.NewAnthropicAgent(cred.APIKey, cred.WorkspaceID), nil
 
 	case "openai":
-		apiKey := os.Getenv("OPENAI_API_KEY")
-		if apiKey == "" {
-			return nil, fmt.Errorf("OPENAI_API_KEY is not set")
-		}
-		// Empty baseURL means OpenAI itself; set OPENAI_BASE_URL for any
-		// other OpenAI-compatible provider (DeepSeek, Groq, a local
-		// Ollama server, ...).
-		baseURL := os.Getenv("OPENAI_BASE_URL")
-		return models.NewOpenAIAgent(apiKey, baseURL), nil
+		// Empty BaseURL means OpenAI itself; a non-empty one points at any
+		// other OpenAI-compatible provider (DeepSeek, Groq, a local Ollama
+		// server, ...).
+		return models.NewOpenAIAgent(cred.APIKey, cred.BaseURL), nil
 
 	default:
 		return nil, fmt.Errorf("unknown provider: %q", provider)

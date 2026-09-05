@@ -9,6 +9,7 @@ import (
 	"github.com/Aliizi83/vohu/internal/agent"
 	"github.com/Aliizi83/vohu/internal/ai_model"
 	"github.com/Aliizi83/vohu/internal/platform/conversation"
+	"github.com/Aliizi83/vohu/internal/platform/providerkey"
 	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"github.com/Aliizi83/vohu/internal/platform/sshconn"
 	"github.com/Aliizi83/vohu/internal/tools"
@@ -26,6 +27,7 @@ type Handler struct {
 	sshconns      sshconn.Service
 	canAccess     CanAccessResource
 	commandPolicy command.Policy
+	providerKeys  providerkey.Service
 }
 
 func NewHandler(
@@ -33,12 +35,14 @@ func NewHandler(
 	sshconns sshconn.Service,
 	canAccess CanAccessResource,
 	commandPolicy command.Policy,
+	providerKeys providerkey.Service,
 ) *Handler {
 	return &Handler{
 		conversations: conversations,
 		sshconns:      sshconns,
 		canAccess:     canAccess,
 		commandPolicy: commandPolicy,
+		providerKeys:  providerKeys,
 	}
 }
 
@@ -162,7 +166,7 @@ func (h *Handler) SendMessage(c *gin.Context) {
 		return
 	}
 
-	llm, err := buildLLM(conv.Provider)
+	llm, err := buildLLM(c.Request.Context(), h.providerKeys, userID, conv.Provider)
 	if err != nil {
 		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, err)
 		return

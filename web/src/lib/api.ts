@@ -131,6 +131,14 @@ export interface SSHConnectionDto {
   createdByUserId: number
 }
 
+export type LLMProvider = "gemini" | "anthropic" | "openai"
+
+export interface ProviderKeyDto {
+  provider: LLMProvider
+  baseUrl?: string
+  workspaceId?: string
+}
+
 export interface UserDto {
   id: number
   username: string
@@ -230,6 +238,18 @@ export const api = {
       secret: string
     }) => request<SSHConnectionDto>("POST", "/ssh-connections", { body: data }),
     remove: (id: number) => request<null>("DELETE", `/ssh-connections/${id}`),
+  },
+
+  providerKeys: {
+    listMine: () => request<ProviderKeyDto[]>("GET", "/provider-keys/me"),
+    setMine: (data: { provider: LLMProvider; apiKey: string; baseUrl?: string; workspaceId?: string }) =>
+      request<null>("POST", "/provider-keys/me", { body: data }),
+    removeMine: (provider: LLMProvider) => request<null>("DELETE", `/provider-keys/me/${provider}`),
+
+    listGlobal: () => request<ProviderKeyDto[]>("GET", "/provider-keys"),
+    setGlobal: (data: { provider: LLMProvider; apiKey: string; baseUrl?: string; workspaceId?: string }) =>
+      request<null>("POST", "/provider-keys", { body: data }),
+    removeGlobal: (provider: LLMProvider) => request<null>("DELETE", `/provider-keys/${provider}`),
   },
 }
 

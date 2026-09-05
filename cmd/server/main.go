@@ -9,6 +9,7 @@ import (
 	"github.com/Aliizi83/vohu/internal/platform/conversation"
 	"github.com/Aliizi83/vohu/internal/platform/httpserver"
 	"github.com/Aliizi83/vohu/internal/platform/migrations"
+	"github.com/Aliizi83/vohu/internal/platform/providerkey"
 	"github.com/Aliizi83/vohu/internal/platform/rbac"
 	"github.com/Aliizi83/vohu/internal/platform/sshconn"
 	"github.com/Aliizi83/vohu/internal/platform/user"
@@ -77,7 +78,12 @@ func main() {
 		{Program: "git", ArgsPrefixes: [][]string{{"status"}, {"log"}}, Allowed: true},
 		{Program: "docker", ArgsPrefixes: [][]string{{"ps"}, {"logs"}}, Allowed: true},
 	})
-	chatHandler := chat.NewHandler(conversationService, sshconnService, rbacService.CanAccessResource, sshCommandPolicy)
+	providerKeyRepo := providerkey.NewRepository(db.GetDB())
+	providerKeyService := providerkey.NewService(providerKeyRepo, secretBox)
+	providerKeyHandler := providerkey.NewHandler(providerKeyService)
+	providerKeyPolicy := providerkey.NewPolicy(rbacService.HasPermission)
+
+	chatHandler := chat.NewHandler(conversationService, sshconnService, rbacService.CanAccessResource, sshCommandPolicy, providerKeyService)
 
 	engine, v1 := httpserver.NewEngine(logger)
 
@@ -86,6 +92,7 @@ func main() {
 	user.RegisterRoutes(v1, userHandler, authMiddleware, userPolicy)
 	rbac.RegisterRoutes(v1, rbacHandler, authMiddleware, rbacPolicy)
 	sshconn.RegisterRoutes(v1, sshconnHandler, authMiddleware, sshconnPolicy)
+	providerkey.RegisterRoutes(v1, providerKeyHandler, authMiddleware, providerKeyPolicy)
 	chat.RegisterRoutes(v1, chatHandler, authMiddleware)
 	auth.RegisterRoutes(v1, authHandler)
 
