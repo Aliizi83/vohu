@@ -109,17 +109,17 @@ func (s *service) Authentication() gin.HandlerFunc {
 		parts := strings.SplitN(header, " ", 2)
 
 		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authorization header required"})
+			shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("authorization header required"))
 			return
 		}
 
 		claims, err := parseAccessToken(parts[1], s.cfg.JWT.Secret)
 		if err != nil {
 			if errors.Is(err, jwt.ErrTokenExpired) {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "token expired"})
+				shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("token expired"))
 				return
 			}
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+			shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("invalid token"))
 			return
 		}
 

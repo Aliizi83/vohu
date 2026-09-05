@@ -1,9 +1,11 @@
 package httpserver
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
+	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"github.com/Aliizi83/vohu/pkg/logging"
 	"github.com/gin-gonic/gin"
 )
@@ -38,6 +40,6 @@ func Recovery(logger logging.Logger) gin.HandlerFunc {
 			logger.Error(nil, logging.Internal, logging.Api, "panic recovered", map[string]any{"recovered": recovered})
 		}
 
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		shared.AbortWithError(c, http.StatusInternalServerError, shared.ResultInternalError, errors.New("internal server error"))
 	})
 }

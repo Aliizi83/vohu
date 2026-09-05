@@ -20,39 +20,39 @@ func (h *Handler) Create(c *gin.Context) {
 	var req CreateUserRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		shared.RespondValidationError(c, err)
 		return
 	}
 
 	res, err := h.service.Register(c.Request.Context(), req)
 	if err != nil {
 		if errors.Is(err, ErrUsernameTaken) {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			shared.RespondError(c, http.StatusConflict, shared.ResultConflictError, err)
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, errors.New("internal error"))
 		return
 	}
 
-	c.JSON(http.StatusCreated, res)
+	shared.RespondSuccess(c, http.StatusCreated, res)
 }
 
 func (h *Handler) Get(c *gin.Context) {
 	id, err := shared.ParseIDParam(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		shared.RespondError(c, http.StatusBadRequest, shared.ResultValidationError, errors.New("invalid id"))
 		return
 	}
 
 	u, err := h.service.GetByID(c.Request.Context(), id)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			shared.RespondError(c, http.StatusNotFound, shared.ResultNotFoundError, err)
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, errors.New("internal error"))
 		return
 	}
 
-	c.JSON(http.StatusOK, toResponse(*u))
+	shared.RespondSuccess(c, http.StatusOK, toResponse(*u))
 }

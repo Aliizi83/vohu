@@ -119,17 +119,17 @@ func (s *service) RequirePermission(key string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID, ok := shared.GetUserID(c)
 		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+			shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
 			return
 		}
 
 		allowed, err := s.HasPermission(c.Request.Context(), userID, key)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+			shared.AbortWithError(c, http.StatusInternalServerError, shared.ResultInternalError, errors.New("internal error"))
 			return
 		}
 		if !allowed {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			shared.AbortWithError(c, http.StatusForbidden, shared.ResultForbiddenError, errors.New("forbidden"))
 			return
 		}
 
