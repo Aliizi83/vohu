@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState, type FormEvent } from "react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { useConfirm } from "@/components/ConfirmDialog"
+import { SearchInput } from "@/components/SearchInput"
 import {
   Dialog,
   DialogContent,
@@ -30,17 +32,25 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useLanguage } from "@/lib/i18n"
+import { useDebouncedValue } from "@/lib/useDebouncedValue"
 import { api, ApiError, type RoleDto, type UserDto } from "@/lib/api"
 
 export default function UsersPage() {
   const { t } = useLanguage()
+  const { confirm, confirmDialog } = useConfirm()
   const [users, setUsers] = useState<UserDto[] | null>(null)
   const [roles, setRoles] = useState<RoleDto[]>([])
+  const [search, setSearch] = useState("")
+  const debouncedSearch = useDebouncedValue(search)
 
   const load = useCallback(async () => {
     try {
       const [userPage, rolePage] = await Promise.all([
-        api.users.list(1, 50),
+        api.users.list(
+          1,
+          50,
+          debouncedSearch ? { filters: { Username: { type: "contains", from: debouncedSearch } } } : undefined,
+        ),
         api.roles.list(1, 50),
       ])
       setUsers(userPage.items)
@@ -48,7 +58,10 @@ export default function UsersPage() {
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("users.loadFailed"))
     }
-  }, [t])
+    // t intentionally excluded — its identity changing on language switch
+    // shouldn't re-trigger a network call.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch])
 
   useEffect(() => {
     load()
@@ -65,7 +78,8 @@ export default function UsersPage() {
   }
 
   async function handleDelete(user: UserDto) {
-    if (!confirm(t("users.confirmDelete", { username: user.username }))) return
+    const ok = await confirm({ description: t("users.confirmDelete", { username: user.username }) })
+    if (!ok) return
     try {
       await api.users.remove(user.id)
       toast.success(t("users.deleted", { username: user.username }))
@@ -77,6 +91,7 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6">
+      {confirmDialog}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-semibold">{t("users.title")}</h2>
@@ -84,6 +99,8 @@ export default function UsersPage() {
         </div>
         <CreateUserDialog onCreated={load} />
       </div>
+
+      <SearchInput value={search} onChange={setSearch} placeholder={t("users.searchPlaceholder")} className="max-w-sm" />
 
       <div className="rounded-md border">
         <Table>
@@ -108,7 +125,7 @@ export default function UsersPage() {
             {users?.length === 0 && (
               <TableRow>
                 <TableCell colSpan={4} className="text-center text-muted-foreground">
-                  {t("users.empty")}
+                  {debouncedSearch ? t("common.noSearchResults") : t("users.empty")}
                 </TableCell>
               </TableRow>
             )}

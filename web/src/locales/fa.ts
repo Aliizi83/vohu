@@ -13,6 +13,8 @@ export const fa: Dictionary = {
     creating: "در حال ایجاد...",
     actions: "عملیات",
     loading: "در حال بارگذاری...",
+    noSearchResults: "نتیجه‌ای یافت نشد.",
+    confirmTitle: "آیا مطمئن هستید؟",
   },
 
   nav: {
@@ -42,6 +44,7 @@ export const fa: Dictionary = {
     title: "کاربران",
     subtitle: "حساب کاربری بسازید و نقش‌های آن‌ها را مدیریت کنید.",
     newUser: "کاربر جدید",
+    searchPlaceholder: "جستجو بر اساس نام کاربری...",
     columnUsername: "نام کاربری",
     columnEmail: "ایمیل",
     columnStatus: "وضعیت",
@@ -76,6 +79,7 @@ export const fa: Dictionary = {
     title: "نقش‌ها",
     subtitle: "نقش‌ها مجموعه‌ای از دسترسی‌ها هستند؛ تخصیص نقش به کاربر از صفحه کاربران انجام می‌شود.",
     newRole: "نقش جدید",
+    searchPlaceholder: "جستجو بر اساس نام...",
     columnName: "نام",
     empty: "هنوز نقشی وجود ندارد.",
     grantPermission: "اعطای دسترسی",
@@ -101,6 +105,7 @@ export const fa: Dictionary = {
     subtitlePrefix: "کلیدهای ساده‌ای مانند",
     subtitleSuffix: "— که از صفحه نقش‌ها به نقش‌ها اعطا می‌شوند.",
     newPermission: "دسترسی جدید",
+    searchPlaceholder: "جستجو بر اساس کلید...",
     columnKey: "کلید",
     empty: "هنوز دسترسی‌ای وجود ندارد.",
     loadFailed: "خطا در بارگذاری دسترسی‌ها",
@@ -119,6 +124,7 @@ export const fa: Dictionary = {
     subtitle:
       "سرورهایی که ایجنت می‌تواند از طریق SSH به آن‌ها متصل شود. فقط شما (و هر کسی که صراحتاً دسترسی گرفته) می‌تواند از اتصالی که می‌سازید استفاده کند — برای اینکه چه کسی مجاز به مدیریت اتصالات است به صفحه نقش‌ها/دسترسی‌ها مراجعه کنید.",
     newConnection: "اتصال جدید",
+    searchPlaceholder: "جستجو بر اساس نام...",
     columnId: "شناسه",
     columnName: "نام",
     columnHost: "هاست",

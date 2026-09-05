@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import { useConfirm } from "@/components/ConfirmDialog"
+import { SearchInput } from "@/components/SearchInput"
 import {
   Dialog,
   DialogContent,
@@ -21,27 +23,37 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useLanguage } from "@/lib/i18n"
+import { useDebouncedValue } from "@/lib/useDebouncedValue"
 import { api, ApiError, type PermissionDto } from "@/lib/api"
 
 export default function PermissionsPage() {
   const { t } = useLanguage()
+  const { confirm, confirmDialog } = useConfirm()
   const [permissions, setPermissions] = useState<PermissionDto[] | null>(null)
+  const [search, setSearch] = useState("")
+  const debouncedSearch = useDebouncedValue(search)
 
   const load = useCallback(async () => {
     try {
-      const page = await api.permissions.list(1, 200)
+      const page = await api.permissions.list(
+        1,
+        200,
+        debouncedSearch ? { filters: { Key: { type: "contains", from: debouncedSearch } } } : undefined,
+      )
       setPermissions(page.items)
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("permissions.loadFailed"))
     }
-  }, [t])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch])
 
   useEffect(() => {
     load()
   }, [load])
 
   async function handleDelete(permission: PermissionDto) {
-    if (!confirm(t("permissions.confirmDelete", { key: permission.key }))) return
+    const ok = await confirm({ description: t("permissions.confirmDelete", { key: permission.key }) })
+    if (!ok) return
     try {
       await api.permissions.remove(permission.id)
       toast.success(t("permissions.deleted", { key: permission.key }))
@@ -53,6 +65,7 @@ export default function PermissionsPage() {
 
   return (
     <div className="space-y-6">
+      {confirmDialog}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-semibold">{t("permissions.title")}</h2>
@@ -64,6 +77,13 @@ export default function PermissionsPage() {
         </div>
         <CreatePermissionDialog onCreated={load} />
       </div>
+
+      <SearchInput
+        value={search}
+        onChange={setSearch}
+        placeholder={t("permissions.searchPlaceholder")}
+        className="max-w-sm"
+      />
 
       <div className="rounded-md border">
         <Table>
@@ -86,7 +106,7 @@ export default function PermissionsPage() {
             {permissions?.length === 0 && (
               <TableRow>
                 <TableCell colSpan={2} className="text-center text-muted-foreground">
-                  {t("permissions.empty")}
+                  {debouncedSearch ? t("common.noSearchResults") : t("permissions.empty")}
                 </TableCell>
               </TableRow>
             )}

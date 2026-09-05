@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import { useConfirm } from "@/components/ConfirmDialog"
+import { SearchInput } from "@/components/SearchInput"
 import {
   Dialog,
   DialogContent,
@@ -29,17 +31,25 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useLanguage } from "@/lib/i18n"
+import { useDebouncedValue } from "@/lib/useDebouncedValue"
 import { api, ApiError, type PermissionDto, type RoleDto } from "@/lib/api"
 
 export default function RolesPage() {
   const { t } = useLanguage()
+  const { confirm, confirmDialog } = useConfirm()
   const [roles, setRoles] = useState<RoleDto[] | null>(null)
   const [permissions, setPermissions] = useState<PermissionDto[]>([])
+  const [search, setSearch] = useState("")
+  const debouncedSearch = useDebouncedValue(search)
 
   const load = useCallback(async () => {
     try {
       const [rolePage, permissionPage] = await Promise.all([
-        api.roles.list(1, 50),
+        api.roles.list(
+          1,
+          50,
+          debouncedSearch ? { filters: { Name: { type: "contains", from: debouncedSearch } } } : undefined,
+        ),
         api.permissions.list(1, 200),
       ])
       setRoles(rolePage.items)
@@ -47,14 +57,16 @@ export default function RolesPage() {
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("roles.loadFailed"))
     }
-  }, [t])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch])
 
   useEffect(() => {
     load()
   }, [load])
 
   async function handleDelete(role: RoleDto) {
-    if (!confirm(t("roles.confirmDelete", { name: role.name }))) return
+    const ok = await confirm({ description: t("roles.confirmDelete", { name: role.name }) })
+    if (!ok) return
     try {
       await api.roles.remove(role.id)
       toast.success(t("roles.deleted", { name: role.name }))
@@ -66,6 +78,7 @@ export default function RolesPage() {
 
   return (
     <div className="space-y-6">
+      {confirmDialog}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-semibold">{t("roles.title")}</h2>
@@ -73,6 +86,8 @@ export default function RolesPage() {
         </div>
         <CreateRoleDialog onCreated={load} />
       </div>
+
+      <SearchInput value={search} onChange={setSearch} placeholder={t("roles.searchPlaceholder")} className="max-w-sm" />
 
       <div className="rounded-md border">
         <Table>
@@ -95,7 +110,7 @@ export default function RolesPage() {
             {roles?.length === 0 && (
               <TableRow>
                 <TableCell colSpan={2} className="text-center text-muted-foreground">
-                  {t("roles.empty")}
+                  {debouncedSearch ? t("common.noSearchResults") : t("roles.empty")}
                 </TableCell>
               </TableRow>
             )}

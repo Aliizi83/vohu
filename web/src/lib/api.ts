@@ -227,8 +227,10 @@ export const api = {
   },
 
   sshConnections: {
-    list: (page?: number, pageSize?: number) =>
-      request<PagedList<SSHConnectionDto>>("GET", "/ssh-connections", { query: listQuery(page, pageSize) }),
+    list: (page?: number, pageSize?: number, filter?: DynamicFilter) =>
+      request<PagedList<SSHConnectionDto>>("GET", "/ssh-connections", {
+        query: listQuery(page, pageSize, filter),
+      }),
     create: (data: {
       name: string
       host: string

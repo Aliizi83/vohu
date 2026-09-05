@@ -12,6 +12,8 @@ export const en = {
     creating: "Creating...",
     actions: "Actions",
     loading: "Loading...",
+    noSearchResults: "No results found.",
+    confirmTitle: "Are you sure?",
   },
 
   nav: {
@@ -41,6 +43,7 @@ export const en = {
     title: "Users",
     subtitle: "Create accounts and manage their roles.",
     newUser: "New user",
+    searchPlaceholder: "Search by username...",
     columnUsername: "Username",
     columnEmail: "Email",
     columnStatus: "Status",
@@ -75,6 +78,7 @@ export const en = {
     title: "Roles",
     subtitle: "Roles bundle permissions; assign a role to a user on the Users page.",
     newRole: "New role",
+    searchPlaceholder: "Search by name...",
     columnName: "Name",
     empty: "No roles yet.",
     grantPermission: "Grant permission",
@@ -100,6 +104,7 @@ export const en = {
     subtitlePrefix: "Flat keys like",
     subtitleSuffix: "— granted to roles on the Roles page.",
     newPermission: "New permission",
+    searchPlaceholder: "Search by key...",
     columnKey: "Key",
     empty: "No permissions yet.",
     loadFailed: "Failed to load permissions",
@@ -118,6 +123,7 @@ export const en = {
     subtitle:
       "Servers the agent can reach over SSH. Only you (and anyone else explicitly granted access) can use a connection you create — see Roles/Permissions for who may manage connections at all.",
     newConnection: "New connection",
+    searchPlaceholder: "Search by name...",
     columnId: "ID",
     columnName: "Name",
     columnHost: "Host",

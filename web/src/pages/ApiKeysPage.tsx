@@ -21,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { useConfirm } from "@/components/ConfirmDialog"
 import { useLanguage } from "@/lib/i18n"
 import { api, ApiError, type LLMProvider, type ProviderKeyDto } from "@/lib/api"
 
@@ -119,9 +120,11 @@ function ProviderKeyTable({
   onRemove: (provider: LLMProvider) => Promise<void>
 }) {
   const { t } = useLanguage()
+  const { confirm, confirmDialog } = useConfirm()
 
   async function handleRemove(provider: LLMProvider) {
-    if (!confirm(t("apiKeys.confirmRemove", { provider }))) return
+    const ok = await confirm({ description: t("apiKeys.confirmRemove", { provider }) })
+    if (!ok) return
     try {
       await onRemove(provider)
       toast.success(t("apiKeys.removed", { provider }))
@@ -134,6 +137,7 @@ function ProviderKeyTable({
 
   return (
     <div className="space-y-3">
+      {confirmDialog}
       <div>
         <h3 className="font-medium">{title}</h3>
         <p className="text-sm text-muted-foreground">{description}</p>

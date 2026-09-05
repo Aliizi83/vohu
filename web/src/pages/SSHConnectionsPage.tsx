@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import { useConfirm } from "@/components/ConfirmDialog"
+import { SearchInput } from "@/components/SearchInput"
 import {
   Dialog,
   DialogContent,
@@ -29,27 +31,37 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useLanguage } from "@/lib/i18n"
+import { useDebouncedValue } from "@/lib/useDebouncedValue"
 import { api, ApiError, type SSHConnectionDto } from "@/lib/api"
 
 export default function SSHConnectionsPage() {
   const { t } = useLanguage()
+  const { confirm, confirmDialog } = useConfirm()
   const [connections, setConnections] = useState<SSHConnectionDto[] | null>(null)
+  const [search, setSearch] = useState("")
+  const debouncedSearch = useDebouncedValue(search)
 
   const load = useCallback(async () => {
     try {
-      const page = await api.sshConnections.list(1, 100)
+      const page = await api.sshConnections.list(
+        1,
+        100,
+        debouncedSearch ? { filters: { Name: { type: "contains", from: debouncedSearch } } } : undefined,
+      )
       setConnections(page.items)
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("sshConnections.loadFailed"))
     }
-  }, [t])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch])
 
   useEffect(() => {
     load()
   }, [load])
 
   async function handleDelete(conn: SSHConnectionDto) {
-    if (!confirm(t("sshConnections.confirmDelete", { name: conn.name }))) return
+    const ok = await confirm({ description: t("sshConnections.confirmDelete", { name: conn.name }) })
+    if (!ok) return
     try {
       await api.sshConnections.remove(conn.id)
       toast.success(t("sshConnections.deleted", { name: conn.name }))
@@ -61,6 +73,7 @@ export default function SSHConnectionsPage() {
 
   return (
     <div className="space-y-6">
+      {confirmDialog}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-semibold">{t("sshConnections.title")}</h2>
@@ -68,6 +81,13 @@ export default function SSHConnectionsPage() {
         </div>
         <CreateConnectionDialog onCreated={load} />
       </div>
+
+      <SearchInput
+        value={search}
+        onChange={setSearch}
+        placeholder={t("sshConnections.searchPlaceholder")}
+        className="max-w-sm"
+      />
 
       <div className="rounded-md border">
         <Table>
@@ -94,7 +114,7 @@ export default function SSHConnectionsPage() {
             {connections?.length === 0 && (
               <TableRow>
                 <TableCell colSpan={6} className="text-center text-muted-foreground">
-                  {t("sshConnections.empty")}
+                  {debouncedSearch ? t("common.noSearchResults") : t("sshConnections.empty")}
                 </TableCell>
               </TableRow>
             )}
