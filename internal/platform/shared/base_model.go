@@ -11,7 +11,7 @@ import (
 // trimmed: no random Code field, and soft-delete uses GORM's own
 // gorm.DeletedAt so queries filter deleted rows automatically.
 type BaseModel struct {
-	ID        uint           `gorm:"primaryKey"`
+	ID        uint `gorm:"primaryKey"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	DeletedAt gorm.DeletedAt `gorm:"index"`
