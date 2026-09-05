@@ -4,6 +4,7 @@ import (
 	"github.com/Aliizi83/vohu/config"
 	"github.com/Aliizi83/vohu/internal/platform/auth"
 	"github.com/Aliizi83/vohu/internal/platform/httpserver"
+	"github.com/Aliizi83/vohu/internal/platform/migrations"
 	"github.com/Aliizi83/vohu/internal/platform/rbac"
 	"github.com/Aliizi83/vohu/internal/platform/user"
 	"github.com/Aliizi83/vohu/pkg/db"
@@ -19,7 +20,7 @@ func main() {
 	}
 	defer db.CloseDB()
 
-	if err := migrate(); err != nil {
+	if err := migrations.UpP_1(db.GetDB(), logger); err != nil {
 		logger.Fatal(err, logging.Postgres, logging.Migration, err.Error(), nil)
 	}
 
@@ -34,10 +35,6 @@ func main() {
 	authService := auth.NewService(cfg, userService)
 	authHandler := auth.NewHandler(authService)
 
-	if err := seedDefaultAdmin(userService, rbacService); err != nil {
-		logger.Fatal(err, logging.Internal, logging.Startup, err.Error(), nil)
-	}
-
 	engine, v1 := httpserver.NewEngine(logger)
 
 	authMiddleware := authService.Authentication()
@@ -51,14 +48,4 @@ func main() {
 	if err := httpserver.Run(engine, cfg); err != nil {
 		logger.Fatal(err, logging.General, logging.Startup, err.Error(), nil)
 	}
-}
-
-func migrate() error {
-	return db.GetDB().AutoMigrate(
-		&user.User{},
-		&rbac.Role{},
-		&rbac.Permission{},
-		&rbac.RolePermission{},
-		&rbac.UserRole{},
-	)
 }

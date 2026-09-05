@@ -27,6 +27,9 @@ go.work.sum
 # env file
 .env
 
+# runtime log output (pkg/logging writes here)
+/logs/
+
 # Editor/IDE
 # .idea/
 # .vscode/

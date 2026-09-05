@@ -1,3 +1,5 @@
+name: vohu
+
 services:
   postgres:
     image: postgres

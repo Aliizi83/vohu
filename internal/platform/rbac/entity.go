@@ -35,3 +35,10 @@ type UserRole struct {
 }
 
 func (UserRole) TableName() string { return "user_roles" }
+
+func init() {
+	shared.RegisterModel(&Role{})
+	shared.RegisterModel(&Permission{})
+	shared.RegisterModel(&RolePermission{})
+	shared.RegisterModel(&UserRole{})
+}
