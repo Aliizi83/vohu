@@ -17,7 +17,7 @@ func setupRBACTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("failed to open in-memory sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(&rbac.Role{}, &rbac.Permission{}, &rbac.RolePermission{}, &rbac.UserRole{}); err != nil {
+	if err := db.AutoMigrate(&rbac.Role{}, &rbac.Permission{}, &rbac.RolePermission{}, &rbac.UserRole{}, &rbac.ResourcePermission{}); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
 	}
 	return db
@@ -133,5 +133,80 @@ func TestDeleteRole_NotFound(t *testing.T) {
 	err := service.DeleteRole(context.Background(), 9999)
 	if err != shared.ErrNotFound {
 		t.Fatalf("expected shared.ErrNotFound, got %v", err)
+	}
+}
+
+func TestCanAccessResource_DefaultDenyWithNoRow(t *testing.T) {
+	service := rbac.NewService(rbac.NewRepository(setupRBACTestDB(t)))
+
+	allowed, err := service.CanAccessResource(context.Background(), 1, "ssh_connection", 5)
+	if err != nil {
+		t.Fatalf("CanAccessResource failed: %v", err)
+	}
+	if allowed {
+		t.Fatal("expected default deny when no resource_permission row exists")
+	}
+}
+
+func TestCanAccessResource_Accepted(t *testing.T) {
+	service := rbac.NewService(rbac.NewRepository(setupRBACTestDB(t)))
+	ctx := context.Background()
+
+	if err := service.GrantResourceAccess(ctx, 1, "ssh_connection", 5, rbac.EffectAccepted); err != nil {
+		t.Fatalf("GrantResourceAccess failed: %v", err)
+	}
+
+	allowed, err := service.CanAccessResource(ctx, 1, "ssh_connection", 5)
+	if err != nil {
+		t.Fatalf("CanAccessResource failed: %v", err)
+	}
+	if !allowed {
+		t.Fatal("expected access after granting EffectAccepted")
+	}
+
+	// A different resource ID (same type) must stay denied.
+	allowed, err = service.CanAccessResource(ctx, 1, "ssh_connection", 6)
+	if err != nil {
+		t.Fatalf("CanAccessResource failed: %v", err)
+	}
+	if allowed {
+		t.Fatal("expected a grant on resource 5 to not leak into resource 6")
+	}
+}
+
+func TestCanAccessResource_Forbidden(t *testing.T) {
+	service := rbac.NewService(rbac.NewRepository(setupRBACTestDB(t)))
+	ctx := context.Background()
+
+	if err := service.GrantResourceAccess(ctx, 1, "ssh_connection", 5, rbac.EffectForbidden); err != nil {
+		t.Fatalf("GrantResourceAccess failed: %v", err)
+	}
+
+	allowed, err := service.CanAccessResource(ctx, 1, "ssh_connection", 5)
+	if err != nil {
+		t.Fatalf("CanAccessResource failed: %v", err)
+	}
+	if allowed {
+		t.Fatal("expected EffectForbidden to deny access")
+	}
+}
+
+func TestGrantResourceAccess_UpsertsOnRepeatGrant(t *testing.T) {
+	service := rbac.NewService(rbac.NewRepository(setupRBACTestDB(t)))
+	ctx := context.Background()
+
+	if err := service.GrantResourceAccess(ctx, 1, "ssh_connection", 5, rbac.EffectAccepted); err != nil {
+		t.Fatalf("first grant failed: %v", err)
+	}
+	if err := service.GrantResourceAccess(ctx, 1, "ssh_connection", 5, rbac.EffectForbidden); err != nil {
+		t.Fatalf("second grant failed: %v", err)
+	}
+
+	allowed, err := service.CanAccessResource(ctx, 1, "ssh_connection", 5)
+	if err != nil {
+		t.Fatalf("CanAccessResource failed: %v", err)
+	}
+	if allowed {
+		t.Fatal("expected the second grant (Forbidden) to overwrite the first (Accepted), not add a second row")
 	}
 }

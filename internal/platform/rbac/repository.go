@@ -30,6 +30,9 @@ type Repository interface {
 	AssignRoleToUser(ctx context.Context, userID, roleID uint) error
 
 	GetPermissionKeysForUser(ctx context.Context, userID uint) ([]string, error)
+
+	UpsertResourcePermission(ctx context.Context, userID uint, resourceType string, resourceID uint, effect Effect) error
+	FindResourcePermission(ctx context.Context, userID uint, resourceType string, resourceID uint) (*ResourcePermission, error)
 }
 
 // gormRepository holds one generic repository per entity it manages (named
@@ -156,6 +159,52 @@ func (r *gormRepository) AssignRoleToUser(ctx context.Context, userID, roleID ui
 		UserID: userID,
 		RoleID: roleID,
 	}).Error
+}
+
+func (r *gormRepository) UpsertResourcePermission(
+	ctx context.Context,
+	userID uint,
+	resourceType string,
+	resourceID uint,
+	effect Effect,
+) error {
+	existing, err := r.FindResourcePermission(ctx, userID, resourceType, resourceID)
+	if err != nil && !errors.Is(err, shared.ErrNotFound) {
+		return err
+	}
+
+	if existing != nil {
+		existing.Effect = effect
+		return r.db.WithContext(ctx).Save(existing).Error
+	}
+
+	return r.db.WithContext(ctx).Create(&ResourcePermission{
+		UserID:       userID,
+		ResourceType: resourceType,
+		ResourceID:   resourceID,
+		Effect:       effect,
+	}).Error
+}
+
+func (r *gormRepository) FindResourcePermission(
+	ctx context.Context,
+	userID uint,
+	resourceType string,
+	resourceID uint,
+) (*ResourcePermission, error) {
+	var permission ResourcePermission
+
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND resource_type = ? AND resource_id = ?", userID, resourceType, resourceID).
+		First(&permission).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, shared.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &permission, nil
 }
 
 func (r *gormRepository) GetPermissionKeysForUser(ctx context.Context, userID uint) ([]string, error) {

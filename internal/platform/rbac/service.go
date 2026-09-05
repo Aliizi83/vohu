@@ -31,6 +31,16 @@ type Service interface {
 	AssignRoleToUser(ctx context.Context, userID, roleID uint) error
 
 	HasPermission(ctx context.Context, userID uint, key string) (bool, error)
+
+	// GrantResourceAccess records an explicit Accepted/Forbidden decision
+	// for one user on one (resourceType, resourceID) pair — an upsert, a
+	// repeat grant just updates the effect.
+	GrantResourceAccess(ctx context.Context, userID uint, resourceType string, resourceID uint, effect Effect) error
+
+	// CanAccessResource answers "can this user touch this specific row" —
+	// default deny when no row exists at all, same safe-by-default posture
+	// as command.CommandPolicy's accept mode.
+	CanAccessResource(ctx context.Context, userID uint, resourceType string, resourceID uint) (bool, error)
 }
 
 type service struct {
@@ -178,4 +188,31 @@ func (s *service) HasPermission(ctx context.Context, userID uint, key string) (b
 	}
 
 	return false, nil
+}
+
+func (s *service) GrantResourceAccess(
+	ctx context.Context,
+	userID uint,
+	resourceType string,
+	resourceID uint,
+	effect Effect,
+) error {
+	return s.repo.UpsertResourcePermission(ctx, userID, resourceType, resourceID, effect)
+}
+
+func (s *service) CanAccessResource(
+	ctx context.Context,
+	userID uint,
+	resourceType string,
+	resourceID uint,
+) (bool, error) {
+	permission, err := s.repo.FindResourcePermission(ctx, userID, resourceType, resourceID)
+	if errors.Is(err, shared.ErrNotFound) {
+		return false, nil // no row at all -> default deny
+	}
+	if err != nil {
+		return false, err
+	}
+
+	return permission.Effect == EffectAccepted, nil
 }
