@@ -20,9 +20,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { useLanguage } from "@/lib/i18n"
 import { api, ApiError, type PermissionDto } from "@/lib/api"
 
 export default function PermissionsPage() {
+  const { t } = useLanguage()
   const [permissions, setPermissions] = useState<PermissionDto[] | null>(null)
 
   const load = useCallback(async () => {
@@ -30,22 +32,22 @@ export default function PermissionsPage() {
       const page = await api.permissions.list(1, 200)
       setPermissions(page.items)
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to load permissions")
+      toast.error(err instanceof ApiError ? err.message : t("permissions.loadFailed"))
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     load()
   }, [load])
 
   async function handleDelete(permission: PermissionDto) {
-    if (!confirm(`Delete permission "${permission.key}"? This can't be undone.`)) return
+    if (!confirm(t("permissions.confirmDelete", { key: permission.key }))) return
     try {
       await api.permissions.remove(permission.id)
-      toast.success(`Permission "${permission.key}" deleted`)
+      toast.success(t("permissions.deleted", { key: permission.key }))
       load()
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Delete failed")
+      toast.error(err instanceof ApiError ? err.message : t("permissions.deleteFailed"))
     }
   }
 
@@ -53,10 +55,11 @@ export default function PermissionsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-semibold">Permissions</h2>
+          <h2 className="text-2xl font-semibold">{t("permissions.title")}</h2>
           <p className="text-sm text-muted-foreground">
-            Flat keys like <code className="rounded bg-muted px-1 py-0.5 text-xs">user:create</code> —
-            granted to roles on the Roles page.
+            {t("permissions.subtitlePrefix")}{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">user:create</code>{" "}
+            {t("permissions.subtitleSuffix")}
           </p>
         </div>
         <CreatePermissionDialog onCreated={load} />
@@ -66,8 +69,8 @@ export default function PermissionsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Key</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead>{t("permissions.columnKey")}</TableHead>
+              <TableHead className="text-end">{t("common.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -83,7 +86,7 @@ export default function PermissionsPage() {
             {permissions?.length === 0 && (
               <TableRow>
                 <TableCell colSpan={2} className="text-center text-muted-foreground">
-                  No permissions yet.
+                  {t("permissions.empty")}
                 </TableCell>
               </TableRow>
             )}
@@ -91,9 +94,9 @@ export default function PermissionsPage() {
             {permissions?.map((permission) => (
               <TableRow key={permission.id}>
                 <TableCell className="font-mono text-sm">{permission.key}</TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-end">
                   <Button variant="destructive" size="sm" onClick={() => handleDelete(permission)}>
-                    Delete
+                    {t("common.delete")}
                   </Button>
                 </TableCell>
               </TableRow>
@@ -106,6 +109,7 @@ export default function PermissionsPage() {
 }
 
 function CreatePermissionDialog({ onCreated }: { onCreated: () => void }) {
+  const { t } = useLanguage()
   const [open, setOpen] = useState(false)
   const [key, setKey] = useState("")
   const [loading, setLoading] = useState(false)
@@ -115,12 +119,12 @@ function CreatePermissionDialog({ onCreated }: { onCreated: () => void }) {
     setLoading(true)
     try {
       await api.permissions.create(key)
-      toast.success(`Permission "${key}" created`)
+      toast.success(t("permissions.created", { key }))
       setOpen(false)
       setKey("")
       onCreated()
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to create permission")
+      toast.error(err instanceof ApiError ? err.message : t("permissions.createFailed"))
     } finally {
       setLoading(false)
     }
@@ -128,17 +132,17 @@ function CreatePermissionDialog({ onCreated }: { onCreated: () => void }) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button>New permission</Button>} />
+      <DialogTrigger render={<Button>{t("permissions.newPermission")}</Button>} />
       <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Create permission</DialogTitle>
+            <DialogTitle>{t("permissions.createDialogTitle")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-2 py-4">
-            <Label htmlFor="permission-key">Key</Label>
+            <Label htmlFor="permission-key">{t("permissions.key")}</Label>
             <Input
               id="permission-key"
-              placeholder="resource:action"
+              placeholder={t("permissions.keyPlaceholder")}
               value={key}
               onChange={(e) => setKey(e.target.value)}
               required
@@ -147,7 +151,7 @@ function CreatePermissionDialog({ onCreated }: { onCreated: () => void }) {
           </div>
           <DialogFooter>
             <Button type="submit" disabled={loading}>
-              {loading ? "Creating..." : "Create"}
+              {loading ? t("common.creating") : t("common.create")}
             </Button>
           </DialogFooter>
         </form>

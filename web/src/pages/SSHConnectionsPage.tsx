@@ -28,9 +28,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { useLanguage } from "@/lib/i18n"
 import { api, ApiError, type SSHConnectionDto } from "@/lib/api"
 
 export default function SSHConnectionsPage() {
+  const { t } = useLanguage()
   const [connections, setConnections] = useState<SSHConnectionDto[] | null>(null)
 
   const load = useCallback(async () => {
@@ -38,22 +40,22 @@ export default function SSHConnectionsPage() {
       const page = await api.sshConnections.list(1, 100)
       setConnections(page.items)
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to load SSH connections")
+      toast.error(err instanceof ApiError ? err.message : t("sshConnections.loadFailed"))
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     load()
   }, [load])
 
   async function handleDelete(conn: SSHConnectionDto) {
-    if (!confirm(`Delete connection "${conn.name}"? This can't be undone.`)) return
+    if (!confirm(t("sshConnections.confirmDelete", { name: conn.name }))) return
     try {
       await api.sshConnections.remove(conn.id)
-      toast.success(`${conn.name} deleted`)
+      toast.success(t("sshConnections.deleted", { name: conn.name }))
       load()
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Delete failed")
+      toast.error(err instanceof ApiError ? err.message : t("sshConnections.deleteFailed"))
     }
   }
 
@@ -61,12 +63,8 @@ export default function SSHConnectionsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-semibold">SSH Connections</h2>
-          <p className="text-sm text-muted-foreground">
-            Servers the agent can reach over SSH. Only you (and anyone else explicitly
-            granted access) can use a connection you create — see Roles/Permissions for
-            who may manage connections at all.
-          </p>
+          <h2 className="text-2xl font-semibold">{t("sshConnections.title")}</h2>
+          <p className="text-sm text-muted-foreground">{t("sshConnections.subtitle")}</p>
         </div>
         <CreateConnectionDialog onCreated={load} />
       </div>
@@ -75,12 +73,12 @@ export default function SSHConnectionsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>ID</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Host</TableHead>
-              <TableHead>Username</TableHead>
-              <TableHead>Auth</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead>{t("sshConnections.columnId")}</TableHead>
+              <TableHead>{t("sshConnections.columnName")}</TableHead>
+              <TableHead>{t("sshConnections.columnHost")}</TableHead>
+              <TableHead>{t("sshConnections.columnUsername")}</TableHead>
+              <TableHead>{t("sshConnections.columnAuth")}</TableHead>
+              <TableHead className="text-end">{t("common.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -96,7 +94,7 @@ export default function SSHConnectionsPage() {
             {connections?.length === 0 && (
               <TableRow>
                 <TableCell colSpan={6} className="text-center text-muted-foreground">
-                  No SSH connections yet.
+                  {t("sshConnections.empty")}
                 </TableCell>
               </TableRow>
             )}
@@ -109,10 +107,12 @@ export default function SSHConnectionsPage() {
                   {conn.host}:{conn.port}
                 </TableCell>
                 <TableCell>{conn.username}</TableCell>
-                <TableCell className="text-muted-foreground">{conn.authMethod}</TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-muted-foreground">
+                  {conn.authMethod === "password" ? t("sshConnections.authPassword") : t("sshConnections.authPrivateKey")}
+                </TableCell>
+                <TableCell className="text-end">
                   <Button variant="destructive" size="sm" onClick={() => handleDelete(conn)}>
-                    Delete
+                    {t("common.delete")}
                   </Button>
                 </TableCell>
               </TableRow>
@@ -125,6 +125,7 @@ export default function SSHConnectionsPage() {
 }
 
 function CreateConnectionDialog({ onCreated }: { onCreated: () => void }) {
+  const { t } = useLanguage()
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
   const [host, setHost] = useState("")
@@ -146,7 +147,7 @@ function CreateConnectionDialog({ onCreated }: { onCreated: () => void }) {
         authMethod,
         secret,
       })
-      toast.success(`Connection "${name}" created`)
+      toast.success(t("sshConnections.created", { name }))
       setOpen(false)
       setName("")
       setHost("")
@@ -156,7 +157,7 @@ function CreateConnectionDialog({ onCreated }: { onCreated: () => void }) {
       setSecret("")
       onCreated()
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to create connection")
+      toast.error(err instanceof ApiError ? err.message : t("sshConnections.createFailed"))
     } finally {
       setLoading(false)
     }
@@ -164,28 +165,25 @@ function CreateConnectionDialog({ onCreated }: { onCreated: () => void }) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button>New connection</Button>} />
+      <DialogTrigger render={<Button>{t("sshConnections.newConnection")}</Button>} />
       <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>New SSH connection</DialogTitle>
-            <DialogDescription>
-              The password/key is encrypted before it's stored and is never returned by
-              the API again.
-            </DialogDescription>
+            <DialogTitle>{t("sshConnections.createDialogTitle")}</DialogTitle>
+            <DialogDescription>{t("sshConnections.createDialogDescription")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="conn-name">Name</Label>
+              <Label htmlFor="conn-name">{t("sshConnections.name")}</Label>
               <Input id="conn-name" value={name} onChange={(e) => setName(e.target.value)} required />
             </div>
             <div className="grid grid-cols-3 gap-2">
               <div className="col-span-2 space-y-2">
-                <Label htmlFor="conn-host">Host</Label>
+                <Label htmlFor="conn-host">{t("sshConnections.host")}</Label>
                 <Input id="conn-host" value={host} onChange={(e) => setHost(e.target.value)} required />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="conn-port">Port</Label>
+                <Label htmlFor="conn-port">{t("sshConnections.port")}</Label>
                 <Input
                   id="conn-port"
                   type="number"
@@ -195,7 +193,7 @@ function CreateConnectionDialog({ onCreated }: { onCreated: () => void }) {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="conn-username">Username</Label>
+              <Label htmlFor="conn-username">{t("sshConnections.username")}</Label>
               <Input
                 id="conn-username"
                 value={username}
@@ -204,25 +202,27 @@ function CreateConnectionDialog({ onCreated }: { onCreated: () => void }) {
               />
             </div>
             <div className="space-y-2">
-              <Label>Auth method</Label>
+              <Label>{t("sshConnections.authMethod")}</Label>
               <Select
                 value={authMethod}
                 onValueChange={(value) => setAuthMethod((value as "password" | "private_key") ?? "password")}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue>
-                    {(value: string) => (value === "password" ? "Password" : "Private key")}
+                    {(value: string) =>
+                      value === "password" ? t("sshConnections.authPassword") : t("sshConnections.authPrivateKey")
+                    }
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="password">Password</SelectItem>
-                  <SelectItem value="private_key">Private key</SelectItem>
+                  <SelectItem value="password">{t("sshConnections.authPassword")}</SelectItem>
+                  <SelectItem value="private_key">{t("sshConnections.authPrivateKey")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="conn-secret">
-                {authMethod === "password" ? "Password" : "Private key (PEM)"}
+                {authMethod === "password" ? t("sshConnections.secretPassword") : t("sshConnections.secretPrivateKey")}
               </Label>
               <Input
                 id="conn-secret"
@@ -235,7 +235,7 @@ function CreateConnectionDialog({ onCreated }: { onCreated: () => void }) {
           </div>
           <DialogFooter>
             <Button type="submit" disabled={loading}>
-              {loading ? "Creating..." : "Create"}
+              {loading ? t("common.creating") : t("common.create")}
             </Button>
           </DialogFooter>
         </form>

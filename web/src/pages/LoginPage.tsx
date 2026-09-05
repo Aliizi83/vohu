@@ -12,16 +12,18 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { useAuth } from "@/lib/auth"
+import { useLanguage } from "@/lib/i18n"
 
 export default function LoginPage() {
   const { login, isAuthenticated } = useAuth()
+  const { t } = useLanguage()
   const navigate = useNavigate()
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
 
   if (isAuthenticated) {
-    return <Navigate to="/users" replace />
+    return <Navigate to="/" replace />
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -29,9 +31,9 @@ export default function LoginPage() {
     setLoading(true)
     try {
       await login(username, password)
-      navigate("/users", { replace: true })
+      navigate("/", { replace: true })
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Login failed")
+      toast.error(err instanceof Error ? err.message : t("login.loginFailed"))
     } finally {
       setLoading(false)
     }
@@ -41,13 +43,13 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>Vohu Platform</CardTitle>
-          <CardDescription>Sign in to manage users, roles, and permissions.</CardDescription>
+          <CardTitle>{t("login.title")}</CardTitle>
+          <CardDescription>{t("login.subtitle")}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="username">{t("login.username")}</Label>
               <Input
                 id="username"
                 value={username}
@@ -57,7 +59,7 @@ export default function LoginPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{t("login.password")}</Label>
               <Input
                 id="password"
                 type="password"
@@ -67,7 +69,7 @@ export default function LoginPage() {
               />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Signing in..." : "Sign in"}
+              {loading ? t("login.signingIn") : t("login.signIn")}
             </Button>
           </form>
         </CardContent>

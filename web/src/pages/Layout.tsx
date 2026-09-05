@@ -2,28 +2,31 @@ import { KeyRound, KeySquare, LogOut, MessageSquare, Server, Shield, Users } fro
 import { NavLink, Outlet } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth"
+import { LANGUAGE_OPTIONS, useLanguage } from "@/lib/i18n"
+import { cn } from "cn"
 
 const navItems = [
-  { to: "/chat", label: "Chat", icon: MessageSquare },
-  { to: "/ssh-connections", label: "SSH Connections", icon: Server },
-  { to: "/provider-keys", label: "API Keys", icon: KeySquare },
-  { to: "/users", label: "Users", icon: Users },
-  { to: "/roles", label: "Roles", icon: Shield },
-  { to: "/permissions", label: "Permissions", icon: KeyRound },
-]
+  { to: "/chat", labelKey: "nav.chat", icon: MessageSquare },
+  { to: "/ssh-connections", labelKey: "nav.sshConnections", icon: Server },
+  { to: "/provider-keys", labelKey: "nav.apiKeys", icon: KeySquare },
+  { to: "/users", labelKey: "nav.users", icon: Users },
+  { to: "/roles", labelKey: "nav.roles", icon: Shield },
+  { to: "/permissions", labelKey: "nav.permissions", icon: KeyRound },
+] as const
 
 export default function Layout() {
   const { logout } = useAuth()
+  const { t, language, setLanguage } = useLanguage()
 
   return (
     <div className="flex min-h-screen">
-      <aside className="flex w-60 flex-col gap-1 border-r bg-card p-4">
+      <aside className="flex w-60 flex-col gap-1 border-e bg-card p-4">
         <div className="mb-4 px-2">
-          <h1 className="text-lg font-semibold">Vohu</h1>
-          <p className="text-xs text-muted-foreground">Platform admin</p>
+          <h1 className="text-lg font-semibold">{t("nav.appName")}</h1>
+          <p className="text-xs text-muted-foreground">{t("nav.appTagline")}</p>
         </div>
 
-        {navItems.map(({ to, label, icon: Icon }) => (
+        {navItems.map(({ to, labelKey, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
@@ -36,14 +39,34 @@ export default function Layout() {
             }
           >
             <Icon className="size-4" />
-            {label}
+            {t(labelKey)}
           </NavLink>
         ))}
 
-        <div className="mt-auto pt-4">
+        <div className="mt-auto space-y-3 pt-4">
+          <div className="flex items-center gap-1 px-2">
+            <span className="text-xs text-muted-foreground">{t("nav.language")}:</span>
+            <div className="flex gap-1">
+              {LANGUAGE_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setLanguage(option.value)}
+                  className={cn(
+                    "rounded-md px-2 py-0.5 text-xs transition-colors",
+                    language === option.value
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <Button variant="ghost" className="w-full justify-start gap-2" onClick={logout}>
             <LogOut className="size-4" />
-            Log out
+            {t("nav.logOut")}
           </Button>
         </div>
       </aside>

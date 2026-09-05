@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "@fontsource-variable/vazirmatn";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -130,5 +131,11 @@
   }
   html {
     @apply font-sans;
+  }
+  /* Vazirmatn has full Persian glyph coverage that Geist lacks; Geist
+     stays as its fallback for any Latin text (model names, hostnames,
+     ...) that shows up inside Persian UI. */
+  html[dir="rtl"] {
+    font-family: "Vazirmatn Variable", "Geist Variable", sans-serif;
   }
 }

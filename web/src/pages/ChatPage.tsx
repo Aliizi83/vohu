@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useLanguage } from "@/lib/i18n"
 import {
   api,
   ApiError,
@@ -40,6 +41,7 @@ const MODEL_OPTIONS = [
 ] as const
 
 export default function ChatPage() {
+  const { t } = useLanguage()
   const [conversations, setConversations] = useState<ConversationDto[] | null>(null)
   const [connections, setConnections] = useState<SSHConnectionDto[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -60,9 +62,11 @@ export default function ChatPage() {
         setSelectedId(page.items[0].id)
       }
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to load conversations")
+      toast.error(err instanceof ApiError ? err.message : t("chat.loadConversationsFailed"))
     }
-    // selectedId intentionally excluded — this only picks a default once.
+    // selectedId and t intentionally excluded — this only picks a default
+    // once, and t's identity changing on language switch shouldn't
+    // re-trigger a network call.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -87,9 +91,11 @@ export default function ChatPage() {
       .messages(selectedId)
       .then(setMessages)
       .catch((err) => {
-        toast.error(err instanceof ApiError ? err.message : "Failed to load messages")
+        toast.error(err instanceof ApiError ? err.message : t("chat.loadMessagesFailed"))
         setMessages([])
       })
+    // t intentionally excluded, same reasoning as loadConversations above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId])
 
   useEffect(() => {
@@ -129,7 +135,7 @@ export default function ChatPage() {
     <div className="flex h-[calc(100vh-3rem)] gap-4">
       <aside className="flex w-64 shrink-0 flex-col gap-2 overflow-y-auto rounded-md border p-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-muted-foreground">Conversations</h2>
+          <h2 className="text-sm font-semibold text-muted-foreground">{t("chat.conversations")}</h2>
           <NewConversationDialog
             onCreated={(conv) => {
               setConversations((prev) => [conv, ...(prev ?? [])])
@@ -142,7 +148,7 @@ export default function ChatPage() {
           Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}
 
         {conversations?.length === 0 && (
-          <p className="px-1 py-4 text-sm text-muted-foreground">No conversations yet.</p>
+          <p className="px-1 py-4 text-sm text-muted-foreground">{t("chat.noConversations")}</p>
         )}
 
         {conversations?.map((conv) => (
@@ -150,7 +156,7 @@ export default function ChatPage() {
             key={conv.id}
             onClick={() => setSelectedId(conv.id)}
             className={cn(
-              "flex flex-col items-start rounded-md px-3 py-2 text-left text-sm transition-colors",
+              "flex flex-col items-start rounded-md px-3 py-2 text-start text-sm transition-colors",
               conv.id === selectedId
                 ? "bg-accent text-accent-foreground"
                 : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
@@ -165,7 +171,7 @@ export default function ChatPage() {
 
         {connections.length > 0 && (
           <div className="mt-4 border-t pt-3">
-            <h3 className="mb-2 text-xs font-semibold text-muted-foreground">SSH connections</h3>
+            <h3 className="mb-2 text-xs font-semibold text-muted-foreground">{t("chat.sshConnectionsHeading")}</h3>
             <ul className="space-y-1 text-xs text-muted-foreground">
               {connections.map((c) => (
                 <li key={c.id}>
@@ -180,7 +186,7 @@ export default function ChatPage() {
       <section className="flex flex-1 flex-col rounded-md border">
         {!selectedConversation ? (
           <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-            {conversations === null ? "Loading..." : "Create or select a conversation to start chatting."}
+            {conversations === null ? t("chat.loading") : t("chat.selectPrompt")}
           </div>
         ) : (
           <>
@@ -215,11 +221,11 @@ export default function ChatPage() {
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask the agent to do something, e.g. run `pwd` on one of your servers…"
+                placeholder={t("chat.composerPlaceholder")}
                 disabled={isStreaming}
               />
               <Button type="submit" disabled={isStreaming || !input.trim()}>
-                {isStreaming ? "Sending…" : "Send"}
+                {isStreaming ? t("chat.sending") : t("chat.send")}
               </Button>
             </form>
           </>
@@ -230,6 +236,8 @@ export default function ChatPage() {
 }
 
 function MessageBubble({ message, pending }: { message: MessageDto; pending?: boolean }) {
+  const { t } = useLanguage()
+
   if (message.role === "tool") {
     return (
       <div className="space-y-1 rounded-md border bg-muted/50 px-3 py-2 text-xs">
@@ -237,7 +245,7 @@ function MessageBubble({ message, pending }: { message: MessageDto; pending?: bo
           <div key={i}>
             <span className="font-medium">{result.name}</span>{" "}
             {result.error ? (
-              <span className="text-destructive">error: {result.error}</span>
+              <span className="text-destructive">{t("chat.toolError", { error: result.error })}</span>
             ) : (
               <pre className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">
                 {typeof result.result === "string" ? result.result : JSON.stringify(result.result, null, 2)}
@@ -264,7 +272,7 @@ function MessageBubble({ message, pending }: { message: MessageDto; pending?: bo
       </div>
       {message.toolCalls?.map((call) => (
         <span key={call.id} className="text-xs text-muted-foreground">
-          → calling {call.name}({JSON.stringify(call.arguments)})
+          {t("chat.callingTool", { name: call.name, args: JSON.stringify(call.arguments) })}
         </span>
       ))}
     </div>
@@ -272,6 +280,7 @@ function MessageBubble({ message, pending }: { message: MessageDto; pending?: bo
 }
 
 function NewConversationDialog({ onCreated }: { onCreated: (conv: ConversationDto) => void }) {
+  const { t } = useLanguage()
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState("")
   const [optionIndex, setOptionIndex] = useState("0")
@@ -289,17 +298,17 @@ function NewConversationDialog({ onCreated }: { onCreated: (conv: ConversationDt
     setLoading(true)
     try {
       const conv = await api.conversations.create({
-        title: title.trim() || "New chat",
+        title: title.trim() || t("chat.titlePlaceholder"),
         provider: option.provider,
         model,
       })
-      toast.success("Conversation created")
+      toast.success(t("chat.conversationCreated"))
       setOpen(false)
       setTitle("")
       setCustomModel("")
       onCreated(conv)
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to create conversation")
+      toast.error(err instanceof ApiError ? err.message : t("chat.createConversationFailed"))
     } finally {
       setLoading(false)
     }
@@ -307,31 +316,29 @@ function NewConversationDialog({ onCreated }: { onCreated: (conv: ConversationDt
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button size="sm">New chat</Button>} />
+      <DialogTrigger render={<Button size="sm">{t("chat.newChat")}</Button>} />
       <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>New conversation</DialogTitle>
-            <DialogDescription>
-              Provider and model are fixed for the whole conversation once created.
-            </DialogDescription>
+            <DialogTitle>{t("chat.newConversationDialogTitle")}</DialogTitle>
+            <DialogDescription>{t("chat.newConversationDialogDescription")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="conv-title">Title</Label>
+              <Label htmlFor="conv-title">{t("chat.titleLabel")}</Label>
               <Input
                 id="conv-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="New chat"
+                placeholder={t("chat.titlePlaceholder")}
               />
             </div>
             <div className="space-y-2">
-              <Label>Model</Label>
+              <Label>{t("chat.modelLabel")}</Label>
               <Select value={optionIndex} onValueChange={(value) => setOptionIndex(value ?? "0")}>
                 <SelectTrigger className="w-full">
                   <SelectValue>
-                    {(value: string) => MODEL_OPTIONS[Number(value)]?.label ?? "Choose a model"}
+                    {(value: string) => MODEL_OPTIONS[Number(value)]?.label ?? t("chat.modelLabel")}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
@@ -345,12 +352,12 @@ function NewConversationDialog({ onCreated }: { onCreated: (conv: ConversationDt
             </div>
             {isCustom && (
               <div className="space-y-2">
-                <Label htmlFor="conv-custom-model">Model name</Label>
+                <Label htmlFor="conv-custom-model">{t("chat.modelNameLabel")}</Label>
                 <Input
                   id="conv-custom-model"
                   value={customModel}
                   onChange={(e) => setCustomModel(e.target.value)}
-                  placeholder="e.g. gpt-4o, deepseek-chat"
+                  placeholder={t("chat.modelNamePlaceholder")}
                   required
                 />
               </div>
@@ -358,7 +365,7 @@ function NewConversationDialog({ onCreated }: { onCreated: (conv: ConversationDt
           </div>
           <DialogFooter>
             <Button type="submit" disabled={loading || (isCustom && !customModel.trim())}>
-              {loading ? "Creating..." : "Create"}
+              {loading ? t("common.creating") : t("common.create")}
             </Button>
           </DialogFooter>
         </form>

@@ -29,9 +29,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { useLanguage } from "@/lib/i18n"
 import { api, ApiError, type RoleDto, type UserDto } from "@/lib/api"
 
 export default function UsersPage() {
+  const { t } = useLanguage()
   const [users, setUsers] = useState<UserDto[] | null>(null)
   const [roles, setRoles] = useState<RoleDto[]>([])
 
@@ -44,9 +46,9 @@ export default function UsersPage() {
       setUsers(userPage.items)
       setRoles(rolePage.items)
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to load users")
+      toast.error(err instanceof ApiError ? err.message : t("users.loadFailed"))
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     load()
@@ -55,21 +57,21 @@ export default function UsersPage() {
   async function handleToggleEnabled(user: UserDto) {
     try {
       await api.users.update(user.id, { enabled: !user.enabled })
-      toast.success(`${user.username} ${user.enabled ? "disabled" : "enabled"}`)
+      toast.success(t(user.enabled ? "users.disabledToast" : "users.enabledToast", { username: user.username }))
       load()
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Update failed")
+      toast.error(err instanceof ApiError ? err.message : t("users.updateFailed"))
     }
   }
 
   async function handleDelete(user: UserDto) {
-    if (!confirm(`Delete user "${user.username}"? This can't be undone.`)) return
+    if (!confirm(t("users.confirmDelete", { username: user.username }))) return
     try {
       await api.users.remove(user.id)
-      toast.success(`${user.username} deleted`)
+      toast.success(t("users.deleted", { username: user.username }))
       load()
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Delete failed")
+      toast.error(err instanceof ApiError ? err.message : t("users.deleteFailed"))
     }
   }
 
@@ -77,8 +79,8 @@ export default function UsersPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-semibold">Users</h2>
-          <p className="text-sm text-muted-foreground">Create accounts and manage their roles.</p>
+          <h2 className="text-2xl font-semibold">{t("users.title")}</h2>
+          <p className="text-sm text-muted-foreground">{t("users.subtitle")}</p>
         </div>
         <CreateUserDialog onCreated={load} />
       </div>
@@ -87,10 +89,10 @@ export default function UsersPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Username</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead>{t("users.columnUsername")}</TableHead>
+              <TableHead>{t("users.columnEmail")}</TableHead>
+              <TableHead>{t("users.columnStatus")}</TableHead>
+              <TableHead className="text-end">{t("common.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -106,7 +108,7 @@ export default function UsersPage() {
             {users?.length === 0 && (
               <TableRow>
                 <TableCell colSpan={4} className="text-center text-muted-foreground">
-                  No users yet.
+                  {t("users.empty")}
                 </TableCell>
               </TableRow>
             )}
@@ -117,16 +119,16 @@ export default function UsersPage() {
                 <TableCell className="text-muted-foreground">{user.email || "—"}</TableCell>
                 <TableCell>
                   <Badge variant={user.enabled ? "default" : "secondary"}>
-                    {user.enabled ? "Enabled" : "Disabled"}
+                    {user.enabled ? t("users.enabled") : t("users.disabled")}
                   </Badge>
                 </TableCell>
                 <TableCell className="flex justify-end gap-2">
                   <AssignRoleDialog user={user} roles={roles} onAssigned={load} />
                   <Button variant="outline" size="sm" onClick={() => handleToggleEnabled(user)}>
-                    {user.enabled ? "Disable" : "Enable"}
+                    {user.enabled ? t("users.disable") : t("users.enable")}
                   </Button>
                   <Button variant="destructive" size="sm" onClick={() => handleDelete(user)}>
-                    Delete
+                    {t("common.delete")}
                   </Button>
                 </TableCell>
               </TableRow>
@@ -139,6 +141,7 @@ export default function UsersPage() {
 }
 
 function CreateUserDialog({ onCreated }: { onCreated: () => void }) {
+  const { t } = useLanguage()
   const [open, setOpen] = useState(false)
   const [username, setUsername] = useState("")
   const [email, setEmail] = useState("")
@@ -150,14 +153,14 @@ function CreateUserDialog({ onCreated }: { onCreated: () => void }) {
     setLoading(true)
     try {
       await api.users.create({ username, email: email || undefined, password })
-      toast.success(`User "${username}" created`)
+      toast.success(t("users.created", { username }))
       setOpen(false)
       setUsername("")
       setEmail("")
       setPassword("")
       onCreated()
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to create user")
+      toast.error(err instanceof ApiError ? err.message : t("users.createFailed"))
     } finally {
       setLoading(false)
     }
@@ -165,16 +168,16 @@ function CreateUserDialog({ onCreated }: { onCreated: () => void }) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button>New user</Button>} />
+      <DialogTrigger render={<Button>{t("users.newUser")}</Button>} />
       <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Create user</DialogTitle>
-            <DialogDescription>Password must be at least 8 characters.</DialogDescription>
+            <DialogTitle>{t("users.createDialogTitle")}</DialogTitle>
+            <DialogDescription>{t("users.createDialogDescription")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="new-username">Username</Label>
+              <Label htmlFor="new-username">{t("users.columnUsername")}</Label>
               <Input
                 id="new-username"
                 value={username}
@@ -184,7 +187,7 @@ function CreateUserDialog({ onCreated }: { onCreated: () => void }) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="new-email">Email (optional)</Label>
+              <Label htmlFor="new-email">{t("users.emailOptional")}</Label>
               <Input
                 id="new-email"
                 type="email"
@@ -193,7 +196,7 @@ function CreateUserDialog({ onCreated }: { onCreated: () => void }) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="new-password">Password</Label>
+              <Label htmlFor="new-password">{t("login.password")}</Label>
               <Input
                 id="new-password"
                 type="password"
@@ -206,7 +209,7 @@ function CreateUserDialog({ onCreated }: { onCreated: () => void }) {
           </div>
           <DialogFooter>
             <Button type="submit" disabled={loading}>
-              {loading ? "Creating..." : "Create"}
+              {loading ? t("common.creating") : t("common.create")}
             </Button>
           </DialogFooter>
         </form>
@@ -224,6 +227,7 @@ function AssignRoleDialog({
   roles: RoleDto[]
   onAssigned: () => void
 }) {
+  const { t } = useLanguage()
   const [open, setOpen] = useState(false)
   const [roleId, setRoleId] = useState<string>("")
   const [loading, setLoading] = useState(false)
@@ -233,12 +237,12 @@ function AssignRoleDialog({
     setLoading(true)
     try {
       await api.users.assignRole(user.id, Number(roleId))
-      toast.success(`Role assigned to ${user.username}`)
+      toast.success(t("users.assigned", { username: user.username }))
       setOpen(false)
       setRoleId("")
       onAssigned()
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to assign role")
+      toast.error(err instanceof ApiError ? err.message : t("users.assignFailed"))
     } finally {
       setLoading(false)
     }
@@ -249,19 +253,21 @@ function AssignRoleDialog({
       <DialogTrigger
         render={
           <Button variant="outline" size="sm">
-            Assign role
+            {t("users.assignRole")}
           </Button>
         }
       />
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Assign role to {user.username}</DialogTitle>
-          <DialogDescription>Grants every permission attached to the chosen role.</DialogDescription>
+          <DialogTitle>{t("users.assignDialogTitle", { username: user.username })}</DialogTitle>
+          <DialogDescription>{t("users.assignDialogDescription")}</DialogDescription>
         </DialogHeader>
         <div className="py-4">
           <Select value={roleId} onValueChange={(value) => setRoleId(value ?? "")}>
             <SelectTrigger className="w-full">
-              <SelectValue placeholder="Choose a role" />
+              <SelectValue placeholder={t("users.choosePermissionRole")}>
+                {(value: string) => roles.find((r) => String(r.id) === value)?.name ?? t("users.choosePermissionRole")}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {roles.map((role) => (
@@ -274,7 +280,7 @@ function AssignRoleDialog({
         </div>
         <DialogFooter>
           <Button onClick={handleAssign} disabled={!roleId || loading}>
-            {loading ? "Assigning..." : "Assign"}
+            {loading ? t("users.assigning") : t("users.assign")}
           </Button>
         </DialogFooter>
       </DialogContent>

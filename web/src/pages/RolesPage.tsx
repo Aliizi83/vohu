@@ -28,9 +28,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { useLanguage } from "@/lib/i18n"
 import { api, ApiError, type PermissionDto, type RoleDto } from "@/lib/api"
 
 export default function RolesPage() {
+  const { t } = useLanguage()
   const [roles, setRoles] = useState<RoleDto[] | null>(null)
   const [permissions, setPermissions] = useState<PermissionDto[]>([])
 
@@ -43,22 +45,22 @@ export default function RolesPage() {
       setRoles(rolePage.items)
       setPermissions(permissionPage.items)
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to load roles")
+      toast.error(err instanceof ApiError ? err.message : t("roles.loadFailed"))
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     load()
   }, [load])
 
   async function handleDelete(role: RoleDto) {
-    if (!confirm(`Delete role "${role.name}"? This can't be undone.`)) return
+    if (!confirm(t("roles.confirmDelete", { name: role.name }))) return
     try {
       await api.roles.remove(role.id)
-      toast.success(`Role "${role.name}" deleted`)
+      toast.success(t("roles.deleted", { name: role.name }))
       load()
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Delete failed")
+      toast.error(err instanceof ApiError ? err.message : t("roles.deleteFailed"))
     }
   }
 
@@ -66,10 +68,8 @@ export default function RolesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-semibold">Roles</h2>
-          <p className="text-sm text-muted-foreground">
-            Roles bundle permissions; assign a role to a user on the Users page.
-          </p>
+          <h2 className="text-2xl font-semibold">{t("roles.title")}</h2>
+          <p className="text-sm text-muted-foreground">{t("roles.subtitle")}</p>
         </div>
         <CreateRoleDialog onCreated={load} />
       </div>
@@ -78,8 +78,8 @@ export default function RolesPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead>{t("roles.columnName")}</TableHead>
+              <TableHead className="text-end">{t("common.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -95,7 +95,7 @@ export default function RolesPage() {
             {roles?.length === 0 && (
               <TableRow>
                 <TableCell colSpan={2} className="text-center text-muted-foreground">
-                  No roles yet.
+                  {t("roles.empty")}
                 </TableCell>
               </TableRow>
             )}
@@ -106,7 +106,7 @@ export default function RolesPage() {
                 <TableCell className="flex justify-end gap-2">
                   <GrantPermissionDialog role={role} permissions={permissions} onGranted={load} />
                   <Button variant="destructive" size="sm" onClick={() => handleDelete(role)}>
-                    Delete
+                    {t("common.delete")}
                   </Button>
                 </TableCell>
               </TableRow>
@@ -119,6 +119,7 @@ export default function RolesPage() {
 }
 
 function CreateRoleDialog({ onCreated }: { onCreated: () => void }) {
+  const { t } = useLanguage()
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
   const [loading, setLoading] = useState(false)
@@ -128,12 +129,12 @@ function CreateRoleDialog({ onCreated }: { onCreated: () => void }) {
     setLoading(true)
     try {
       await api.roles.create(name)
-      toast.success(`Role "${name}" created`)
+      toast.success(t("roles.created", { name }))
       setOpen(false)
       setName("")
       onCreated()
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to create role")
+      toast.error(err instanceof ApiError ? err.message : t("roles.createFailed"))
     } finally {
       setLoading(false)
     }
@@ -141,14 +142,14 @@ function CreateRoleDialog({ onCreated }: { onCreated: () => void }) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button>New role</Button>} />
+      <DialogTrigger render={<Button>{t("roles.newRole")}</Button>} />
       <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Create role</DialogTitle>
+            <DialogTitle>{t("roles.createDialogTitle")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-2 py-4">
-            <Label htmlFor="role-name">Name</Label>
+            <Label htmlFor="role-name">{t("roles.name")}</Label>
             <Input
               id="role-name"
               value={name}
@@ -159,7 +160,7 @@ function CreateRoleDialog({ onCreated }: { onCreated: () => void }) {
           </div>
           <DialogFooter>
             <Button type="submit" disabled={loading}>
-              {loading ? "Creating..." : "Create"}
+              {loading ? t("common.creating") : t("common.create")}
             </Button>
           </DialogFooter>
         </form>
@@ -177,6 +178,7 @@ function GrantPermissionDialog({
   permissions: PermissionDto[]
   onGranted: () => void
 }) {
+  const { t } = useLanguage()
   const [open, setOpen] = useState(false)
   const [permissionId, setPermissionId] = useState<string>("")
   const [loading, setLoading] = useState(false)
@@ -186,12 +188,12 @@ function GrantPermissionDialog({
     setLoading(true)
     try {
       await api.roles.grantPermission(role.id, Number(permissionId))
-      toast.success(`Permission granted to ${role.name}`)
+      toast.success(t("roles.granted", { name: role.name }))
       setOpen(false)
       setPermissionId("")
       onGranted()
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to grant permission")
+      toast.error(err instanceof ApiError ? err.message : t("roles.grantFailed"))
     } finally {
       setLoading(false)
     }
@@ -202,21 +204,23 @@ function GrantPermissionDialog({
       <DialogTrigger
         render={
           <Button variant="outline" size="sm">
-            Grant permission
+            {t("roles.grantPermission")}
           </Button>
         }
       />
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Grant permission to {role.name}</DialogTitle>
-          <DialogDescription>
-            Every user with this role gains this permission immediately.
-          </DialogDescription>
+          <DialogTitle>{t("roles.grantDialogTitle", { name: role.name })}</DialogTitle>
+          <DialogDescription>{t("roles.grantDialogDescription")}</DialogDescription>
         </DialogHeader>
         <div className="py-4">
           <Select value={permissionId} onValueChange={(value) => setPermissionId(value ?? "")}>
             <SelectTrigger className="w-full">
-              <SelectValue placeholder="Choose a permission" />
+              <SelectValue placeholder={t("roles.choosePermission")}>
+                {(value: string) =>
+                  permissions.find((p) => String(p.id) === value)?.key ?? t("roles.choosePermission")
+                }
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {permissions.map((permission) => (
@@ -229,7 +233,7 @@ function GrantPermissionDialog({
         </div>
         <DialogFooter>
           <Button onClick={handleGrant} disabled={!permissionId || loading}>
-            {loading ? "Granting..." : "Grant"}
+            {loading ? t("roles.granting") : t("roles.grant")}
           </Button>
         </DialogFooter>
       </DialogContent>

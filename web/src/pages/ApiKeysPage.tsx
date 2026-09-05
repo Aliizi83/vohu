@@ -21,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { useLanguage } from "@/lib/i18n"
 import { api, ApiError, type LLMProvider, type ProviderKeyDto } from "@/lib/api"
 
 const PROVIDERS: { value: LLMProvider; label: string }[] = [
@@ -30,6 +31,7 @@ const PROVIDERS: { value: LLMProvider; label: string }[] = [
 ]
 
 export default function ApiKeysPage() {
+  const { t } = useLanguage()
   const [myKeys, setMyKeys] = useState<ProviderKeyDto[] | null>(null)
   const [globalKeys, setGlobalKeys] = useState<ProviderKeyDto[] | null>(null)
   // null = still loading / unknown, false = the caller isn't allowed to
@@ -41,9 +43,9 @@ export default function ApiKeysPage() {
     try {
       setMyKeys(await api.providerKeys.listMine())
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to load your API keys")
+      toast.error(err instanceof ApiError ? err.message : t("apiKeys.loadMineFailed"))
     }
-  }, [])
+  }, [t])
 
   const loadGlobal = useCallback(async () => {
     try {
@@ -54,9 +56,9 @@ export default function ApiKeysPage() {
         setCanManageGlobal(false)
         return
       }
-      toast.error(err instanceof ApiError ? err.message : "Failed to load global API keys")
+      toast.error(err instanceof ApiError ? err.message : t("apiKeys.loadGlobalFailed"))
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     loadMine()
@@ -66,17 +68,13 @@ export default function ApiKeysPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-semibold">API Keys</h2>
-        <p className="text-sm text-muted-foreground">
-          Credentials for the LLM providers the chat agent uses. A personal key always
-          takes priority over the global default; if you don't set one, your chats use
-          whatever an admin configured for everyone.
-        </p>
+        <h2 className="text-2xl font-semibold">{t("apiKeys.title")}</h2>
+        <p className="text-sm text-muted-foreground">{t("apiKeys.subtitle")}</p>
       </div>
 
       <ProviderKeyTable
-        title="My keys"
-        description="Only you can see or use these — never shared with other users."
+        title={t("apiKeys.myKeysTitle")}
+        description={t("apiKeys.myKeysDescription")}
         keys={myKeys}
         onSet={async (data) => {
           await api.providerKeys.setMine(data)
@@ -90,8 +88,8 @@ export default function ApiKeysPage() {
 
       {canManageGlobal && (
         <ProviderKeyTable
-          title="Global default keys"
-          description="Used for any user who hasn't set their own personal key for that provider."
+          title={t("apiKeys.globalKeysTitle")}
+          description={t("apiKeys.globalKeysDescription")}
           keys={globalKeys}
           onSet={async (data) => {
             await api.providerKeys.setGlobal(data)
@@ -120,13 +118,15 @@ function ProviderKeyTable({
   onSet: (data: { provider: LLMProvider; apiKey: string; baseUrl?: string; workspaceId?: string }) => Promise<void>
   onRemove: (provider: LLMProvider) => Promise<void>
 }) {
+  const { t } = useLanguage()
+
   async function handleRemove(provider: LLMProvider) {
-    if (!confirm(`Remove the ${provider} key? Chats using it will fall back to any other configured key.`)) return
+    if (!confirm(t("apiKeys.confirmRemove", { provider }))) return
     try {
       await onRemove(provider)
-      toast.success(`${provider} key removed`)
+      toast.success(t("apiKeys.removed", { provider }))
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to remove key")
+      toast.error(err instanceof ApiError ? err.message : t("apiKeys.removeFailed"))
     }
   }
 
@@ -143,10 +143,10 @@ function ProviderKeyTable({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Provider</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Base URL / Workspace</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead>{t("apiKeys.columnProvider")}</TableHead>
+              <TableHead>{t("apiKeys.columnStatus")}</TableHead>
+              <TableHead>{t("apiKeys.columnBaseUrlWorkspace")}</TableHead>
+              <TableHead className="text-end">{t("common.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -159,9 +159,9 @@ function ProviderKeyTable({
                     {keys === null ? (
                       <span className="text-muted-foreground">…</span>
                     ) : key ? (
-                      <Badge>Configured</Badge>
+                      <Badge>{t("apiKeys.configured")}</Badge>
                     ) : (
-                      <Badge variant="secondary">Not set</Badge>
+                      <Badge variant="secondary">{t("apiKeys.notSet")}</Badge>
                     )}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
@@ -173,7 +173,7 @@ function ProviderKeyTable({
                     <SetKeyDialog provider={value} label={label} onSet={onSet} />
                     {key && (
                       <Button variant="destructive" size="sm" onClick={() => handleRemove(value)}>
-                        Remove
+                        {t("apiKeys.remove")}
                       </Button>
                     )}
                   </TableCell>
@@ -196,6 +196,7 @@ function SetKeyDialog({
   label: string
   onSet: (data: { provider: LLMProvider; apiKey: string; baseUrl?: string; workspaceId?: string }) => Promise<void>
 }) {
+  const { t } = useLanguage()
   const [open, setOpen] = useState(false)
   const [apiKey, setApiKey] = useState("")
   const [baseUrl, setBaseUrl] = useState("")
@@ -212,13 +213,13 @@ function SetKeyDialog({
         baseUrl: baseUrl || undefined,
         workspaceId: workspaceId || undefined,
       })
-      toast.success(`${label} key saved`)
+      toast.success(t("apiKeys.saved", { label }))
       setOpen(false)
       setApiKey("")
       setBaseUrl("")
       setWorkspaceId("")
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to save key")
+      toast.error(err instanceof ApiError ? err.message : t("apiKeys.saveFailed"))
     } finally {
       setLoading(false)
     }
@@ -229,22 +230,19 @@ function SetKeyDialog({
       <DialogTrigger
         render={
           <Button variant="outline" size="sm">
-            Set key
+            {t("apiKeys.setKey")}
           </Button>
         }
       />
       <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Set {label} key</DialogTitle>
-            <DialogDescription>
-              The key is encrypted before it's stored and is never returned by the API
-              again.
-            </DialogDescription>
+            <DialogTitle>{t("apiKeys.setDialogTitle", { label })}</DialogTitle>
+            <DialogDescription>{t("apiKeys.setDialogDescription")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor={`${provider}-api-key`}>API key</Label>
+              <Label htmlFor={`${provider}-api-key`}>{t("apiKeys.apiKeyLabel")}</Label>
               <Input
                 id={`${provider}-api-key`}
                 type="password"
@@ -255,30 +253,30 @@ function SetKeyDialog({
             </div>
             {provider === "openai" && (
               <div className="space-y-2">
-                <Label htmlFor={`${provider}-base-url`}>Base URL (optional)</Label>
+                <Label htmlFor={`${provider}-base-url`}>{t("apiKeys.baseUrlLabel")}</Label>
                 <Input
                   id={`${provider}-base-url`}
                   value={baseUrl}
                   onChange={(e) => setBaseUrl(e.target.value)}
-                  placeholder="Leave empty for OpenAI itself"
+                  placeholder={t("apiKeys.baseUrlPlaceholder")}
                 />
               </div>
             )}
             {provider === "anthropic" && (
               <div className="space-y-2">
-                <Label htmlFor={`${provider}-workspace-id`}>Workspace ID (optional)</Label>
+                <Label htmlFor={`${provider}-workspace-id`}>{t("apiKeys.workspaceIdLabel")}</Label>
                 <Input
                   id={`${provider}-workspace-id`}
                   value={workspaceId}
                   onChange={(e) => setWorkspaceId(e.target.value)}
-                  placeholder="Only needed for a multi-workspace organization"
+                  placeholder={t("apiKeys.workspaceIdPlaceholder")}
                 />
               </div>
             )}
           </div>
           <DialogFooter>
             <Button type="submit" disabled={loading || !apiKey}>
-              {loading ? "Saving..." : "Save"}
+              {loading ? t("common.saving") : t("common.save")}
             </Button>
           </DialogFooter>
         </form>
