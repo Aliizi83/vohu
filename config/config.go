@@ -12,11 +12,7 @@ import (
 type Config struct {
 	Server   ServerConfig
 	Postgres PostgresConfig
-	Redis    RedisConfig
-	Password PasswordConfig
-	Cors     CorsConfig
 	Logger   LoggerConfig
-	Otp      OtpConfig
 	JWT      JWTConfig
 }
 
@@ -47,38 +43,6 @@ type PostgresConfig struct {
 	MaxIdleConns    int
 	MaxOpenConns    int
 	ConnMaxLifetime time.Duration
-}
-
-type RedisConfig struct {
-	Host               string
-	Port               string
-	Password           string
-	Db                 string
-	DialTimeout        time.Duration
-	ReadTimeout        time.Duration
-	WriteTimeout       time.Duration
-	IdleCheckFrequency time.Duration
-	PoolSize           int
-	PoolTimeout        time.Duration
-}
-
-type PasswordConfig struct {
-	IncludeChars     bool
-	IncludeDigits    bool
-	MinLength        int
-	MaxLength        int
-	IncludeUppercase bool
-	IncludeLowercase bool
-}
-
-type CorsConfig struct {
-	AllowOrigins string
-}
-
-type OtpConfig struct {
-	ExpireTime time.Duration
-	Digits     int
-	Limiter    time.Duration
 }
 
 type JWTConfig struct {
@@ -139,12 +103,14 @@ func LoadConfig(filename string, fileType string) (*viper.Viper, error) {
 	return v, nil
 }
 
+// getConfigPath is relative to the repo root, since cmd/server is meant to
+// be run as `go run ./cmd/server` from there.
 func getConfigPath(env string) string {
 	if env == "docker" {
 		return "/app/config/config-docker"
 	} else if env == "production" {
 		return "/config/config-production"
 	} else {
-		return "../config/config-development"
+		return "config/config-development"
 	}
 }
