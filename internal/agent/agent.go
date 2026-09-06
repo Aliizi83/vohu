@@ -8,17 +8,24 @@ import (
 	"github.com/Aliizi83/vohu/internal/tools"
 )
 
+// defaultMaxToolIterations caps how many model round-trips a single Run
+// call will make before giving up on a turn. Without a cap, a model that
+// keeps requesting tools would loop indefinitely.
+const defaultMaxToolIterations = 10
+
 type Agent struct {
-	llm      ai_model.LLM
-	registry *tools.Registry
-	model    string
+	llm               ai_model.LLM
+	registry          *tools.Registry
+	model             string
+	maxToolIterations int
 }
 
 func New(llm ai_model.LLM, registry *tools.Registry, model string) *Agent {
 	return &Agent{
-		llm:      llm,
-		registry: registry,
-		model:    model,
+		llm:               llm,
+		registry:          registry,
+		model:             model,
+		maxToolIterations: defaultMaxToolIterations,
 	}
 }
 
@@ -32,7 +39,7 @@ func (a *Agent) Run(
 	onChunk func(text string),
 ) ([]ai_model.Message, error) {
 
-	for {
+	for iteration := 0; iteration < a.maxToolIterations; iteration++ {
 		response, err := a.llm.StreamChat(ctx, ai_model.ChatRequest{
 			Messages: messages,
 			Model:    a.model,
@@ -62,6 +69,14 @@ func (a *Agent) Run(
 			})
 		}
 	}
+
+	return append(messages, ai_model.Message{
+		Role: ai_model.RoleAssistant,
+		Content: fmt.Sprintf(
+			"Stopped after %d tool calls in a single turn to avoid an infinite loop.",
+			a.maxToolIterations,
+		),
+	}), nil
 }
 
 func (a *Agent) executeTool(
