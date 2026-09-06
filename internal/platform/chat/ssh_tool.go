@@ -5,18 +5,12 @@ import (
 	"fmt"
 
 	"github.com/Aliizi83/vohu/internal/ai_model"
+	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"github.com/Aliizi83/vohu/internal/platform/sshconn"
 	"github.com/Aliizi83/vohu/internal/tools"
 	"github.com/Aliizi83/vohu/internal/tools/command"
 	"golang.org/x/crypto/ssh"
 )
-
-// HasAccessLevel is rbac.Service.HasAccessLevel's shape, injected as a
-// function value like every cross-module dependency in this codebase —
-// this package never imports rbac just for one permission check. level is
-// a plain string (rbac.AccessLevel's underlying type) for the same reason
-// sshconn's GrantCreatorAccess takes one instead of an rbac type.
-type HasAccessLevel func(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) (bool, error)
 
 // accessLevelWrite is what executing a command over a connection
 // requires — running anything, even something read-only in intent,
@@ -34,14 +28,14 @@ const accessLevelWrite = "write"
 type SSHTool struct {
 	userID        uint
 	sshconns      sshconn.Service
-	canAccess     HasAccessLevel
+	canAccess     shared.AccessLevelCheck
 	commandPolicy command.Policy
 }
 
 func NewSSHTool(
 	userID uint,
 	sshconns sshconn.Service,
-	canAccess HasAccessLevel,
+	canAccess shared.AccessLevelCheck,
 	commandPolicy command.Policy,
 ) *SSHTool {
 	return &SSHTool{

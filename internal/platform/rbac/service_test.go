@@ -301,3 +301,95 @@ func TestAccessLevel_Satisfies(t *testing.T) {
 		}
 	}
 }
+
+func TestListPermissionKeysForUser_ReturnsEveryKeyThroughAnyRole(t *testing.T) {
+	service := rbac.NewService(rbac.NewRepository(setupRBACTestDB(t)))
+	ctx := context.Background()
+
+	// seedUserWithPermission always creates a role named "test-role", so
+	// granting a second key goes through it directly instead of calling
+	// that helper twice (which would collide on the role name).
+	role, err := service.CreateRole(ctx, rbac.CreateRoleRequest{Name: "test-role"})
+	if err != nil {
+		t.Fatalf("CreateRole failed: %v", err)
+	}
+	for _, key := range []string{"widget:create", "widget:delete"} {
+		permission, err := service.CreatePermission(ctx, rbac.CreatePermissionRequest{Key: key})
+		if err != nil {
+			t.Fatalf("CreatePermission failed: %v", err)
+		}
+		if err := service.GrantPermissionToRole(ctx, role.ID, permission.ID); err != nil {
+			t.Fatalf("GrantPermissionToRole failed: %v", err)
+		}
+	}
+	if err := service.AssignRoleToUser(ctx, 1, role.ID); err != nil {
+		t.Fatalf("AssignRoleToUser failed: %v", err)
+	}
+
+	keys, err := service.ListPermissionKeysForUser(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("ListPermissionKeysForUser failed: %v", err)
+	}
+
+	want := map[string]bool{"widget:create": true, "widget:delete": true}
+	if len(keys) != len(want) {
+		t.Fatalf("expected %d keys, got %d: %v", len(want), len(keys), keys)
+	}
+	for _, k := range keys {
+		if !want[k] {
+			t.Fatalf("unexpected key %q in %v", k, keys)
+		}
+	}
+}
+
+func TestListPermissionKeysForUser_EmptyForUserWithNoRoles(t *testing.T) {
+	service := rbac.NewService(rbac.NewRepository(setupRBACTestDB(t)))
+
+	keys, err := service.ListPermissionKeysForUser(context.Background(), 999)
+	if err != nil {
+		t.Fatalf("ListPermissionKeysForUser failed: %v", err)
+	}
+	if len(keys) != 0 {
+		t.Fatalf("expected no keys for a user with no roles, got %v", keys)
+	}
+}
+
+func TestListResourceAccessForUser_ReturnsOnlyThatUsersGrants(t *testing.T) {
+	service := rbac.NewService(rbac.NewRepository(setupRBACTestDB(t)))
+	ctx := context.Background()
+
+	if err := service.GrantResourceAccess(ctx, 1, "ssh_connection", 5, rbac.AccessWrite); err != nil {
+		t.Fatalf("GrantResourceAccess failed: %v", err)
+	}
+	if err := service.GrantResourceAccess(ctx, 1, "ssh_connection", 6, rbac.AccessRead); err != nil {
+		t.Fatalf("GrantResourceAccess failed: %v", err)
+	}
+	if err := service.GrantResourceAccess(ctx, 2, "ssh_connection", 5, rbac.AccessManage); err != nil {
+		t.Fatalf("GrantResourceAccess failed: %v", err)
+	}
+
+	grants, err := service.ListResourceAccessForUser(ctx, 1)
+	if err != nil {
+		t.Fatalf("ListResourceAccessForUser failed: %v", err)
+	}
+	if len(grants) != 2 {
+		t.Fatalf("expected exactly 2 grants for user 1, got %d: %+v", len(grants), grants)
+	}
+	for _, g := range grants {
+		if g.UserID != 1 {
+			t.Fatalf("expected only user 1's grants, got one for user %d", g.UserID)
+		}
+	}
+}
+
+func TestListResourceAccessForUser_EmptyForUserWithNoGrants(t *testing.T) {
+	service := rbac.NewService(rbac.NewRepository(setupRBACTestDB(t)))
+
+	grants, err := service.ListResourceAccessForUser(context.Background(), 999)
+	if err != nil {
+		t.Fatalf("ListResourceAccessForUser failed: %v", err)
+	}
+	if len(grants) != 0 {
+		t.Fatalf("expected no grants, got %+v", grants)
+	}
+}

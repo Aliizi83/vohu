@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 import { Toaster } from "@/components/ui/sonner"
+import { AccessProvider, useAccess } from "@/lib/access"
 import { AuthProvider, useAuth } from "@/lib/auth"
 import { LanguageProvider } from "@/lib/i18n"
 import ApiKeysPage from "@/pages/ApiKeysPage"
@@ -19,34 +20,77 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
+// PermissionRoute is a frontend-only convenience — it redirects away from
+// a page the user has no use for (matching what the nav already hides)
+// rather than rendering a page whose every API call would just 403. The
+// real boundary is still enforced by each backend endpoint independently;
+// this never substitutes for it. Renders nothing while access is still
+// loading rather than flashing the redirect.
+function PermissionRoute({ permission, children }: { permission: string; children: ReactNode }) {
+  const { hasPermission, loading } = useAccess()
+  if (loading) return null
+  if (!hasPermission(permission)) return <Navigate to="/chat" replace />
+  return <>{children}</>
+}
+
 export default function App() {
   return (
     <LanguageProvider>
       <AuthProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
-                  <Layout />
-                </ProtectedRoute>
-              }
-            >
-              <Route index element={<Navigate to="/chat" replace />} />
-              <Route path="chat" element={<ChatPage />} />
-              <Route path="ssh-connections" element={<SSHConnectionsPage />} />
-              <Route path="provider-keys" element={<ApiKeysPage />} />
-              <Route path="users" element={<UsersPage />} />
-              <Route path="roles" element={<RolesPage />} />
-              <Route path="permissions" element={<PermissionsPage />} />
-              <Route path="resource-access" element={<ResourceAccessPage />} />
-            </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </BrowserRouter>
-        <Toaster />
+        <AccessProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route
+                path="/"
+                element={
+                  <ProtectedRoute>
+                    <Layout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<Navigate to="/chat" replace />} />
+                <Route path="chat" element={<ChatPage />} />
+                <Route path="ssh-connections" element={<SSHConnectionsPage />} />
+                <Route path="provider-keys" element={<ApiKeysPage />} />
+                <Route
+                  path="users"
+                  element={
+                    <PermissionRoute permission="user:read">
+                      <UsersPage />
+                    </PermissionRoute>
+                  }
+                />
+                <Route
+                  path="roles"
+                  element={
+                    <PermissionRoute permission="rbac:manage">
+                      <RolesPage />
+                    </PermissionRoute>
+                  }
+                />
+                <Route
+                  path="permissions"
+                  element={
+                    <PermissionRoute permission="rbac:manage">
+                      <PermissionsPage />
+                    </PermissionRoute>
+                  }
+                />
+                <Route
+                  path="resource-access"
+                  element={
+                    <PermissionRoute permission="rbac:manage">
+                      <ResourceAccessPage />
+                    </PermissionRoute>
+                  }
+                />
+              </Route>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </BrowserRouter>
+          <Toaster />
+        </AccessProvider>
       </AuthProvider>
     </LanguageProvider>
   )

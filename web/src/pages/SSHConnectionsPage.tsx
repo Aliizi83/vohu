@@ -30,12 +30,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { useAccess } from "@/lib/access"
 import { useLanguage } from "@/lib/i18n"
 import { useDebouncedValue } from "@/lib/useDebouncedValue"
 import { api, ApiError, type SSHConnectionDto } from "@/lib/api"
 
 export default function SSHConnectionsPage() {
   const { t } = useLanguage()
+  const { hasPermission } = useAccess()
   const { confirm, confirmDialog } = useConfirm()
   const [connections, setConnections] = useState<SSHConnectionDto[] | null>(null)
   const [search, setSearch] = useState("")
@@ -79,7 +81,7 @@ export default function SSHConnectionsPage() {
           <h2 className="text-2xl font-semibold">{t("sshConnections.title")}</h2>
           <p className="text-sm text-muted-foreground">{t("sshConnections.subtitle")}</p>
         </div>
-        <CreateConnectionDialog onCreated={load} />
+        {hasPermission("ssh:create") && <CreateConnectionDialog onCreated={load} />}
       </div>
 
       <SearchInput
@@ -131,9 +133,11 @@ export default function SSHConnectionsPage() {
                   {conn.authMethod === "password" ? t("sshConnections.authPassword") : t("sshConnections.authPrivateKey")}
                 </TableCell>
                 <TableCell className="text-end">
-                  <Button variant="destructive" size="sm" onClick={() => handleDelete(conn)}>
-                    {t("common.delete")}
-                  </Button>
+                  {hasPermission("ssh:delete") && (
+                    <Button variant="destructive" size="sm" onClick={() => handleDelete(conn)}>
+                      {t("common.delete")}
+                    </Button>
+                  )}
                 </TableCell>
               </TableRow>
             ))}

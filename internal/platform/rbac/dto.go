@@ -70,3 +70,14 @@ func toResourcePermissionResponse(p ResourcePermission) ResourcePermissionRespon
 		Level:        p.Level,
 	}
 }
+
+// MyAccessResponse is the caller's own complete access profile — sent
+// right after login so the frontend can decide what nav items and
+// records to show without trial-and-error against 403s. Permissions is
+// every flat key the caller holds through any role; ResourceAccess is
+// every per-resource grant they personally have (not everyone's, unlike
+// the admin-only ListResourcePermissions).
+type MyAccessResponse struct {
+	Permissions    []string                     `json:"permissions"`
+	ResourceAccess []ResourcePermissionResponse `json:"resourceAccess"`
+}

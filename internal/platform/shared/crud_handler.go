@@ -112,16 +112,37 @@ func DeleteHandler(
 	RespondSuccess(c, http.StatusOK, nil)
 }
 
-// listQuery is what ListHandler binds from the query string — GET
-// requests can't carry a JSON body (the fetch spec rejects a body on
-// GET/HEAD outright, so a browser client couldn't call this endpoint at
-// all if it required one). Pagination binds as plain query params;
-// DynamicFilter — a map, awkward to flatten into query-string form tags —
-// travels as a single JSON-encoded "filter" param instead.
+// listQuery is what ListHandler and ParseListQuery bind from the query
+// string — GET requests can't carry a JSON body (the fetch spec rejects a
+// body on GET/HEAD outright, so a browser client couldn't call this
+// endpoint at all if it required one). Pagination binds as plain query
+// params; DynamicFilter — a map, awkward to flatten into query-string
+// form tags — travels as a single JSON-encoded "filter" param instead.
 type listQuery struct {
 	PageNumber int    `form:"pageNumber"`
 	PageSize   int    `form:"pageSize"`
 	Filter     string `form:"filter"`
+}
+
+// ParseListQuery is ListHandler's query-parsing half, exposed on its own
+// for handlers that can't use the fully generic ListHandler — e.g. one
+// that has to thread the authenticated caller's ID into the service call
+// (sshconn's List, which filters differently per caller) rather than just
+// forwarding filter/page straight through.
+func ParseListQuery(c *gin.Context) (Pagination, DynamicFilter, error) {
+	var q listQuery
+	if err := c.ShouldBindQuery(&q); err != nil {
+		return Pagination{}, DynamicFilter{}, err
+	}
+
+	var filter DynamicFilter
+	if q.Filter != "" {
+		if err := json.Unmarshal([]byte(q.Filter), &filter); err != nil {
+			return Pagination{}, DynamicFilter{}, errors.New("invalid filter")
+		}
+	}
+
+	return Pagination{PageNumber: q.PageNumber, PageSize: q.PageSize}, filter, nil
 }
 
 func ListHandler[TOutput, TResponse any](
@@ -129,21 +150,11 @@ func ListHandler[TOutput, TResponse any](
 	mapRes func(TOutput) TResponse,
 	list func(ctx context.Context, filter DynamicFilter, page Pagination) ([]TOutput, int64, error),
 ) {
-	var q listQuery
-	if err := c.ShouldBindQuery(&q); err != nil {
+	page, filter, err := ParseListQuery(c)
+	if err != nil {
 		RespondValidationError(c, err)
 		return
 	}
-
-	var filter DynamicFilter
-	if q.Filter != "" {
-		if err := json.Unmarshal([]byte(q.Filter), &filter); err != nil {
-			RespondError(c, http.StatusBadRequest, ResultValidationError, errors.New("invalid filter"))
-			return
-		}
-	}
-
-	page := Pagination{PageNumber: q.PageNumber, PageSize: q.PageSize}
 
 	items, total, err := list(c.Request.Context(), filter, page)
 	if err != nil {

@@ -5,9 +5,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// RegisterRoutes wires this module's HTTP routes. Every route here is
-// admin-management surface, so all of it requires policy.CanManage
-// ("rbac:manage", granted to the default admin role at seed time).
+// RegisterRoutes wires this module's HTTP routes. Every route here except
+// GET /me/access is admin-management surface, requiring policy.CanManage
+// ("rbac:manage", granted to the default admin role at seed time) —
+// /me/access is self-service, since it only ever returns the caller's own
+// data.
 func RegisterRoutes(
 	v1 *gin.RouterGroup,
 	handler *Handler,
@@ -43,4 +45,6 @@ func RegisterRoutes(
 		resourcePermissions.GET("", manage, handler.ListResourcePermissions)
 		resourcePermissions.DELETE("/:id", manage, handler.RevokeResourceAccess)
 	}
+
+	v1.GET("/me/access", authMiddleware, handler.GetMyAccess)
 }

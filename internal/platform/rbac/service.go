@@ -48,6 +48,14 @@ type Service interface {
 	// resource, not scoped to a single one like the two methods above.
 	ListResourcePermissions(ctx context.Context, filter shared.DynamicFilter, page shared.Pagination) ([]ResourcePermission, int64, error)
 	RevokeResourceAccess(ctx context.Context, id uint) error
+
+	// ListPermissionKeysForUser and ListResourceAccessForUser back the
+	// self-service /me/access endpoint — a user's own complete access
+	// profile, both flat keys and per-resource grants, sent to the
+	// frontend right after login so it can decide what to show without
+	// probing routes and reacting to 403s.
+	ListPermissionKeysForUser(ctx context.Context, userID uint) ([]string, error)
+	ListResourceAccessForUser(ctx context.Context, userID uint) ([]ResourcePermission, error)
 }
 
 type service struct {
@@ -235,4 +243,12 @@ func (s *service) ListResourcePermissions(
 
 func (s *service) RevokeResourceAccess(ctx context.Context, id uint) error {
 	return s.repo.DeleteResourcePermission(ctx, id)
+}
+
+func (s *service) ListPermissionKeysForUser(ctx context.Context, userID uint) ([]string, error) {
+	return s.repo.GetPermissionKeysForUser(ctx, userID)
+}
+
+func (s *service) ListResourceAccessForUser(ctx context.Context, userID uint) ([]ResourcePermission, error) {
+	return s.repo.ListResourcePermissionsForUser(ctx, userID)
 }

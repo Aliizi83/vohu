@@ -25,7 +25,7 @@ import (
 type Handler struct {
 	conversations conversation.Service
 	sshconns      sshconn.Service
-	canAccess     HasAccessLevel
+	canAccess     shared.AccessLevelCheck
 	commandPolicy command.Policy
 	providerKeys  providerkey.Service
 }
@@ -33,7 +33,7 @@ type Handler struct {
 func NewHandler(
 	conversations conversation.Service,
 	sshconns sshconn.Service,
-	canAccess HasAccessLevel,
+	canAccess shared.AccessLevelCheck,
 	commandPolicy command.Policy,
 	providerKeys providerkey.Service,
 ) *Handler {

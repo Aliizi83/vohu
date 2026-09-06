@@ -1,23 +1,35 @@
 import { KeyRound, KeySquare, LogOut, MessageSquare, Server, Shield, ShieldCheck, Users } from "lucide-react"
 import { NavLink, Outlet } from "react-router-dom"
 import { Button } from "@/components/ui/button"
+import { useAccess } from "@/lib/access"
 import { useAuth } from "@/lib/auth"
 import { LANGUAGE_OPTIONS, useLanguage } from "@/lib/i18n"
 import { cn } from "cn"
 
+// requiredPermission is undefined for items open to every authenticated
+// user (Chat, SSH Connections — visibility of *records* there is filtered
+// server-side per user rather than gated by a flat permission at all,
+// API Keys — self-service). Items with one are hidden unless the user's
+// /me/access profile includes that key, matching what would otherwise
+// just 403.
 const navItems = [
-  { to: "/chat", labelKey: "nav.chat", icon: MessageSquare },
-  { to: "/ssh-connections", labelKey: "nav.sshConnections", icon: Server },
-  { to: "/provider-keys", labelKey: "nav.apiKeys", icon: KeySquare },
-  { to: "/users", labelKey: "nav.users", icon: Users },
-  { to: "/roles", labelKey: "nav.roles", icon: Shield },
-  { to: "/permissions", labelKey: "nav.permissions", icon: KeyRound },
-  { to: "/resource-access", labelKey: "nav.resourceAccess", icon: ShieldCheck },
+  { to: "/chat", labelKey: "nav.chat", icon: MessageSquare, requiredPermission: undefined },
+  { to: "/ssh-connections", labelKey: "nav.sshConnections", icon: Server, requiredPermission: undefined },
+  { to: "/provider-keys", labelKey: "nav.apiKeys", icon: KeySquare, requiredPermission: undefined },
+  { to: "/users", labelKey: "nav.users", icon: Users, requiredPermission: "user:read" },
+  { to: "/roles", labelKey: "nav.roles", icon: Shield, requiredPermission: "rbac:manage" },
+  { to: "/permissions", labelKey: "nav.permissions", icon: KeyRound, requiredPermission: "rbac:manage" },
+  { to: "/resource-access", labelKey: "nav.resourceAccess", icon: ShieldCheck, requiredPermission: "rbac:manage" },
 ] as const
 
 export default function Layout() {
   const { logout } = useAuth()
+  const { hasPermission } = useAccess()
   const { t, language, setLanguage } = useLanguage()
+
+  const visibleNavItems = navItems.filter(
+    (item) => item.requiredPermission === undefined || hasPermission(item.requiredPermission),
+  )
 
   return (
     <div className="flex min-h-screen">
@@ -27,7 +39,7 @@ export default function Layout() {
           <p className="text-xs text-muted-foreground">{t("nav.appTagline")}</p>
         </div>
 
-        {navItems.map(({ to, labelKey, icon: Icon }) => (
+        {visibleNavItems.map(({ to, labelKey, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}

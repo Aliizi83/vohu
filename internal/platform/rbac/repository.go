@@ -34,6 +34,7 @@ type Repository interface {
 	UpsertResourcePermission(ctx context.Context, userID uint, resourceType string, resourceID uint, level AccessLevel) error
 	FindResourcePermission(ctx context.Context, userID uint, resourceType string, resourceID uint) (*ResourcePermission, error)
 	ListResourcePermissions(ctx context.Context, filter shared.DynamicFilter, page shared.Pagination) ([]ResourcePermission, int64, error)
+	ListResourcePermissionsForUser(ctx context.Context, userID uint) ([]ResourcePermission, error)
 	DeleteResourcePermission(ctx context.Context, id uint) error
 }
 
@@ -200,6 +201,17 @@ func (r *gormRepository) ListResourcePermissions(
 
 func (r *gormRepository) DeleteResourcePermission(ctx context.Context, id uint) error {
 	return r.resourcePermissions.Delete(ctx, id)
+}
+
+// ListResourcePermissionsForUser backs the self-service /me/access
+// endpoint — unpaginated (one user's own grants are never large enough to
+// need it) and unfiltered by anything but ownership, unlike
+// ListResourcePermissions which is the admin-facing, paginated view
+// across every user.
+func (r *gormRepository) ListResourcePermissionsForUser(ctx context.Context, userID uint) ([]ResourcePermission, error) {
+	var permissions []ResourcePermission
+	err := r.db.WithContext(ctx).Where("user_id = ?", userID).Find(&permissions).Error
+	return permissions, err
 }
 
 func (r *gormRepository) FindResourcePermission(

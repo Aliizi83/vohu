@@ -48,14 +48,18 @@ func main() {
 		logger.Fatal(err, logging.General, logging.Startup, err.Error(), nil)
 	}
 
-	sshconnRepo := sshconn.NewRepository(db.GetDB())
-	// rbac.AccessLevel is a named string type; GrantCreatorAccess takes a
-	// plain string so sshconn never has to import rbac — this closure is
-	// the only place that bridges the two.
+	// rbac.AccessLevel is a named string type; GrantCreatorAccess and
+	// AccessLevelCheck both take a plain string so no module but this one
+	// ever has to import rbac just to bridge the two.
 	grantCreatorAccess := func(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) error {
 		return rbacService.GrantResourceAccess(ctx, userID, resourceType, resourceID, rbac.AccessLevel(level))
 	}
-	sshconnService := sshconn.NewService(sshconnRepo, secretBox, grantCreatorAccess)
+	hasAccessLevel := func(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) (bool, error) {
+		return rbacService.HasAccessLevel(ctx, userID, resourceType, resourceID, rbac.AccessLevel(level))
+	}
+
+	sshconnRepo := sshconn.NewRepository(db.GetDB())
+	sshconnService := sshconn.NewService(sshconnRepo, secretBox, grantCreatorAccess, rbacService.HasPermission, hasAccessLevel)
 	sshconnHandler := sshconn.NewHandler(sshconnService)
 	sshconnPolicy := sshconn.NewPolicy(rbacService.HasPermission)
 
@@ -83,11 +87,6 @@ func main() {
 	providerKeyHandler := providerkey.NewHandler(providerKeyService)
 	providerKeyPolicy := providerkey.NewPolicy(rbacService.HasPermission)
 
-	// rbac.AccessLevel is a named string type; HasAccessLevel takes a
-	// plain string so chat never has to import rbac just for this check.
-	hasAccessLevel := func(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) (bool, error) {
-		return rbacService.HasAccessLevel(ctx, userID, resourceType, resourceID, rbac.AccessLevel(level))
-	}
 	chatHandler := chat.NewHandler(conversationService, sshconnService, hasAccessLevel, sshCommandPolicy, providerKeyService)
 
 	engine, v1 := httpserver.NewEngine(logger)

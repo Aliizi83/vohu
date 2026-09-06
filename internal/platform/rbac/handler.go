@@ -177,3 +177,35 @@ func (h *Handler) ListResourcePermissions(c *gin.Context) {
 func (h *Handler) RevokeResourceAccess(c *gin.Context) {
 	shared.DeleteHandler(c, h.service.RevokeResourceAccess, mapError)
 }
+
+// GetMyAccess handles GET /me/access — self-service, no policy beyond
+// being authenticated, since it only ever returns the caller's own data.
+func (h *Handler) GetMyAccess(c *gin.Context) {
+	userID, ok := shared.GetUserID(c)
+	if !ok {
+		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
+		return
+	}
+
+	permissions, err := h.service.ListPermissionKeysForUser(c.Request.Context(), userID)
+	if err != nil {
+		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, errors.New("internal error"))
+		return
+	}
+
+	grants, err := h.service.ListResourceAccessForUser(c.Request.Context(), userID)
+	if err != nil {
+		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, errors.New("internal error"))
+		return
+	}
+
+	resourceAccess := make([]ResourcePermissionResponse, 0, len(grants))
+	for _, g := range grants {
+		resourceAccess = append(resourceAccess, toResourcePermissionResponse(g))
+	}
+
+	shared.RespondSuccess(c, http.StatusOK, MyAccessResponse{
+		Permissions:    permissions,
+		ResourceAccess: resourceAccess,
+	})
+}

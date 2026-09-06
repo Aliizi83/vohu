@@ -13,6 +13,14 @@ import (
 // has to import rbac just to check a permission key.
 type PermissionCheck func(ctx context.Context, userID uint, key string) (bool, error)
 
+// AccessLevelCheck is the shape of rbac.Service.HasAccessLevel — level is
+// a plain string (rbac.AccessLevel's underlying type) so a module never
+// has to import rbac just to check one resource's grant. Living here
+// (rather than duplicated locally, the way it started in the chat
+// package) is what lets sshconn depend on the exact same shape chat
+// already does, without either importing the other.
+type AccessLevelCheck func(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) (bool, error)
+
 // PolicyCheck is the shape every <module>.Policy method (CanCreate,
 // CanRead, ...) has — takes the authenticated user's ID (read from
 // UserIDContextKey), decides yes/no. A policy method can be a flat

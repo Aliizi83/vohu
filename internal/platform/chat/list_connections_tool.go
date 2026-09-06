@@ -18,17 +18,17 @@ const accessLevelRead = "read"
 // ListSSHConnectionsTool lets the model discover which SSH connections
 // exist and their IDs before calling SSHTool — without it, the model has
 // no way to know a valid connectionId short of the user typing one into
-// the chat. Only connections HasAccessLevel grants at least Read on are
+// the chat. Only connections canAccess grants at least Read on are
 // returned; the point of the whole resource-permission system is that a
 // user shouldn't even learn a connection exists if they can't reach it at
 // all.
 type ListSSHConnectionsTool struct {
 	userID    uint
 	sshconns  sshconn.Service
-	canAccess HasAccessLevel
+	canAccess shared.AccessLevelCheck
 }
 
-func NewListSSHConnectionsTool(userID uint, sshconns sshconn.Service, canAccess HasAccessLevel) *ListSSHConnectionsTool {
+func NewListSSHConnectionsTool(userID uint, sshconns sshconn.Service, canAccess shared.AccessLevelCheck) *ListSSHConnectionsTool {
 	return &ListSSHConnectionsTool{userID: userID, sshconns: sshconns, canAccess: canAccess}
 }
 

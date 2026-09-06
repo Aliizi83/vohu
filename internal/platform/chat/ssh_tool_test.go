@@ -36,6 +36,12 @@ func (s *stubSSHConnService) Delete(context.Context, uint) error { panic("not us
 func (s *stubSSHConnService) List(context.Context, shared.DynamicFilter, shared.Pagination) ([]sshconn.SSHConnection, int64, error) {
 	panic("not used by SSHTool")
 }
+func (s *stubSSHConnService) ListForCaller(context.Context, uint, shared.DynamicFilter, shared.Pagination) ([]sshconn.SSHConnection, int64, error) {
+	panic("not used by SSHTool")
+}
+func (s *stubSSHConnService) GetByIDForCaller(context.Context, uint, uint) (*sshconn.SSHConnection, error) {
+	panic("not used by SSHTool")
+}
 func (s *stubSSHConnService) DecryptSecret(*sshconn.SSHConnection) (string, error) {
 	if s.secretErr != nil {
 		return "", s.secretErr

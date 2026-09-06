@@ -166,6 +166,17 @@ export interface PermissionDto {
   key: string
 }
 
+// MyAccessDto is the caller's own complete access profile, fetched once
+// right after login — every flat permission key they hold through any
+// role, plus every per-resource grant that's personally theirs. The
+// frontend uses this to decide what to show rather than reacting to 403s;
+// the backend still enforces every boundary independently (this is a UX
+// layer, not the actual security boundary).
+export interface MyAccessDto {
+  permissions: string[]
+  resourceAccess: ResourcePermissionDto[]
+}
+
 export interface PagedList<T> {
   pageNumber: number
   pageSize: number
@@ -195,6 +206,10 @@ function listQuery(page?: number, pageSize?: number, filter?: DynamicFilter) {
 export const api = {
   login: (username: string, password: string) =>
     request<TokenPair>("POST", "/auth/login", { body: { username, password } }),
+
+  me: {
+    access: () => request<MyAccessDto>("GET", "/me/access"),
+  },
 
   users: {
     list: (page?: number, pageSize?: number, filter?: DynamicFilter) =>
