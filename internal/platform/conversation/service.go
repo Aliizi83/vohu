@@ -10,13 +10,16 @@ import (
 
 var ErrNotOwner = errors.New("conversation does not belong to this user")
 
+const resourceTypeConversation = "conversation"
+
 type Service interface {
 	Create(ctx context.Context, userID uint, req CreateConversationRequest) (*Conversation, error)
 
 	// Get returns shared.ErrNotFound both when the conversation truly
-	// doesn't exist and when it exists but belongs to someone else — a
-	// caller has no legitimate reason to distinguish "not found" from
-	// "not yours."
+	// doesn't exist and when it exists but belongs to someone else *and*
+	// the caller holds no resource-level access to it either (see
+	// hasAccessLevel) — a caller has no legitimate reason to distinguish
+	// "not found" from "not yours and not shared with you."
 	Get(ctx context.Context, userID uint, id uint) (*Conversation, error)
 	List(ctx context.Context, userID uint, page shared.Pagination) ([]Conversation, int64, error)
 
@@ -31,11 +34,12 @@ type Service interface {
 }
 
 type service struct {
-	repo Repository
+	repo           Repository
+	hasAccessLevel shared.AccessLevelCheck
 }
 
-func NewService(repo Repository) Service {
-	return &service{repo: repo}
+func NewService(repo Repository, hasAccessLevel shared.AccessLevelCheck) Service {
+	return &service{repo: repo, hasAccessLevel: hasAccessLevel}
 }
 
 func (s *service) Create(ctx context.Context, userID uint, req CreateConversationRequest) (*Conversation, error) {
@@ -59,7 +63,19 @@ func (s *service) Get(ctx context.Context, userID uint, id uint) (*Conversation,
 		return nil, err
 	}
 
-	if conv.UserID != userID {
+	if conv.UserID == userID {
+		return conv, nil
+	}
+
+	// Not the owner — fall back to resource-level access (e.g. a support
+	// role granted read access to every user with a given role's
+	// conversations). Still default-deny: no grant means shared.ErrNotFound,
+	// same as if the conversation didn't exist at all.
+	allowed, err := s.hasAccessLevel(ctx, userID, resourceTypeConversation, conv.ID, "read")
+	if err != nil {
+		return nil, err
+	}
+	if !allowed {
 		return nil, shared.ErrNotFound
 	}
 

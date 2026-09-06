@@ -8,6 +8,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// KnownResourceTypes is every resource type the platform currently
+// defines — duplicated here as plain strings the same way
+// seeders.KnownPermissions used to duplicate other modules' permission
+// keys, so rbac never has to import sshconn/user/chat just to know their
+// names. Used to seed the admin role's wildcard grants and to compute
+// MyAccessResponse.Levels for /me/access.
+var KnownResourceTypes = []string{"user", "role", "ssh_connection", "provider_key", "conversation", "resource_access"}
+
 type Handler struct {
 	service Service
 }
@@ -20,7 +28,7 @@ func mapError(err error) (int, shared.ResultCode) {
 	switch {
 	case errors.Is(err, shared.ErrNotFound):
 		return http.StatusNotFound, shared.ResultNotFoundError
-	case errors.Is(err, ErrRoleExists), errors.Is(err, ErrPermissionExists):
+	case errors.Is(err, ErrRoleExists):
 		return http.StatusConflict, shared.ResultConflictError
 	default:
 		return http.StatusInternalServerError, shared.ResultInternalError
@@ -64,66 +72,6 @@ func (h *Handler) ListRoles(c *gin.Context) {
 	)
 }
 
-func (h *Handler) CreatePermission(c *gin.Context) {
-	shared.CreateHandler(c,
-		shared.Identity[CreatePermissionRequest],
-		func(p *Permission) PermissionResponse { return toPermissionResponse(*p) },
-		h.service.CreatePermission,
-		mapError,
-	)
-}
-
-func (h *Handler) GetPermission(c *gin.Context) {
-	shared.GetByIDHandler(c,
-		func(p *Permission) PermissionResponse { return toPermissionResponse(*p) },
-		h.service.GetPermission,
-		mapError,
-	)
-}
-
-func (h *Handler) UpdatePermission(c *gin.Context) {
-	shared.UpdateHandler(c,
-		shared.Identity[UpdatePermissionRequest],
-		func(p *Permission) PermissionResponse { return toPermissionResponse(*p) },
-		h.service.UpdatePermission,
-		mapError,
-	)
-}
-
-func (h *Handler) DeletePermission(c *gin.Context) {
-	shared.DeleteHandler(c, h.service.DeletePermission, mapError)
-}
-
-func (h *Handler) ListPermissions(c *gin.Context) {
-	shared.ListHandler(c,
-		func(p Permission) PermissionResponse { return toPermissionResponse(p) },
-		h.service.ListPermissions,
-	)
-}
-
-// GrantPermissionToRole handles POST /roles/:id/permissions — :id is the
-// role ID. More than plain CRUD (a join-table write), so hand-written.
-func (h *Handler) GrantPermissionToRole(c *gin.Context) {
-	roleID, err := shared.ParseIDParam(c)
-	if err != nil {
-		shared.RespondError(c, http.StatusBadRequest, shared.ResultValidationError, errors.New("invalid id"))
-		return
-	}
-
-	var req GrantPermissionRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		shared.RespondValidationError(c, err)
-		return
-	}
-
-	if err := h.service.GrantPermissionToRole(c.Request.Context(), roleID, req.PermissionID); err != nil {
-		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, errors.New("internal error"))
-		return
-	}
-
-	shared.RespondSuccess(c, http.StatusOK, nil)
-}
-
 // AssignRoleToUser handles POST /users/:id/roles — :id is the user ID.
 // More than plain CRUD (a join-table write), so hand-written.
 func (h *Handler) AssignRoleToUser(c *gin.Context) {
@@ -147,18 +95,41 @@ func (h *Handler) AssignRoleToUser(c *gin.Context) {
 	shared.RespondSuccess(c, http.StatusOK, nil)
 }
 
-// GrantResourceAccess handles POST /resource-permissions. Hand-written
-// rather than shared.CreateHandler because the service method upserts
-// (returns only an error, not the row) and the four fields all live
-// directly on the request body rather than one coming from a route param.
+// GrantResourceAccess handles POST /resource-access. Hand-written rather
+// than shared.CreateHandler for two reasons: the service method upserts
+// (returns only an error, not the row), and — the important one — the
+// resource being granted access to lives in the request body, not a route
+// param, so the "does the granter already hold manage on this specific
+// resource" check (granting access to X requires manage on X, no separate
+// meta-permission needed) can't be expressed as route-level middleware
+// the way every other check in this module is; it has to read the body
+// first.
 func (h *Handler) GrantResourceAccess(c *gin.Context) {
+	userID, ok := shared.GetUserID(c)
+	if !ok {
+		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
+		return
+	}
+
 	var req GrantResourceAccessRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		shared.RespondValidationError(c, err)
 		return
 	}
 
-	err := h.service.GrantResourceAccess(c.Request.Context(), req.UserID, req.ResourceType, req.ResourceID, req.Level)
+	allowed, err := h.service.HasAccessLevel(c.Request.Context(), userID, req.ResourceType, req.ResourceID, AccessManage)
+	if err != nil {
+		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, errors.New("internal error"))
+		return
+	}
+	if !allowed {
+		shared.RespondError(c, http.StatusForbidden, shared.ResultForbiddenError, errors.New("forbidden"))
+		return
+	}
+
+	err = h.service.GrantResourceAccess(
+		c.Request.Context(), req.GranteeType, req.GranteeID, req.ResourceType, req.ResourceID, req.Level, req.Effect,
+	)
 	if err != nil {
 		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, errors.New("internal error"))
 		return
@@ -167,15 +138,55 @@ func (h *Handler) GrantResourceAccess(c *gin.Context) {
 	shared.RespondSuccess(c, http.StatusOK, nil)
 }
 
-func (h *Handler) ListResourcePermissions(c *gin.Context) {
+func (h *Handler) ListResourceAccess(c *gin.Context) {
 	shared.ListHandler(c,
-		func(p ResourcePermission) ResourcePermissionResponse { return toResourcePermissionResponse(p) },
-		h.service.ListResourcePermissions,
+		func(a ResourceAccess) ResourceAccessResponse { return toResourceAccessResponse(a) },
+		h.service.ListResourceAccess,
 	)
 }
 
+// RevokeResourceAccess handles DELETE /resource-access/:id — :id is the
+// grant row's own ID, not the resource it refers to, so the "does the
+// caller hold manage on that resource" check has to load the row first to
+// learn its ResourceType/ResourceID, same reasoning as GrantResourceAccess
+// above.
 func (h *Handler) RevokeResourceAccess(c *gin.Context) {
-	shared.DeleteHandler(c, h.service.RevokeResourceAccess, mapError)
+	userID, ok := shared.GetUserID(c)
+	if !ok {
+		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
+		return
+	}
+
+	id, err := shared.ParseIDParam(c)
+	if err != nil {
+		shared.RespondError(c, http.StatusBadRequest, shared.ResultValidationError, errors.New("invalid id"))
+		return
+	}
+
+	grant, err := h.service.GetResourceAccess(c.Request.Context(), id)
+	if err != nil {
+		status, code := mapError(err)
+		shared.RespondError(c, status, code, err)
+		return
+	}
+
+	allowed, err := h.service.HasAccessLevel(c.Request.Context(), userID, grant.ResourceType, grant.ResourceID, AccessManage)
+	if err != nil {
+		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, errors.New("internal error"))
+		return
+	}
+	if !allowed {
+		shared.RespondError(c, http.StatusForbidden, shared.ResultForbiddenError, errors.New("forbidden"))
+		return
+	}
+
+	if err := h.service.RevokeResourceAccess(c.Request.Context(), id); err != nil {
+		status, code := mapError(err)
+		shared.RespondError(c, status, code, err)
+		return
+	}
+
+	shared.RespondSuccess(c, http.StatusOK, nil)
 }
 
 // GetMyAccess handles GET /me/access — self-service, no policy beyond
@@ -187,25 +198,30 @@ func (h *Handler) GetMyAccess(c *gin.Context) {
 		return
 	}
 
-	permissions, err := h.service.ListPermissionKeysForUser(c.Request.Context(), userID)
+	grants, err := h.service.MyResourceAccess(c.Request.Context(), userID)
 	if err != nil {
 		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, errors.New("internal error"))
 		return
 	}
-
-	grants, err := h.service.ListResourceAccessForUser(c.Request.Context(), userID)
-	if err != nil {
-		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, errors.New("internal error"))
-		return
-	}
-
-	resourceAccess := make([]ResourcePermissionResponse, 0, len(grants))
+	resourceAccess := make([]ResourceAccessResponse, 0, len(grants))
 	for _, g := range grants {
-		resourceAccess = append(resourceAccess, toResourcePermissionResponse(g))
+		resourceAccess = append(resourceAccess, toResourceAccessResponse(g))
+	}
+
+	levels := make(map[string]AccessLevel, len(KnownResourceTypes))
+	for _, resourceType := range KnownResourceTypes {
+		level, ok, err := h.service.MyLevel(c.Request.Context(), userID, resourceType)
+		if err != nil {
+			shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, errors.New("internal error"))
+			return
+		}
+		if ok {
+			levels[resourceType] = level
+		}
 	}
 
 	shared.RespondSuccess(c, http.StatusOK, MyAccessResponse{
-		Permissions:    permissions,
 		ResourceAccess: resourceAccess,
+		Levels:         levels,
 	})
 }

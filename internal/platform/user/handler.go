@@ -57,9 +57,33 @@ func (h *Handler) Delete(c *gin.Context) {
 	shared.DeleteHandler(c, h.service.Delete, mapError)
 }
 
+// List is hand-written rather than shared.ListHandler because visibility
+// isn't all-or-nothing anymore — Service.ListForCaller needs the caller's
+// ID to decide whether they see every user or only the ones they hold
+// resource-level access to.
 func (h *Handler) List(c *gin.Context) {
-	shared.ListHandler(c,
-		func(u User) Response { return toResponse(u) },
-		h.service.List,
-	)
+	userID, ok := shared.GetUserID(c)
+	if !ok {
+		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
+		return
+	}
+
+	page, filter, err := shared.ParseListQuery(c)
+	if err != nil {
+		shared.RespondValidationError(c, err)
+		return
+	}
+
+	items, total, err := h.service.ListForCaller(c.Request.Context(), userID, filter, page)
+	if err != nil {
+		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, err)
+		return
+	}
+
+	responses := make([]Response, 0, len(items))
+	for _, item := range items {
+		responses = append(responses, toResponse(item))
+	}
+
+	shared.RespondSuccess(c, http.StatusOK, shared.NewPagedList(responses, total, page))
 }

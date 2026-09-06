@@ -1,49 +1,56 @@
 package rbac
 
 import (
+	"context"
+
 	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"github.com/gin-gonic/gin"
 )
 
-// RegisterRoutes wires this module's HTTP routes. Every route here except
-// GET /me/access is admin-management surface, requiring policy.CanManage
-// ("rbac:manage", granted to the default admin role at seed time) —
-// /me/access is self-service, since it only ever returns the caller's own
-// data.
+// RegisterRoutes wires this module's HTTP routes. Every route is gated
+// through Service.HasAccessLevel — rbac doesn't need shared.AccessLevelCheck
+// injected from outside the way every other module does (that indirection
+// exists so a module never has to import rbac just to check one
+// resource's grant); rbac already owns the resolver, so it builds its own
+// adapter locally to hand to shared.RequireAccessLevelOnParam/Wildcard,
+// the same middleware every other module's routes use.
+//
+// GrantResourceAccess/RevokeResourceAccess aren't gated by that
+// middleware at all — see their handler doc comments for why (the
+// resource being granted/revoked lives in the request body or has to be
+// looked up first, not read straight off a URL param).
 func RegisterRoutes(
 	v1 *gin.RouterGroup,
 	handler *Handler,
 	authMiddleware gin.HandlerFunc,
-	policy *Policy,
+	service Service,
 ) {
-	manage := shared.RequirePolicy(policy.CanManage)
+	hasAccessLevel := func(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) (bool, error) {
+		return service.HasAccessLevel(ctx, userID, resourceType, resourceID, AccessLevel(level))
+	}
 
 	roles := v1.Group("/roles", authMiddleware)
 	{
-		roles.POST("", manage, handler.CreateRole)
-		roles.GET("", manage, handler.ListRoles)
-		roles.GET("/:id", manage, handler.GetRole)
-		roles.PUT("/:id", manage, handler.UpdateRole)
-		roles.DELETE("/:id", manage, handler.DeleteRole)
-		roles.POST("/:id/permissions", manage, handler.GrantPermissionToRole)
+		roles.POST("", shared.RequireAccessLevelWildcard(hasAccessLevel, "role", "write"), handler.CreateRole)
+		roles.GET("", shared.RequireAccessLevelWildcard(hasAccessLevel, "role", "read"), handler.ListRoles)
+		roles.GET("/:id", shared.RequireAccessLevelOnParam(hasAccessLevel, "role", "read"), handler.GetRole)
+		roles.PUT("/:id", shared.RequireAccessLevelOnParam(hasAccessLevel, "role", "write"), handler.UpdateRole)
+		roles.DELETE("/:id", shared.RequireAccessLevelOnParam(hasAccessLevel, "role", "manage"), handler.DeleteRole)
 	}
 
-	permissions := v1.Group("/permissions", authMiddleware)
-	{
-		permissions.POST("", manage, handler.CreatePermission)
-		permissions.GET("", manage, handler.ListPermissions)
-		permissions.GET("/:id", manage, handler.GetPermission)
-		permissions.PUT("/:id", manage, handler.UpdatePermission)
-		permissions.DELETE("/:id", manage, handler.DeletePermission)
-	}
+	// :id here is the target USER's ID — assigning them a role is a
+	// management action on that user resource.
+	v1.POST(
+		"/users/:id/roles", authMiddleware,
+		shared.RequireAccessLevelOnParam(hasAccessLevel, "user", "manage"),
+		handler.AssignRoleToUser,
+	)
 
-	v1.POST("/users/:id/roles", authMiddleware, manage, handler.AssignRoleToUser)
-
-	resourcePermissions := v1.Group("/resource-permissions", authMiddleware)
+	resourceAccess := v1.Group("/resource-access", authMiddleware)
 	{
-		resourcePermissions.POST("", manage, handler.GrantResourceAccess)
-		resourcePermissions.GET("", manage, handler.ListResourcePermissions)
-		resourcePermissions.DELETE("/:id", manage, handler.RevokeResourceAccess)
+		resourceAccess.POST("", handler.GrantResourceAccess)
+		resourceAccess.GET("", shared.RequireAccessLevelWildcard(hasAccessLevel, "resource_access", "read"), handler.ListResourceAccess)
+		resourceAccess.DELETE("/:id", handler.RevokeResourceAccess)
 	}
 
 	v1.GET("/me/access", authMiddleware, handler.GetMyAccess)

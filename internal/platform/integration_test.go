@@ -49,16 +49,17 @@ func setupIntegrationServer(t *testing.T) *gin.Engine {
 	}
 	logger := logging.NewLogger(cfg)
 
-	userRepo := user.NewRepository(db)
-	userService := user.NewService(userRepo)
-	userHandler := user.NewHandler(userService)
-
 	rbacRepo := rbac.NewRepository(db)
 	rbacService := rbac.NewService(rbacRepo)
 	rbacHandler := rbac.NewHandler(rbacService)
-	rbacPolicy := rbac.NewPolicy(rbacService)
 
-	userPolicy := user.NewPolicy(rbacService.HasPermission)
+	hasAccessLevel := func(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) (bool, error) {
+		return rbacService.HasAccessLevel(ctx, userID, resourceType, resourceID, rbac.AccessLevel(level))
+	}
+
+	userRepo := user.NewRepository(db)
+	userService := user.NewService(userRepo, hasAccessLevel)
+	userHandler := user.NewHandler(userService)
 
 	authService := auth.NewService(cfg, userService)
 	authHandler := auth.NewHandler(authService)
@@ -66,14 +67,16 @@ func setupIntegrationServer(t *testing.T) *gin.Engine {
 	engine, v1 := httpserver.NewEngine(logger)
 	authMiddleware := authService.Authentication()
 
-	user.RegisterRoutes(v1, userHandler, authMiddleware, userPolicy)
-	rbac.RegisterRoutes(v1, rbacHandler, authMiddleware, rbacPolicy)
+	user.RegisterRoutes(v1, userHandler, authMiddleware, hasAccessLevel)
+	rbac.RegisterRoutes(v1, rbacHandler, authMiddleware, rbacService)
 	auth.RegisterRoutes(v1, authHandler)
 
-	// Seed an admin with every user permission, and a plain user with none
-	// — same shape as cmd/server/seeders, built directly through the
-	// services here so the test doesn't depend on the seeders package's
-	// specific dev credentials.
+	// Seed an admin with a wildcard "manage" grant on the "user" resource
+	// type (manage on shared.WildcardResourceID satisfies any real user
+	// ID, including ones created after this grant), and a plain user with
+	// no grants at all — same shape as cmd/server/seeders' seedAdminAccess,
+	// built directly through the services here so the test doesn't depend
+	// on the seeders package's specific dev credentials.
 	if _, err := userService.Register(ctx, user.CreateUserRequest{Username: "admin", Password: "adminpass123"}); err != nil {
 		t.Fatalf("seed admin failed: %v", err)
 	}
@@ -82,22 +85,10 @@ func setupIntegrationServer(t *testing.T) *gin.Engine {
 		t.Fatalf("get seeded admin failed: %v", err)
 	}
 
-	role, err := rbacService.CreateRole(ctx, rbac.CreateRoleRequest{Name: "admin"})
-	if err != nil {
-		t.Fatalf("create role failed: %v", err)
-	}
-
-	for _, key := range []string{"user:create", "user:read", "user:update", "user:delete", "rbac:manage"} {
-		p, err := rbacService.CreatePermission(ctx, rbac.CreatePermissionRequest{Key: key})
-		if err != nil {
-			t.Fatalf("create permission %q failed: %v", key, err)
-		}
-		if err := rbacService.GrantPermissionToRole(ctx, role.ID, p.ID); err != nil {
-			t.Fatalf("grant %q failed: %v", key, err)
-		}
-	}
-	if err := rbacService.AssignRoleToUser(ctx, admin.ID, role.ID); err != nil {
-		t.Fatalf("assign role to admin failed: %v", err)
+	if err := rbacService.GrantResourceAccess(
+		ctx, rbac.GranteeUser, admin.ID, "user", shared.WildcardResourceID, rbac.AccessManage, rbac.EffectAccepted,
+	); err != nil {
+		t.Fatalf("grant admin wildcard access failed: %v", err)
 	}
 
 	if _, err := userService.Register(ctx, user.CreateUserRequest{Username: "plain", Password: "plainpass123"}); err != nil {

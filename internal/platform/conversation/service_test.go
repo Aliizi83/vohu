@@ -25,9 +25,17 @@ func setupConversationTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
+func denyAccessLevel(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) (bool, error) {
+	return false, nil
+}
+
+func allowAccessLevel(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) (bool, error) {
+	return true, nil
+}
+
 func newTestService(t *testing.T) conversation.Service {
 	t.Helper()
-	return conversation.NewService(conversation.NewRepository(setupConversationTestDB(t)))
+	return conversation.NewService(conversation.NewRepository(setupConversationTestDB(t)), denyAccessLevel)
 }
 
 func TestCreate_ThenGet_SucceedsForOwner(t *testing.T) {
@@ -50,7 +58,7 @@ func TestCreate_ThenGet_SucceedsForOwner(t *testing.T) {
 	}
 }
 
-func TestGet_DeniesNonOwnerAsNotFound(t *testing.T) {
+func TestGet_DeniesNonOwnerWithNoResourceAccessAsNotFound(t *testing.T) {
 	service := newTestService(t)
 	ctx := context.Background()
 
@@ -63,7 +71,27 @@ func TestGet_DeniesNonOwnerAsNotFound(t *testing.T) {
 
 	_, err = service.Get(ctx, 2, conv.ID)
 	if err != shared.ErrNotFound {
-		t.Fatalf("expected shared.ErrNotFound for a non-owner, got %v", err)
+		t.Fatalf("expected shared.ErrNotFound for a non-owner with no resource access, got %v", err)
+	}
+}
+
+func TestGet_AllowsNonOwnerWithResourceAccess(t *testing.T) {
+	service := conversation.NewService(conversation.NewRepository(setupConversationTestDB(t)), allowAccessLevel)
+	ctx := context.Background()
+
+	conv, err := service.Create(ctx, 1, conversation.CreateConversationRequest{
+		Title: "private", Provider: "gemini", Model: "gemini-2.0-flash",
+	})
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	got, err := service.Get(ctx, 2, conv.ID)
+	if err != nil {
+		t.Fatalf("expected a non-owner with resource-level read access to succeed, got %v", err)
+	}
+	if got.ID != conv.ID {
+		t.Fatalf("expected conversation %d, got %d", conv.ID, got.ID)
 	}
 }
 
@@ -129,7 +157,7 @@ func TestAppendHistory_ThenLoadHistory_RoundTripsMessagesInOrder(t *testing.T) {
 	}
 }
 
-func TestLoadHistory_DeniesNonOwner(t *testing.T) {
+func TestLoadHistory_DeniesNonOwnerWithNoResourceAccess(t *testing.T) {
 	service := newTestService(t)
 	ctx := context.Background()
 

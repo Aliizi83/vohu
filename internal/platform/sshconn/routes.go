@@ -5,24 +5,26 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// RegisterRoutes wires this module's HTTP routes. GET routes are open to
-// any authenticated user (not gated by policy.CanRead) because visibility
-// is no longer all-or-nothing: Handler.List/Get call the service's
-// ...ForCaller methods, which show a flat-ssh:read holder everything and
-// everyone else only the connections they hold resource-level access to.
-// Mutating routes stay exactly as before — flat-permission-gated only.
+// RegisterRoutes wires this module's HTTP routes. Get/Update/Delete are
+// gated per-:id (shared.RequireAccessLevelOnParam already tries the exact
+// row then falls back to a caller's wildcard/role grant, closing the gap
+// this used to have — Update/Delete were flat-permission-gated only,
+// meaning anyone holding "ssh:update"/"ssh:delete" could touch any
+// connection regardless of resource grants); List can't be expressed that
+// way (no single :id, and visibility is per-row) so it's the one
+// hand-written handler — see Service.ListForCaller.
 func RegisterRoutes(
 	v1 *gin.RouterGroup,
 	handler *Handler,
 	authMiddleware gin.HandlerFunc,
-	policy *Policy,
+	hasAccessLevel shared.AccessLevelCheck,
 ) {
 	connections := v1.Group("/ssh-connections", authMiddleware)
 	{
-		connections.POST("", shared.RequirePolicy(policy.CanCreate), handler.Create)
+		connections.POST("", shared.RequireAccessLevelWildcard(hasAccessLevel, ResourceTypeSSHConnection, "write"), handler.Create)
 		connections.GET("", handler.List)
-		connections.GET("/:id", handler.Get)
-		connections.PUT("/:id", shared.RequirePolicy(policy.CanUpdate), handler.Update)
-		connections.DELETE("/:id", shared.RequirePolicy(policy.CanDelete), handler.Delete)
+		connections.GET("/:id", shared.RequireAccessLevelOnParam(hasAccessLevel, ResourceTypeSSHConnection, "read"), handler.Get)
+		connections.PUT("/:id", shared.RequireAccessLevelOnParam(hasAccessLevel, ResourceTypeSSHConnection, "write"), handler.Update)
+		connections.DELETE("/:id", shared.RequireAccessLevelOnParam(hasAccessLevel, ResourceTypeSSHConnection, "manage"), handler.Delete)
 	}
 }

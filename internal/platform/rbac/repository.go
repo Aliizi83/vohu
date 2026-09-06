@@ -16,47 +16,53 @@ type Repository interface {
 	DeleteRole(ctx context.Context, id uint) error
 	ListRoles(ctx context.Context, filter shared.DynamicFilter, page shared.Pagination) ([]Role, int64, error)
 
-	CreatePermission(ctx context.Context, p *Permission) error
-	FindPermissionByID(ctx context.Context, id uint) (*Permission, error)
-	FindPermissionByKey(ctx context.Context, key string) (*Permission, error)
-	UpdatePermission(ctx context.Context, p *Permission) error
-	DeletePermission(ctx context.Context, id uint) error
-	ListPermissions(ctx context.Context, filter shared.DynamicFilter, page shared.Pagination) ([]Permission, int64, error)
-
-	RolePermissionExists(ctx context.Context, roleID, permissionID uint) (bool, error)
-	AssignPermissionToRole(ctx context.Context, roleID, permissionID uint) error
-
 	UserRoleExists(ctx context.Context, userID, roleID uint) (bool, error)
 	AssignRoleToUser(ctx context.Context, userID, roleID uint) error
+	// GetRoleIDsForUser backs the resolver — both for the caller's own
+	// roles (step 3 in HasAccessLevel) and, when checking access to a
+	// "user" resource, for the target user's roles (the cascade in step
+	// 4).
+	GetRoleIDsForUser(ctx context.Context, userID uint) ([]uint, error)
 
-	GetPermissionKeysForUser(ctx context.Context, userID uint) ([]string, error)
-
-	UpsertResourcePermission(ctx context.Context, userID uint, resourceType string, resourceID uint, level AccessLevel) error
-	FindResourcePermission(ctx context.Context, userID uint, resourceType string, resourceID uint) (*ResourcePermission, error)
-	ListResourcePermissions(ctx context.Context, filter shared.DynamicFilter, page shared.Pagination) ([]ResourcePermission, int64, error)
-	ListResourcePermissionsForUser(ctx context.Context, userID uint) ([]ResourcePermission, error)
-	DeleteResourcePermission(ctx context.Context, id uint) error
+	// UpsertResourceAccess finds an existing row for the exact
+	// (granteeType, granteeID, resourceType, resourceID) tuple and
+	// updates its Level/Effect, or creates a new one — a repeat grant
+	// updates rather than duplicates.
+	UpsertResourceAccess(ctx context.Context, granteeType GranteeType, granteeID uint, resourceType string, resourceID uint, level AccessLevel, effect ResourceEffect) error
+	// FindResourceAccess looks up the exact tuple only — the resolver is
+	// the one that tries the real ID then falls back to
+	// shared.WildcardResourceID, not this method.
+	FindResourceAccess(ctx context.Context, granteeType GranteeType, granteeID uint, resourceType string, resourceID uint) (*ResourceAccess, error)
+	// FindResourceAccessByID looks up a grant row by its own ID (not the
+	// resource it refers to) — used to learn a grant's ResourceType/
+	// ResourceID before revoking it, so that can be checked against the
+	// resolver in turn.
+	FindResourceAccessByID(ctx context.Context, id uint) (*ResourceAccess, error)
+	ListResourceAccess(ctx context.Context, filter shared.DynamicFilter, page shared.Pagination) ([]ResourceAccess, int64, error)
+	// ListResourceAccessForGrantee is hand-written rather than going
+	// through shared.ApplyDynamicFilter — that helper's OpEquals builds an
+	// ILIKE comparison (it exists for user-supplied filter UIs on text
+	// columns), which breaks against GranteeID's real numeric column in
+	// Postgres. Same reasoning as conversation.ListConversationsByUser.
+	ListResourceAccessForGrantee(ctx context.Context, granteeType GranteeType, granteeID uint) ([]ResourceAccess, error)
+	DeleteResourceAccess(ctx context.Context, id uint) error
 }
 
-// gormRepository holds one generic repository per entity it manages (named
-// fields, not embedding — Role and Permission would both promote a
-// same-named FindByID/etc, which is ambiguous through embedding) for plain
-// CRUD, plus the hand-written methods for everything beyond that:
-// name/key lookups, the role<->permission and user<->role join tables, and
-// the permission-keys-for-a-user query.
+// gormRepository holds one generic repository per entity it manages for
+// plain CRUD, plus hand-written methods for everything beyond that: name
+// lookups, the user<->role join table, and the resource-access resolver's
+// exact-tuple lookups.
 type gormRepository struct {
-	db                  *gorm.DB
-	roles               *shared.GenericRepository[Role]
-	permissions         *shared.GenericRepository[Permission]
-	resourcePermissions *shared.GenericRepository[ResourcePermission]
+	db             *gorm.DB
+	roles          *shared.GenericRepository[Role]
+	resourceAccess *shared.GenericRepository[ResourceAccess]
 }
 
 func NewRepository(db *gorm.DB) Repository {
 	return &gormRepository{
-		db:                  db,
-		roles:               shared.NewGenericRepository[Role](db),
-		permissions:         shared.NewGenericRepository[Permission](db),
-		resourcePermissions: shared.NewGenericRepository[ResourcePermission](db),
+		db:             db,
+		roles:          shared.NewGenericRepository[Role](db),
+		resourceAccess: shared.NewGenericRepository[ResourceAccess](db),
 	}
 }
 
@@ -98,59 +104,6 @@ func (r *gormRepository) FindRoleByName(ctx context.Context, name string) (*Role
 	return &role, nil
 }
 
-func (r *gormRepository) CreatePermission(ctx context.Context, permission *Permission) error {
-	return r.permissions.Create(ctx, permission)
-}
-
-func (r *gormRepository) FindPermissionByID(ctx context.Context, id uint) (*Permission, error) {
-	return r.permissions.FindByID(ctx, id)
-}
-
-func (r *gormRepository) UpdatePermission(ctx context.Context, permission *Permission) error {
-	return r.permissions.Update(ctx, permission)
-}
-
-func (r *gormRepository) DeletePermission(ctx context.Context, id uint) error {
-	return r.permissions.Delete(ctx, id)
-}
-
-func (r *gormRepository) ListPermissions(
-	ctx context.Context,
-	filter shared.DynamicFilter,
-	page shared.Pagination,
-) ([]Permission, int64, error) {
-	return r.permissions.List(ctx, filter, page)
-}
-
-func (r *gormRepository) FindPermissionByKey(ctx context.Context, key string) (*Permission, error) {
-	var permission Permission
-
-	err := r.db.WithContext(ctx).Where("key = ?", key).First(&permission).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, shared.ErrNotFound
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	return &permission, nil
-}
-
-func (r *gormRepository) RolePermissionExists(ctx context.Context, roleID, permissionID uint) (bool, error) {
-	var count int64
-	err := r.db.WithContext(ctx).Model(&RolePermission{}).
-		Where("role_id = ? AND permission_id = ?", roleID, permissionID).
-		Count(&count).Error
-	return count > 0, err
-}
-
-func (r *gormRepository) AssignPermissionToRole(ctx context.Context, roleID, permissionID uint) error {
-	return r.db.WithContext(ctx).Create(&RolePermission{
-		RoleID:       roleID,
-		PermissionID: permissionID,
-	}).Error
-}
-
 func (r *gormRepository) UserRoleExists(ctx context.Context, userID, roleID uint) (bool, error) {
 	var count int64
 	err := r.db.WithContext(ctx).Model(&UserRole{}).
@@ -166,65 +119,60 @@ func (r *gormRepository) AssignRoleToUser(ctx context.Context, userID, roleID ui
 	}).Error
 }
 
-func (r *gormRepository) UpsertResourcePermission(
+func (r *gormRepository) GetRoleIDsForUser(ctx context.Context, userID uint) ([]uint, error) {
+	var roleIDs []uint
+	err := r.db.WithContext(ctx).
+		Model(&UserRole{}).
+		Where("user_id = ?", userID).
+		Pluck("role_id", &roleIDs).Error
+	return roleIDs, err
+}
+
+func (r *gormRepository) UpsertResourceAccess(
 	ctx context.Context,
-	userID uint,
+	granteeType GranteeType,
+	granteeID uint,
 	resourceType string,
 	resourceID uint,
 	level AccessLevel,
+	effect ResourceEffect,
 ) error {
-	existing, err := r.FindResourcePermission(ctx, userID, resourceType, resourceID)
+	existing, err := r.FindResourceAccess(ctx, granteeType, granteeID, resourceType, resourceID)
 	if err != nil && !errors.Is(err, shared.ErrNotFound) {
 		return err
 	}
 
 	if existing != nil {
 		existing.Level = level
+		existing.Effect = effect
 		return r.db.WithContext(ctx).Save(existing).Error
 	}
 
-	return r.db.WithContext(ctx).Create(&ResourcePermission{
-		UserID:       userID,
+	return r.db.WithContext(ctx).Create(&ResourceAccess{
+		GranteeType:  granteeType,
+		GranteeID:    granteeID,
 		ResourceType: resourceType,
 		ResourceID:   resourceID,
 		Level:        level,
+		Effect:       effect,
 	}).Error
 }
 
-func (r *gormRepository) ListResourcePermissions(
+func (r *gormRepository) FindResourceAccess(
 	ctx context.Context,
-	filter shared.DynamicFilter,
-	page shared.Pagination,
-) ([]ResourcePermission, int64, error) {
-	return r.resourcePermissions.List(ctx, filter, page)
-}
-
-func (r *gormRepository) DeleteResourcePermission(ctx context.Context, id uint) error {
-	return r.resourcePermissions.Delete(ctx, id)
-}
-
-// ListResourcePermissionsForUser backs the self-service /me/access
-// endpoint — unpaginated (one user's own grants are never large enough to
-// need it) and unfiltered by anything but ownership, unlike
-// ListResourcePermissions which is the admin-facing, paginated view
-// across every user.
-func (r *gormRepository) ListResourcePermissionsForUser(ctx context.Context, userID uint) ([]ResourcePermission, error) {
-	var permissions []ResourcePermission
-	err := r.db.WithContext(ctx).Where("user_id = ?", userID).Find(&permissions).Error
-	return permissions, err
-}
-
-func (r *gormRepository) FindResourcePermission(
-	ctx context.Context,
-	userID uint,
+	granteeType GranteeType,
+	granteeID uint,
 	resourceType string,
 	resourceID uint,
-) (*ResourcePermission, error) {
-	var permission ResourcePermission
+) (*ResourceAccess, error) {
+	var access ResourceAccess
 
 	err := r.db.WithContext(ctx).
-		Where("user_id = ? AND resource_type = ? AND resource_id = ?", userID, resourceType, resourceID).
-		First(&permission).Error
+		Where(
+			"grantee_type = ? AND grantee_id = ? AND resource_type = ? AND resource_id = ?",
+			granteeType, granteeID, resourceType, resourceID,
+		).
+		First(&access).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, shared.ErrNotFound
 	}
@@ -232,19 +180,33 @@ func (r *gormRepository) FindResourcePermission(
 		return nil, err
 	}
 
-	return &permission, nil
+	return &access, nil
 }
 
-func (r *gormRepository) GetPermissionKeysForUser(ctx context.Context, userID uint) ([]string, error) {
-	var keys []string
+func (r *gormRepository) ListResourceAccess(
+	ctx context.Context,
+	filter shared.DynamicFilter,
+	page shared.Pagination,
+) ([]ResourceAccess, int64, error) {
+	return r.resourceAccess.List(ctx, filter, page)
+}
 
+func (r *gormRepository) FindResourceAccessByID(ctx context.Context, id uint) (*ResourceAccess, error) {
+	return r.resourceAccess.FindByID(ctx, id)
+}
+
+func (r *gormRepository) ListResourceAccessForGrantee(
+	ctx context.Context,
+	granteeType GranteeType,
+	granteeID uint,
+) ([]ResourceAccess, error) {
+	var access []ResourceAccess
 	err := r.db.WithContext(ctx).
-		Table("permissions").
-		Joins("JOIN role_permissions ON role_permissions.permission_id = permissions.id AND role_permissions.deleted_at IS NULL").
-		Joins("JOIN user_roles ON user_roles.role_id = role_permissions.role_id AND user_roles.deleted_at IS NULL").
-		Where("user_roles.user_id = ? AND permissions.deleted_at IS NULL", userID).
-		Distinct().
-		Pluck("permissions.key", &keys).Error
+		Where("grantee_type = ? AND grantee_id = ?", granteeType, granteeID).
+		Find(&access).Error
+	return access, err
+}
 
-	return keys, err
+func (r *gormRepository) DeleteResourceAccess(ctx context.Context, id uint) error {
+	return r.resourceAccess.Delete(ctx, id)
 }

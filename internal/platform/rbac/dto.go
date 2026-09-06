@@ -8,18 +8,6 @@ type UpdateRoleRequest struct {
 	Name string `json:"name" binding:"omitempty,min=2,max=50"`
 }
 
-type CreatePermissionRequest struct {
-	Key string `json:"key" binding:"required,min=2,max=100"`
-}
-
-type UpdatePermissionRequest struct {
-	Key string `json:"key" binding:"omitempty,min=2,max=100"`
-}
-
-type GrantPermissionRequest struct {
-	PermissionID uint `json:"permissionId" binding:"required"`
-}
-
 type AssignRoleRequest struct {
 	RoleID uint `json:"roleId" binding:"required"`
 }
@@ -29,55 +17,54 @@ type RoleResponse struct {
 	Name string `json:"name"`
 }
 
-type PermissionResponse struct {
-	ID  uint   `json:"id"`
-	Key string `json:"key"`
-}
-
 func toRoleResponse(r Role) RoleResponse {
 	return RoleResponse{ID: r.ID, Name: r.Name}
 }
 
-func toPermissionResponse(p Permission) PermissionResponse {
-	return PermissionResponse{ID: p.ID, Key: p.Key}
-}
-
 // GrantResourceAccessRequest doubles as both "grant" and "update" —
-// granting again for the same (userId, resourceType, resourceId) upserts
-// the level rather than erroring or duplicating, so there's no separate
-// update request shape.
+// granting again for the same (granteeType, granteeId, resourceType,
+// resourceId) upserts the level/effect rather than erroring or
+// duplicating, so there's no separate update request shape.
 type GrantResourceAccessRequest struct {
-	UserID       uint        `json:"userId" binding:"required"`
-	ResourceType string      `json:"resourceType" binding:"required,max=50"`
-	ResourceID   uint        `json:"resourceId" binding:"required"`
-	Level        AccessLevel `json:"level" binding:"required,oneof=forbidden read write manage"`
+	GranteeType  GranteeType    `json:"granteeType" binding:"required,oneof=user role"`
+	GranteeID    uint           `json:"granteeId" binding:"required"`
+	ResourceType string         `json:"resourceType" binding:"required,max=50"`
+	ResourceID   uint           `json:"resourceId"`
+	Level        AccessLevel    `json:"level" binding:"required,oneof=read write manage"`
+	Effect       ResourceEffect `json:"effect" binding:"required,oneof=accepted prohibited"`
 }
 
-type ResourcePermissionResponse struct {
-	ID           uint        `json:"id"`
-	UserID       uint        `json:"userId"`
-	ResourceType string      `json:"resourceType"`
-	ResourceID   uint        `json:"resourceId"`
-	Level        AccessLevel `json:"level"`
+type ResourceAccessResponse struct {
+	ID           uint           `json:"id"`
+	GranteeType  GranteeType    `json:"granteeType"`
+	GranteeID    uint           `json:"granteeId"`
+	ResourceType string         `json:"resourceType"`
+	ResourceID   uint           `json:"resourceId"`
+	Level        AccessLevel    `json:"level"`
+	Effect       ResourceEffect `json:"effect"`
 }
 
-func toResourcePermissionResponse(p ResourcePermission) ResourcePermissionResponse {
-	return ResourcePermissionResponse{
-		ID:           p.ID,
-		UserID:       p.UserID,
-		ResourceType: p.ResourceType,
-		ResourceID:   p.ResourceID,
-		Level:        p.Level,
+func toResourceAccessResponse(a ResourceAccess) ResourceAccessResponse {
+	return ResourceAccessResponse{
+		ID:           a.ID,
+		GranteeType:  a.GranteeType,
+		GranteeID:    a.GranteeID,
+		ResourceType: a.ResourceType,
+		ResourceID:   a.ResourceID,
+		Level:        a.Level,
+		Effect:       a.Effect,
 	}
 }
 
 // MyAccessResponse is the caller's own complete access profile — sent
 // right after login so the frontend can decide what nav items and
-// records to show without trial-and-error against 403s. Permissions is
-// every flat key the caller holds through any role; ResourceAccess is
-// every per-resource grant they personally have (not everyone's, unlike
-// the admin-only ListResourcePermissions).
+// records to show without trial-and-error against 403s. ResourceAccess is
+// every grant that's personally the caller's (direct or via a role they
+// hold); Levels is the best level the caller holds on each known resource
+// type at large (checked against shared.WildcardResourceID) — what drives
+// nav-item and button visibility, since the frontend can't enumerate
+// every resource ID up front.
 type MyAccessResponse struct {
-	Permissions    []string                     `json:"permissions"`
-	ResourceAccess []ResourcePermissionResponse `json:"resourceAccess"`
+	ResourceAccess []ResourceAccessResponse `json:"resourceAccess"`
+	Levels         map[string]AccessLevel   `json:"levels"`
 }

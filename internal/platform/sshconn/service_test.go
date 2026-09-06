@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Aliizi83/vohu/internal/platform/rbac"
 	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"github.com/Aliizi83/vohu/internal/platform/sshconn"
 	"github.com/Aliizi83/vohu/pkg/crypto"
@@ -14,12 +13,6 @@ import (
 
 const testEncryptionKey = "1P407PvOcPLeLTn+GEIwhyqWg4fV97WCZBFwlPgm1Ns="
 
-// rbac.ResourcePermission is migrated here too (not just SSHConnection) —
-// ListForCaller/GetByIDForCaller's non-bypass path runs a real SQL EXISTS
-// subquery against that table, so the filtering tests below need it to
-// actually exist. Importing rbac from a _test.go file doesn't reintroduce
-// the production coupling sshconn's own code deliberately avoids — this
-// is test setup, not the module depending on rbac's package at runtime.
 func setupSSHConnTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
@@ -27,7 +20,7 @@ func setupSSHConnTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("failed to open in-memory sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(&sshconn.SSHConnection{}, &rbac.ResourcePermission{}); err != nil {
+	if err := db.AutoMigrate(&sshconn.SSHConnection{}); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
 	}
 	return db
@@ -40,28 +33,11 @@ type grantCall struct {
 	userID       uint
 	resourceType string
 	resourceID   uint
+	level        string
 	effect       string
 }
 
-func alwaysHasPermission(ctx context.Context, userID uint, key string) (bool, error) {
-	return true, nil
-}
-
-func neverHasPermission(ctx context.Context, userID uint, key string) (bool, error) {
-	return false, nil
-}
-
-func newTestService(t *testing.T) (sshconn.Service, *[]grantCall) {
-	t.Helper()
-	service, _, calls := newTestServiceWithChecks(t, alwaysHasPermission, nil)
-	return service, calls
-}
-
-func newTestServiceWithChecks(
-	t *testing.T,
-	hasPermission shared.PermissionCheck,
-	hasAccessLevel shared.AccessLevelCheck,
-) (sshconn.Service, *gorm.DB, *[]grantCall) {
+func newTestService(t *testing.T, hasAccessLevel shared.AccessLevelCheck) (sshconn.Service, *[]grantCall) {
 	t.Helper()
 
 	box, err := crypto.NewBox(testEncryptionKey)
@@ -70,18 +46,25 @@ func newTestServiceWithChecks(
 	}
 
 	calls := &[]grantCall{}
-	grant := func(ctx context.Context, userID uint, resourceType string, resourceID uint, effect string) error {
-		*calls = append(*calls, grantCall{userID, resourceType, resourceID, effect})
+	grant := func(ctx context.Context, userID uint, resourceType string, resourceID uint, level string, effect string) error {
+		*calls = append(*calls, grantCall{userID, resourceType, resourceID, level, effect})
 		return nil
 	}
 
-	db := setupSSHConnTestDB(t)
-	repo := sshconn.NewRepository(db)
-	return sshconn.NewService(repo, box, grant, hasPermission, hasAccessLevel), db, calls
+	repo := sshconn.NewRepository(setupSSHConnTestDB(t))
+	return sshconn.NewService(repo, box, grant, hasAccessLevel), calls
 }
 
-func TestCreate_EncryptsSecretAndGrantsCreatorAccess(t *testing.T) {
-	service, calls := newTestService(t)
+func denyAllLevels(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) (bool, error) {
+	return false, nil
+}
+
+func allowAllLevels(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) (bool, error) {
+	return true, nil
+}
+
+func TestCreate_EncryptsSecretAndGrantsCreatorManageAccess(t *testing.T) {
+	service, calls := newTestService(t, denyAllLevels)
 	ctx := context.Background()
 
 	conn, err := service.Create(ctx, 7, sshconn.CreateSSHConnectionRequest{
@@ -109,7 +92,8 @@ func TestCreate_EncryptsSecretAndGrantsCreatorAccess(t *testing.T) {
 		t.Fatalf("expected exactly one grant-access call, got %d", len(*calls))
 	}
 	got := (*calls)[0]
-	if got.userID != 7 || got.resourceType != sshconn.ResourceTypeSSHConnection || got.resourceID != conn.ID || got.effect != "manage" {
+	if got.userID != 7 || got.resourceType != sshconn.ResourceTypeSSHConnection || got.resourceID != conn.ID ||
+		got.level != "manage" || got.effect != "accepted" {
 		t.Fatalf("unexpected grant call: %+v", got)
 	}
 
@@ -123,7 +107,7 @@ func TestCreate_EncryptsSecretAndGrantsCreatorAccess(t *testing.T) {
 }
 
 func TestCreate_RespectsExplicitPort(t *testing.T) {
-	service, _ := newTestService(t)
+	service, _ := newTestService(t, denyAllLevels)
 
 	conn, err := service.Create(context.Background(), 1, sshconn.CreateSSHConnectionRequest{
 		Name:       "custom-port",
@@ -142,7 +126,7 @@ func TestCreate_RespectsExplicitPort(t *testing.T) {
 }
 
 func TestUpdate_WithoutSecretKeepsExistingEncryptedValue(t *testing.T) {
-	service, _ := newTestService(t)
+	service, _ := newTestService(t, denyAllLevels)
 	ctx := context.Background()
 
 	conn, err := service.Create(ctx, 1, sshconn.CreateSSHConnectionRequest{
@@ -176,7 +160,7 @@ func TestUpdate_WithoutSecretKeepsExistingEncryptedValue(t *testing.T) {
 }
 
 func TestUpdate_WithNewSecretReEncrypts(t *testing.T) {
-	service, _ := newTestService(t)
+	service, _ := newTestService(t, denyAllLevels)
 	ctx := context.Background()
 
 	conn, err := service.Create(ctx, 1, sshconn.CreateSSHConnectionRequest{
@@ -207,7 +191,7 @@ func TestUpdate_WithNewSecretReEncrypts(t *testing.T) {
 }
 
 func TestDelete_NotFound(t *testing.T) {
-	service, _ := newTestService(t)
+	service, _ := newTestService(t, denyAllLevels)
 
 	err := service.Delete(context.Background(), 9999)
 	if err != shared.ErrNotFound {
@@ -215,8 +199,8 @@ func TestDelete_NotFound(t *testing.T) {
 	}
 }
 
-func TestListForCaller_WithFlatPermission_SeesEverything(t *testing.T) {
-	service, _, _ := newTestServiceWithChecks(t, alwaysHasPermission, nil)
+func TestListForCaller_WithWildcardReadAccess_SeesEverything(t *testing.T) {
+	service, _ := newTestService(t, allowAllLevels)
 	ctx := context.Background()
 
 	if _, err := service.Create(ctx, 1, sshconn.CreateSSHConnectionRequest{
@@ -230,49 +214,54 @@ func TestListForCaller_WithFlatPermission_SeesEverything(t *testing.T) {
 		t.Fatalf("Create failed: %v", err)
 	}
 
-	// Caller 999 owns neither connection, but holds the flat permission
-	// (alwaysHasPermission) — should still see both, unfiltered.
+	// Caller 999 owns neither connection, but the stub grants access to
+	// everything (simulating a wildcard "read" grant) — should see both.
 	items, total, err := service.ListForCaller(ctx, 999, shared.DynamicFilter{}, shared.Pagination{PageNumber: 1, PageSize: 10})
 	if err != nil {
 		t.Fatalf("ListForCaller failed: %v", err)
 	}
 	if total != 2 || len(items) != 2 {
-		t.Fatalf("expected a flat-permission holder to see both connections, got total=%d len=%d", total, len(items))
+		t.Fatalf("expected a wildcard-read holder to see both connections, got total=%d len=%d", total, len(items))
 	}
 }
 
-func TestListForCaller_WithoutFlatPermission_SeesOnlyAccessible(t *testing.T) {
-	service, db, _ := newTestServiceWithChecks(t, neverHasPermission, nil)
+func TestListForCaller_WithoutWildcardAccess_SeesOnlyGrantedRows(t *testing.T) {
 	ctx := context.Background()
 
-	connA, err := service.Create(ctx, 1, sshconn.CreateSSHConnectionRequest{
+	box, err := crypto.NewBox(testEncryptionKey)
+	if err != nil {
+		t.Fatalf("NewBox failed: %v", err)
+	}
+	repo := sshconn.NewRepository(setupSSHConnTestDB(t))
+	noopGrant := func(context.Context, uint, string, uint, string, string) error { return nil }
+
+	// Two service values sharing the same underlying repo/DB, differing
+	// only in hasAccessLevel — creation uses a permissive one (in
+	// production, Create is gated by the wildcard "write" route
+	// middleware, not exercised here); listing uses a restrictive one
+	// that only allows the specific connection this test expects visible.
+	creator := sshconn.NewService(repo, box, noopGrant, allowAllLevels)
+
+	connA, err := creator.Create(ctx, 1, sshconn.CreateSSHConnectionRequest{
 		Name: "a", Host: "1.1.1.1", Username: "u", AuthMethod: sshconn.AuthPassword, Secret: "s",
 	})
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
-	connB, err := service.Create(ctx, 1, sshconn.CreateSSHConnectionRequest{
+	if _, err := creator.Create(ctx, 1, sshconn.CreateSSHConnectionRequest{
 		Name: "b", Host: "2.2.2.2", Username: "u", AuthMethod: sshconn.AuthPassword, Secret: "s",
-	})
-	if err != nil {
+	}); err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
 
-	// The stub GrantCreatorAccess never actually writes a row, so seed the
-	// real resource_permissions table directly: caller 42 can read connA
-	// only, not connB.
-	if err := db.Create(&rbac.ResourcePermission{
-		UserID: 42, ResourceType: sshconn.ResourceTypeSSHConnection, ResourceID: connA.ID, Level: rbac.AccessRead,
-	}).Error; err != nil {
-		t.Fatalf("seeding resource_permissions failed: %v", err)
-	}
-	if err := db.Create(&rbac.ResourcePermission{
-		UserID: 42, ResourceType: sshconn.ResourceTypeSSHConnection, ResourceID: connB.ID, Level: rbac.AccessForbidden,
-	}).Error; err != nil {
-		t.Fatalf("seeding resource_permissions failed: %v", err)
-	}
+	restrictive := sshconn.NewService(repo, box, noopGrant, func(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) (bool, error) {
+		if resourceID == shared.WildcardResourceID {
+			return false, nil
+		}
+		return resourceID == connA.ID, nil
+	})
 
-	items, total, err := service.ListForCaller(ctx, 42, shared.DynamicFilter{}, shared.Pagination{PageNumber: 1, PageSize: 10})
+	items, total, err := restrictive.ListForCaller(ctx, 42, shared.DynamicFilter{}, shared.Pagination{PageNumber: 1, PageSize: 10})
 	if err != nil {
 		t.Fatalf("ListForCaller failed: %v", err)
 	}
@@ -280,12 +269,12 @@ func TestListForCaller_WithoutFlatPermission_SeesOnlyAccessible(t *testing.T) {
 		t.Fatalf("expected exactly 1 accessible connection, got total=%d len=%d", total, len(items))
 	}
 	if items[0].ID != connA.ID {
-		t.Fatalf("expected connection %d (Read-granted), got %d", connA.ID, items[0].ID)
+		t.Fatalf("expected connection %d (granted), got %d", connA.ID, items[0].ID)
 	}
 }
 
-func TestListForCaller_WithoutFlatPermissionOrAnyGrant_SeesNothing(t *testing.T) {
-	service, _, _ := newTestServiceWithChecks(t, neverHasPermission, nil)
+func TestListForCaller_NoAccessAtAll_SeesNothing(t *testing.T) {
+	service, _ := newTestService(t, denyAllLevels)
 	ctx := context.Background()
 
 	if _, err := service.Create(ctx, 1, sshconn.CreateSSHConnectionRequest{
@@ -299,69 +288,6 @@ func TestListForCaller_WithoutFlatPermissionOrAnyGrant_SeesNothing(t *testing.T)
 		t.Fatalf("ListForCaller failed: %v", err)
 	}
 	if total != 0 || len(items) != 0 {
-		t.Fatalf("expected zero connections for a caller with no flat permission and no grants, got total=%d len=%d", total, len(items))
-	}
-}
-
-func TestGetByIDForCaller_WithFlatPermission_SeesAnyConnection(t *testing.T) {
-	service, _, _ := newTestServiceWithChecks(t, alwaysHasPermission, nil)
-	ctx := context.Background()
-
-	conn, err := service.Create(ctx, 1, sshconn.CreateSSHConnectionRequest{
-		Name: "a", Host: "1.1.1.1", Username: "u", AuthMethod: sshconn.AuthPassword, Secret: "s",
-	})
-	if err != nil {
-		t.Fatalf("Create failed: %v", err)
-	}
-
-	got, err := service.GetByIDForCaller(ctx, 999, conn.ID)
-	if err != nil {
-		t.Fatalf("GetByIDForCaller failed: %v", err)
-	}
-	if got.ID != conn.ID {
-		t.Fatalf("expected connection %d, got %d", conn.ID, got.ID)
-	}
-}
-
-func TestGetByIDForCaller_WithoutFlatPermissionOrGrant_NotFound(t *testing.T) {
-	denyLevel := func(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) (bool, error) {
-		return false, nil
-	}
-	service, _, _ := newTestServiceWithChecks(t, neverHasPermission, denyLevel)
-	ctx := context.Background()
-
-	conn, err := service.Create(ctx, 1, sshconn.CreateSSHConnectionRequest{
-		Name: "a", Host: "1.1.1.1", Username: "u", AuthMethod: sshconn.AuthPassword, Secret: "s",
-	})
-	if err != nil {
-		t.Fatalf("Create failed: %v", err)
-	}
-
-	_, err = service.GetByIDForCaller(ctx, 999, conn.ID)
-	if err != shared.ErrNotFound {
-		t.Fatalf("expected shared.ErrNotFound (existence not leaked), got %v", err)
-	}
-}
-
-func TestGetByIDForCaller_WithoutFlatPermissionButWithGrant_Succeeds(t *testing.T) {
-	allowLevel := func(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) (bool, error) {
-		return true, nil
-	}
-	service, _, _ := newTestServiceWithChecks(t, neverHasPermission, allowLevel)
-	ctx := context.Background()
-
-	conn, err := service.Create(ctx, 1, sshconn.CreateSSHConnectionRequest{
-		Name: "a", Host: "1.1.1.1", Username: "u", AuthMethod: sshconn.AuthPassword, Secret: "s",
-	})
-	if err != nil {
-		t.Fatalf("Create failed: %v", err)
-	}
-
-	got, err := service.GetByIDForCaller(ctx, 42, conn.ID)
-	if err != nil {
-		t.Fatalf("GetByIDForCaller failed: %v", err)
-	}
-	if got.ID != conn.ID {
-		t.Fatalf("expected connection %d, got %d", conn.ID, got.ID)
+		t.Fatalf("expected zero connections for a caller with no access at all, got total=%d len=%d", total, len(items))
 	}
 }

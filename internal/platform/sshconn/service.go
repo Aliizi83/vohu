@@ -11,39 +11,33 @@ import (
 // injected the same way every cross-module dependency is in this
 // codebase — a function value, so this module never imports rbac. Called
 // once, right after a connection is created, so its creator isn't locked
-// out of the row they just made. level is a plain string
-// (rbac.AccessLevel's underlying type).
-type GrantCreatorAccess func(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) error
+// out of the row they just made. level/effect are plain strings
+// (rbac.AccessLevel/ResourceEffect's underlying type).
+type GrantCreatorAccess func(ctx context.Context, userID uint, resourceType string, resourceID uint, level string, effect string) error
 
 const ResourceTypeSSHConnection = "ssh_connection"
 
 // Service is what the chat module depends on — never Repository directly.
+// Get/Update/Delete need no *ForCaller counterpart the way List does:
+// they're gated by shared.RequireAccessLevelOnParam at the route level
+// (which already tries the caller's exact grant on this connection, then
+// falls back to a wildcard grant, then their roles', before ever reaching
+// the handler), so by the time these run the caller is already cleared.
 type Service interface {
 	Create(ctx context.Context, userID uint, req CreateSSHConnectionRequest) (*SSHConnection, error)
-	// GetByID is the raw, unchecked lookup — used internally by chat's
-	// SSHTool, which has always done its own explicit HasAccessLevel
-	// check (at Write) before ever calling this, independent of anyone's
-	// flat ssh:read permission. GetByIDForCaller below is its
-	// admin-facing counterpart.
 	GetByID(ctx context.Context, id uint) (*SSHConnection, error)
 	Update(ctx context.Context, id uint, req UpdateSSHConnectionRequest) (*SSHConnection, error)
 	Delete(ctx context.Context, id uint) error
-	// List is the raw, unfiltered query — same "chat already checked
-	// access itself" reasoning as GetByID.
+	// List is the raw, unfiltered query — used internally by
+	// ListForCaller's wildcard-access fast path, and by chat's SSHTool/
+	// ListSSHConnectionsTool, which already do their own explicit
+	// HasAccessLevel check per row independent of this.
 	List(ctx context.Context, filter shared.DynamicFilter, page shared.Pagination) ([]SSHConnection, int64, error)
 
-	// ListForCaller/GetByIDForCaller back the admin HTTP endpoints: a
-	// caller holding the flat "ssh:read" permission sees every
-	// connection unfiltered (that permission today only exists on the
-	// admin role, so this is the existing "admins manage everything"
-	// behavior, unchanged); anyone else sees only rows they hold at
-	// least Read-level resource access to — filtered at the query level
-	// (see Repository.ListAccessibleToUser), not by fetching everything
-	// and checking each row in Go, and a row outside their access
-	// resolves to shared.ErrNotFound rather than 403 (existence isn't
-	// leaked to a caller with no access to it).
+	// ListForCaller shows a caller holding wildcard "read" every
+	// connection (unchanged admin behavior); anyone else only the
+	// connections they hold at least Read-level resource access to.
 	ListForCaller(ctx context.Context, userID uint, filter shared.DynamicFilter, page shared.Pagination) ([]SSHConnection, int64, error)
-	GetByIDForCaller(ctx context.Context, userID uint, id uint) (*SSHConnection, error)
 
 	// DecryptSecret returns a connection's plaintext password/private key
 	// — only ever called server-side, right before dialing, never
@@ -55,7 +49,6 @@ type service struct {
 	repo           Repository
 	box            *crypto.Box
 	grantAccess    GrantCreatorAccess
-	hasPermission  shared.PermissionCheck
 	hasAccessLevel shared.AccessLevelCheck
 }
 
@@ -63,19 +56,15 @@ func NewService(
 	repo Repository,
 	box *crypto.Box,
 	grantAccess GrantCreatorAccess,
-	hasPermission shared.PermissionCheck,
 	hasAccessLevel shared.AccessLevelCheck,
 ) Service {
 	return &service{
 		repo:           repo,
 		box:            box,
 		grantAccess:    grantAccess,
-		hasPermission:  hasPermission,
 		hasAccessLevel: hasAccessLevel,
 	}
 }
-
-const flatReadPermission = "ssh:read"
 
 func (s *service) Create(ctx context.Context, userID uint, req CreateSSHConnectionRequest) (*SSHConnection, error) {
 	encrypted, err := s.box.Encrypt(req.Secret)
@@ -106,7 +95,7 @@ func (s *service) Create(ctx context.Context, userID uint, req CreateSSHConnecti
 	// otherwise nobody could use a connection they just made, since
 	// resource access is default-deny. "manage" rather than a lower level
 	// so the creator can also grant others access to it later.
-	if err := s.grantAccess(ctx, userID, ResourceTypeSSHConnection, conn.ID, "manage"); err != nil {
+	if err := s.grantAccess(ctx, userID, ResourceTypeSSHConnection, conn.ID, "manage", "accepted"); err != nil {
 		return nil, err
 	}
 
@@ -175,7 +164,7 @@ func (s *service) ListForCaller(
 	filter shared.DynamicFilter,
 	page shared.Pagination,
 ) ([]SSHConnection, int64, error) {
-	canSeeAll, err := s.hasPermission(ctx, userID, flatReadPermission)
+	canSeeAll, err := s.hasAccessLevel(ctx, userID, ResourceTypeSSHConnection, shared.WildcardResourceID, "read")
 	if err != nil {
 		return nil, 0, err
 	}
@@ -183,30 +172,13 @@ func (s *service) ListForCaller(
 		return s.repo.List(ctx, filter, page)
 	}
 
-	return s.repo.ListAccessibleToUser(ctx, filter, page, userID)
-}
-
-func (s *service) GetByIDForCaller(ctx context.Context, userID uint, id uint) (*SSHConnection, error) {
-	conn, err := s.repo.FindByID(ctx, id)
+	candidates, _, err := s.repo.List(ctx, filter, shared.Pagination{PageNumber: 1, PageSize: 1000})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	canSeeAll, err := s.hasPermission(ctx, userID, flatReadPermission)
-	if err != nil {
-		return nil, err
-	}
-	if canSeeAll {
-		return conn, nil
-	}
-
-	allowed, err := s.hasAccessLevel(ctx, userID, ResourceTypeSSHConnection, id, "read")
-	if err != nil {
-		return nil, err
-	}
-	if !allowed {
-		return nil, shared.ErrNotFound
-	}
-
-	return conn, nil
+	return shared.FilterAndPaginate(
+		ctx, candidates, func(c SSHConnection) uint { return c.ID },
+		s.hasAccessLevel, userID, ResourceTypeSSHConnection, "read", page,
+	)
 }

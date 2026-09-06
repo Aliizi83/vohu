@@ -9,8 +9,7 @@ type SeederFunc func(database *gorm.DB) error
 
 var Seeders = []SeederFunc{
 	seedRoles,
-	seedPermissions,
-	seedRolePermissions,
 	seedUsers,
 	seedUserRoles,
+	seedAdminAccess,
 }

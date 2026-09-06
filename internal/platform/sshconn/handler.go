@@ -52,31 +52,16 @@ func (h *Handler) Create(c *gin.Context) {
 	shared.RespondSuccess(c, http.StatusCreated, toResponse(*conn))
 }
 
-// Get is hand-written rather than shared.GetByIDHandler because the
-// service call needs the caller's ID — whether they see this connection
-// at all depends on either the flat ssh:read permission or a personal
-// resource-level grant (see Service.GetByIDForCaller).
+// Get is the plain generic handler again — whether the caller may reach
+// this specific connection at all is already decided by
+// shared.RequireAccessLevelOnParam before this ever runs, so there's
+// nothing left for the handler itself to check.
 func (h *Handler) Get(c *gin.Context) {
-	userID, ok := shared.GetUserID(c)
-	if !ok {
-		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
-		return
-	}
-
-	id, err := shared.ParseIDParam(c)
-	if err != nil {
-		shared.RespondError(c, http.StatusBadRequest, shared.ResultValidationError, errors.New("invalid id"))
-		return
-	}
-
-	conn, err := h.service.GetByIDForCaller(c.Request.Context(), userID, id)
-	if err != nil {
-		status, code := mapError(err)
-		shared.RespondError(c, status, code, err)
-		return
-	}
-
-	shared.RespondSuccess(c, http.StatusOK, toResponse(*conn))
+	shared.GetByIDHandler(c,
+		func(conn *SSHConnection) Response { return toResponse(*conn) },
+		h.service.GetByID,
+		mapError,
+	)
 }
 
 func (h *Handler) Update(c *gin.Context) {
