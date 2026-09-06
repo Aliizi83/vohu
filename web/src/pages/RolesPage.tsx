@@ -6,7 +6,6 @@ import { SearchInput } from "@/components/SearchInput"
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -14,13 +13,6 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
@@ -32,28 +24,23 @@ import {
 } from "@/components/ui/table"
 import { useLanguage } from "@/lib/i18n"
 import { useDebouncedValue } from "@/lib/useDebouncedValue"
-import { api, ApiError, type PermissionDto, type RoleDto } from "@/lib/api"
+import { api, ApiError, type RoleDto } from "@/lib/api"
 
 export default function RolesPage() {
   const { t } = useLanguage()
   const { confirm, confirmDialog } = useConfirm()
   const [roles, setRoles] = useState<RoleDto[] | null>(null)
-  const [permissions, setPermissions] = useState<PermissionDto[]>([])
   const [search, setSearch] = useState("")
   const debouncedSearch = useDebouncedValue(search)
 
   const load = useCallback(async () => {
     try {
-      const [rolePage, permissionPage] = await Promise.all([
-        api.roles.list(
-          1,
-          50,
-          debouncedSearch ? { filters: { Name: { type: "contains", from: debouncedSearch } } } : undefined,
-        ),
-        api.permissions.list(1, 200),
-      ])
+      const rolePage = await api.roles.list(
+        1,
+        50,
+        debouncedSearch ? { filters: { Name: { type: "contains", from: debouncedSearch } } } : undefined,
+      )
       setRoles(rolePage.items)
-      setPermissions(permissionPage.items)
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("roles.loadFailed"))
     }
@@ -119,7 +106,6 @@ export default function RolesPage() {
               <TableRow key={role.id}>
                 <TableCell className="font-medium">{role.name}</TableCell>
                 <TableCell className="flex justify-end gap-2">
-                  <GrantPermissionDialog role={role} permissions={permissions} onGranted={load} />
                   <Button variant="destructive" size="sm" onClick={() => handleDelete(role)}>
                     {t("common.delete")}
                   </Button>
@@ -179,78 +165,6 @@ function CreateRoleDialog({ onCreated }: { onCreated: () => void }) {
             </Button>
           </DialogFooter>
         </form>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function GrantPermissionDialog({
-  role,
-  permissions,
-  onGranted,
-}: {
-  role: RoleDto
-  permissions: PermissionDto[]
-  onGranted: () => void
-}) {
-  const { t } = useLanguage()
-  const [open, setOpen] = useState(false)
-  const [permissionId, setPermissionId] = useState<string>("")
-  const [loading, setLoading] = useState(false)
-
-  async function handleGrant() {
-    if (!permissionId) return
-    setLoading(true)
-    try {
-      await api.roles.grantPermission(role.id, Number(permissionId))
-      toast.success(t("roles.granted", { name: role.name }))
-      setOpen(false)
-      setPermissionId("")
-      onGranted()
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("roles.grantFailed"))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger
-        render={
-          <Button variant="outline" size="sm">
-            {t("roles.grantPermission")}
-          </Button>
-        }
-      />
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{t("roles.grantDialogTitle", { name: role.name })}</DialogTitle>
-          <DialogDescription>{t("roles.grantDialogDescription")}</DialogDescription>
-        </DialogHeader>
-        <div className="py-4">
-          <Select value={permissionId} onValueChange={(value) => setPermissionId(value ?? "")}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder={t("roles.choosePermission")}>
-                {(value: string) =>
-                  permissions.find((p) => String(p.id) === value)?.key ?? t("roles.choosePermission")
-                }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {permissions.map((permission) => (
-                <SelectItem key={permission.id} value={String(permission.id)}>
-                  {permission.key}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <DialogFooter>
-          <Button onClick={handleGrant} disabled={!permissionId || loading}>
-            {loading ? t("roles.granting") : t("roles.grant")}
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

@@ -1,22 +1,21 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
-import { api, type MyAccessDto } from "@/lib/api"
+import { api, levelSatisfies, type AccessLevel, type MyAccessDto } from "@/lib/api"
 import { useAuth } from "@/lib/auth"
 
 interface AccessContextValue {
   loading: boolean
-  permissions: string[]
   resourceAccess: MyAccessDto["resourceAccess"]
-  hasPermission: (key: string) => boolean
+  hasLevel: (resourceType: string, level: AccessLevel) => boolean
 }
 
 const AccessContext = createContext<AccessContextValue | null>(null)
 
-// AccessProvider fetches the caller's own permission/resource-access
-// profile once right after login (GET /me/access) and again on every
-// login/logout transition — this is a UX layer for deciding what to show
-// (nav items, buttons, route guards), not the actual security boundary;
-// every endpoint still enforces its own access independently on the
-// backend regardless of what this reports.
+// AccessProvider fetches the caller's own resource-access profile once
+// right after login (GET /me/access) and again on every login/logout
+// transition — this is a UX layer for deciding what to show (nav items,
+// buttons, route guards), not the actual security boundary; every endpoint
+// still enforces its own access independently on the backend regardless of
+// what this reports.
 export function AccessProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth()
   const [access, setAccess] = useState<MyAccessDto | null>(null)
@@ -48,15 +47,14 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     }
   }, [isAuthenticated])
 
-  const permissions = access?.permissions ?? []
   const resourceAccess = access?.resourceAccess ?? []
 
-  function hasPermission(key: string) {
-    return permissions.includes(key)
+  function hasLevel(resourceType: string, level: AccessLevel) {
+    return levelSatisfies(access?.levels[resourceType], level)
   }
 
   return (
-    <AccessContext.Provider value={{ loading, permissions, resourceAccess, hasPermission }}>
+    <AccessContext.Provider value={{ loading, resourceAccess, hasLevel }}>
       {children}
     </AccessContext.Provider>
   )

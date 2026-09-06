@@ -37,40 +37,50 @@ import {
   api,
   ApiError,
   type AccessLevel,
-  type ResourcePermissionDto,
+  type GranteeType,
+  type ResourceAccessDto,
+  type ResourceEffect,
+  type RoleDto,
   type SSHConnectionDto,
   type UserDto,
 } from "@/lib/api"
 
-// The only resource type the platform actually has today — a free string
-// on the backend (sshconn is never imported by rbac), but there's nothing
-// else to grant access to yet, so the picker doesn't need to be more
-// flexible than this.
+// The free-string resource types the backend currently knows about
+// (rbac.KnownResourceTypes) — kept in sync by hand since the frontend
+// never imports Go code.
+const RESOURCE_TYPES = ["user", "role", "ssh_connection", "provider_key", "conversation", "resource_access"] as const
+
 const RESOURCE_TYPE_SSH_CONNECTION = "ssh_connection"
 
 const LEVEL_KEYS: Record<AccessLevel, string> = {
-  forbidden: "resourceAccess.levelForbidden",
   read: "resourceAccess.levelRead",
   write: "resourceAccess.levelWrite",
   manage: "resourceAccess.levelManage",
 }
 
+const EFFECT_KEYS: Record<ResourceEffect, string> = {
+  accepted: "resourceAccess.effectAccepted",
+  prohibited: "resourceAccess.effectProhibited",
+}
+
 export default function ResourceAccessPage() {
   const { t } = useLanguage()
   const { confirm, confirmDialog } = useConfirm()
-  const [grants, setGrants] = useState<ResourcePermissionDto[] | null>(null)
+  const [grants, setGrants] = useState<ResourceAccessDto[] | null>(null)
   const [users, setUsers] = useState<UserDto[]>([])
+  const [roles, setRoles] = useState<RoleDto[]>([])
   const [connections, setConnections] = useState<SSHConnectionDto[]>([])
   const [search, setSearch] = useState("")
   const debouncedSearch = useDebouncedValue(search)
 
   const usersByID = new Map(users.map((u) => [u.id, u]))
+  const rolesByID = new Map(roles.map((r) => [r.id, r]))
   const connectionsByID = new Map(connections.map((c) => [c.id, c]))
 
   const load = useCallback(async () => {
     try {
-      const [grantPage, userPage, connectionPage] = await Promise.all([
-        api.resourcePermissions.list(
+      const [grantPage, userPage, rolePage, connectionPage] = await Promise.all([
+        api.resourceAccess.list(
           1,
           100,
           debouncedSearch
@@ -78,10 +88,12 @@ export default function ResourceAccessPage() {
             : undefined,
         ),
         api.users.list(1, 100),
+        api.roles.list(1, 100),
         api.sshConnections.list(1, 100),
       ])
       setGrants(grantPage.items)
       setUsers(userPage.items)
+      setRoles(rolePage.items)
       setConnections(connectionPage.items)
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("resourceAccess.loadFailed"))
@@ -93,11 +105,17 @@ export default function ResourceAccessPage() {
     load()
   }, [load])
 
-  async function handleRevoke(grant: ResourcePermissionDto) {
-    const username = usersByID.get(grant.userId)?.username ?? `#${grant.userId}`
+  function granteeLabel(grant: ResourceAccessDto) {
+    if (grant.granteeType === "role") {
+      return rolesByID.get(grant.granteeId)?.name ?? `role #${grant.granteeId}`
+    }
+    return usersByID.get(grant.granteeId)?.username ?? `user #${grant.granteeId}`
+  }
+
+  async function handleRevoke(grant: ResourceAccessDto) {
     const ok = await confirm({
       description: t("resourceAccess.confirmRevoke", {
-        username,
+        grantee: granteeLabel(grant),
         level: t(LEVEL_KEYS[grant.level]),
         resourceType: grant.resourceType,
         resourceId: grant.resourceId,
@@ -105,7 +123,7 @@ export default function ResourceAccessPage() {
     })
     if (!ok) return
     try {
-      await api.resourcePermissions.revoke(grant.id)
+      await api.resourceAccess.revoke(grant.id)
       toast.success(t("resourceAccess.revoked"))
       load()
     } catch (err) {
@@ -121,7 +139,7 @@ export default function ResourceAccessPage() {
           <h2 className="text-2xl font-semibold">{t("resourceAccess.title")}</h2>
           <p className="text-sm text-muted-foreground">{t("resourceAccess.subtitle")}</p>
         </div>
-        <GrantDialog users={users} connections={connections} onGranted={load} />
+        <GrantDialog users={users} roles={roles} connections={connections} onGranted={load} />
       </div>
 
       <SearchInput
@@ -135,10 +153,11 @@ export default function ResourceAccessPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>{t("resourceAccess.columnUser")}</TableHead>
+              <TableHead>{t("resourceAccess.columnGrantee")}</TableHead>
               <TableHead>{t("resourceAccess.columnResourceType")}</TableHead>
               <TableHead>{t("resourceAccess.columnResourceId")}</TableHead>
               <TableHead>{t("resourceAccess.columnLevel")}</TableHead>
+              <TableHead>{t("resourceAccess.columnEffect")}</TableHead>
               <TableHead className="text-end">{t("common.actions")}</TableHead>
             </TableRow>
           </TableHeader>
@@ -146,7 +165,7 @@ export default function ResourceAccessPage() {
             {grants === null &&
               Array.from({ length: 3 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell colSpan={5}>
+                  <TableCell colSpan={6}>
                     <Skeleton className="h-6 w-full" />
                   </TableCell>
                 </TableRow>
@@ -154,26 +173,33 @@ export default function ResourceAccessPage() {
 
             {grants?.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                <TableCell colSpan={6} className="text-center text-muted-foreground">
                   {debouncedSearch ? t("common.noSearchResults") : t("resourceAccess.empty")}
                 </TableCell>
               </TableRow>
             )}
 
             {grants?.map((grant) => {
-              const user = usersByID.get(grant.userId)
               const connection =
                 grant.resourceType === RESOURCE_TYPE_SSH_CONNECTION ? connectionsByID.get(grant.resourceId) : undefined
               return (
                 <TableRow key={grant.id}>
-                  <TableCell className="font-medium">{user?.username ?? `#${grant.userId}`}</TableCell>
+                  <TableCell className="font-medium">
+                    {granteeLabel(grant)}
+                    <span className="ms-1 text-xs text-muted-foreground">
+                      ({t(grant.granteeType === "role" ? "resourceAccess.granteeRole" : "resourceAccess.granteeUser")})
+                    </span>
+                  </TableCell>
                   <TableCell className="text-muted-foreground">{grant.resourceType}</TableCell>
                   <TableCell className="text-muted-foreground">
                     {connection ? `${connection.name} (#${grant.resourceId})` : `#${grant.resourceId}`}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={grant.level === "forbidden" ? "secondary" : "default"}>
-                      {t(LEVEL_KEYS[grant.level])}
+                    <Badge>{t(LEVEL_KEYS[grant.level])}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={grant.effect === "prohibited" ? "destructive" : "secondary"}>
+                      {t(EFFECT_KEYS[grant.effect])}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-end">
@@ -193,40 +219,47 @@ export default function ResourceAccessPage() {
 
 function GrantDialog({
   users,
+  roles,
   connections,
   onGranted,
 }: {
   users: UserDto[]
+  roles: RoleDto[]
   connections: SSHConnectionDto[]
   onGranted: () => void
 }) {
   const { t } = useLanguage()
   const [open, setOpen] = useState(false)
-  const [userId, setUserId] = useState("")
-  const [resourceType, setResourceType] = useState(RESOURCE_TYPE_SSH_CONNECTION)
+  const [granteeType, setGranteeType] = useState<GranteeType>("user")
+  const [granteeId, setGranteeId] = useState("")
+  const [resourceType, setResourceType] = useState<string>(RESOURCE_TYPE_SSH_CONNECTION)
   const [resourceId, setResourceId] = useState("")
   const [level, setLevel] = useState<AccessLevel>("read")
+  const [effect, setEffect] = useState<ResourceEffect>("accepted")
   const [loading, setLoading] = useState(false)
 
   const isSSHConnection = resourceType === RESOURCE_TYPE_SSH_CONNECTION
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    if (!userId || !resourceId) return
+    if (!granteeId || !resourceId) return
 
     setLoading(true)
     try {
-      await api.resourcePermissions.grant({
-        userId: Number(userId),
+      await api.resourceAccess.grant({
+        granteeType,
+        granteeId: Number(granteeId),
         resourceType,
         resourceId: Number(resourceId),
         level,
+        effect,
       })
       toast.success(t("resourceAccess.granted"))
       setOpen(false)
-      setUserId("")
+      setGranteeId("")
       setResourceId("")
       setLevel("read")
+      setEffect("accepted")
       onGranted()
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("resourceAccess.grantFailed"))
@@ -246,31 +279,81 @@ function GrantDialog({
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>{t("resourceAccess.userLabel")}</Label>
-              <Select value={userId} onValueChange={(value) => setUserId(value ?? "")}>
+              <Label>{t("resourceAccess.granteeTypeLabel")}</Label>
+              <Select
+                value={granteeType}
+                onValueChange={(value) => {
+                  setGranteeType((value as GranteeType) ?? "user")
+                  setGranteeId("")
+                }}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue>
-                    {(value: string) => users.find((u) => String(u.id) === value)?.username ?? t("resourceAccess.chooseUser")}
+                    {(value: string) =>
+                      t(value === "role" ? "resourceAccess.granteeRole" : "resourceAccess.granteeUser")
+                    }
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {users.map((u) => (
-                    <SelectItem key={u.id} value={String(u.id)}>
-                      {u.username}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="user">{t("resourceAccess.granteeUser")}</SelectItem>
+                  <SelectItem value="role">{t("resourceAccess.granteeRole")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
+              <Label>{t("resourceAccess.granteeLabel")}</Label>
+              {granteeType === "role" ? (
+                <Select value={granteeId} onValueChange={(value) => setGranteeId(value ?? "")}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue>
+                      {(value: string) => roles.find((r) => String(r.id) === value)?.name ?? t("resourceAccess.chooseRole")}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {roles.map((r) => (
+                      <SelectItem key={r.id} value={String(r.id)}>
+                        {r.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Select value={granteeId} onValueChange={(value) => setGranteeId(value ?? "")}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue>
+                      {(value: string) => users.find((u) => String(u.id) === value)?.username ?? t("resourceAccess.chooseUser")}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {users.map((u) => (
+                      <SelectItem key={u.id} value={String(u.id)}>
+                        {u.username}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+
+            <div className="space-y-2">
               <Label>{t("resourceAccess.resourceTypeLabel")}</Label>
-              <Select value={resourceType} onValueChange={(value) => setResourceType(value ?? RESOURCE_TYPE_SSH_CONNECTION)}>
+              <Select
+                value={resourceType}
+                onValueChange={(value) => {
+                  setResourceType(value ?? RESOURCE_TYPE_SSH_CONNECTION)
+                  setResourceId("")
+                }}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={RESOURCE_TYPE_SSH_CONNECTION}>{RESOURCE_TYPE_SSH_CONNECTION}</SelectItem>
+                  {RESOURCE_TYPES.map((rt) => (
+                    <SelectItem key={rt} value={rt}>
+                      {rt}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -300,6 +383,7 @@ function GrantDialog({
                   type="number"
                   value={resourceId}
                   onChange={(e) => setResourceId(e.target.value)}
+                  placeholder={t("resourceAccess.resourceIdWildcardHint")}
                   required
                 />
               )}
@@ -320,9 +404,25 @@ function GrantDialog({
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="space-y-2">
+              <Label>{t("resourceAccess.effectLabel")}</Label>
+              <Select value={effect} onValueChange={(value) => setEffect((value as ResourceEffect) ?? "accepted")}>
+                <SelectTrigger className="w-full">
+                  <SelectValue>{(value: string) => t(EFFECT_KEYS[value as ResourceEffect])}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(EFFECT_KEYS) as ResourceEffect[]).map((eff) => (
+                    <SelectItem key={eff} value={eff}>
+                      {t(EFFECT_KEYS[eff])}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={loading || !userId || !resourceId}>
+            <Button type="submit" disabled={loading || !granteeId || !resourceId}>
               {loading ? t("resourceAccess.granting") : t("resourceAccess.grant")}
             </Button>
           </DialogFooter>

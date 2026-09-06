@@ -37,7 +37,7 @@ import { api, ApiError, type SSHConnectionDto } from "@/lib/api"
 
 export default function SSHConnectionsPage() {
   const { t } = useLanguage()
-  const { hasPermission } = useAccess()
+  const { hasLevel } = useAccess()
   const { confirm, confirmDialog } = useConfirm()
   const [connections, setConnections] = useState<SSHConnectionDto[] | null>(null)
   const [search, setSearch] = useState("")
@@ -81,7 +81,7 @@ export default function SSHConnectionsPage() {
           <h2 className="text-2xl font-semibold">{t("sshConnections.title")}</h2>
           <p className="text-sm text-muted-foreground">{t("sshConnections.subtitle")}</p>
         </div>
-        {hasPermission("ssh:create") && <CreateConnectionDialog onCreated={load} />}
+        {hasLevel("ssh_connection", "write") && <CreateConnectionDialog onCreated={load} />}
       </div>
 
       <SearchInput
@@ -133,7 +133,7 @@ export default function SSHConnectionsPage() {
                   {conn.authMethod === "password" ? t("sshConnections.authPassword") : t("sshConnections.authPrivateKey")}
                 </TableCell>
                 <TableCell className="text-end">
-                  {hasPermission("ssh:delete") && (
+                  {hasLevel("ssh_connection", "manage") && (
                     <Button variant="destructive" size="sm" onClick={() => handleDelete(conn)}>
                       {t("common.delete")}
                     </Button>

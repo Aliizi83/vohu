@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 import { Toaster } from "@/components/ui/sonner"
+import type { AccessLevel } from "@/lib/api"
 import { AccessProvider, useAccess } from "@/lib/access"
 import { AuthProvider, useAuth } from "@/lib/auth"
 import { LanguageProvider } from "@/lib/i18n"
@@ -8,7 +9,6 @@ import ApiKeysPage from "@/pages/ApiKeysPage"
 import ChatPage from "@/pages/ChatPage"
 import Layout from "@/pages/Layout"
 import LoginPage from "@/pages/LoginPage"
-import PermissionsPage from "@/pages/PermissionsPage"
 import ResourceAccessPage from "@/pages/ResourceAccessPage"
 import RolesPage from "@/pages/RolesPage"
 import SSHConnectionsPage from "@/pages/SSHConnectionsPage"
@@ -26,10 +26,18 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 // real boundary is still enforced by each backend endpoint independently;
 // this never substitutes for it. Renders nothing while access is still
 // loading rather than flashing the redirect.
-function PermissionRoute({ permission, children }: { permission: string; children: ReactNode }) {
-  const { hasPermission, loading } = useAccess()
+function PermissionRoute({
+  resourceType,
+  level,
+  children,
+}: {
+  resourceType: string
+  level: AccessLevel
+  children: ReactNode
+}) {
+  const { hasLevel, loading } = useAccess()
   if (loading) return null
-  if (!hasPermission(permission)) return <Navigate to="/chat" replace />
+  if (!hasLevel(resourceType, level)) return <Navigate to="/chat" replace />
   return <>{children}</>
 }
 
@@ -56,7 +64,7 @@ export default function App() {
                 <Route
                   path="users"
                   element={
-                    <PermissionRoute permission="user:read">
+                    <PermissionRoute resourceType="user" level="read">
                       <UsersPage />
                     </PermissionRoute>
                   }
@@ -64,23 +72,15 @@ export default function App() {
                 <Route
                   path="roles"
                   element={
-                    <PermissionRoute permission="rbac:manage">
+                    <PermissionRoute resourceType="role" level="manage">
                       <RolesPage />
-                    </PermissionRoute>
-                  }
-                />
-                <Route
-                  path="permissions"
-                  element={
-                    <PermissionRoute permission="rbac:manage">
-                      <PermissionsPage />
                     </PermissionRoute>
                   }
                 />
                 <Route
                   path="resource-access"
                   element={
-                    <PermissionRoute permission="rbac:manage">
+                    <PermissionRoute resourceType="resource_access" level="manage">
                       <ResourceAccessPage />
                     </PermissionRoute>
                   }

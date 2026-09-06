@@ -139,14 +139,18 @@ export interface ProviderKeyDto {
   workspaceId?: string
 }
 
-export type AccessLevel = "forbidden" | "read" | "write" | "manage"
+export type AccessLevel = "read" | "write" | "manage"
+export type GranteeType = "user" | "role"
+export type ResourceEffect = "accepted" | "prohibited"
 
-export interface ResourcePermissionDto {
+export interface ResourceAccessDto {
   id: number
-  userId: number
+  granteeType: GranteeType
+  granteeId: number
   resourceType: string
   resourceId: number
   level: AccessLevel
+  effect: ResourceEffect
 }
 
 export interface UserDto {
@@ -161,20 +165,27 @@ export interface RoleDto {
   name: string
 }
 
-export interface PermissionDto {
-  id: number
-  key: string
+// MyAccessDto is the caller's own complete access profile, fetched once
+// right after login. ResourceAccess is every grant that's personally
+// theirs (direct or via a role they hold); Levels is the best level they
+// hold on each known resource type at large (checked against the
+// wildcard resource) — what drives nav-item and button visibility, since
+// the frontend can't enumerate every resource ID up front. The backend
+// still enforces every boundary independently regardless of what this
+// reports — this is a UX layer, not the actual security boundary.
+export interface MyAccessDto {
+  resourceAccess: ResourceAccessDto[]
+  levels: Partial<Record<string, AccessLevel>>
 }
 
-// MyAccessDto is the caller's own complete access profile, fetched once
-// right after login — every flat permission key they hold through any
-// role, plus every per-resource grant that's personally theirs. The
-// frontend uses this to decide what to show rather than reacting to 403s;
-// the backend still enforces every boundary independently (this is a UX
-// layer, not the actual security boundary).
-export interface MyAccessDto {
-  permissions: string[]
-  resourceAccess: ResourcePermissionDto[]
+// LEVEL_RANK/hasLevel mirror rbac.AccessLevel.Satisfies on the Go side —
+// "does the caller's best level on this resource type meet or exceed
+// what's required" (e.g. a caller with "manage" satisfies a "read" check).
+const LEVEL_RANK: Record<AccessLevel, number> = { read: 1, write: 2, manage: 3 }
+
+export function levelSatisfies(level: AccessLevel | undefined, required: AccessLevel): boolean {
+  if (!level) return false
+  return LEVEL_RANK[level] >= LEVEL_RANK[required]
 }
 
 export interface PagedList<T> {
@@ -231,16 +242,6 @@ export const api = {
     create: (name: string) => request<RoleDto>("POST", "/roles", { body: { name } }),
     update: (id: number, name: string) => request<RoleDto>("PUT", `/roles/${id}`, { body: { name } }),
     remove: (id: number) => request<null>("DELETE", `/roles/${id}`),
-    grantPermission: (roleId: number, permissionId: number) =>
-      request<null>("POST", `/roles/${roleId}/permissions`, { body: { permissionId } }),
-  },
-
-  permissions: {
-    list: (page?: number, pageSize?: number, filter?: DynamicFilter) =>
-      request<PagedList<PermissionDto>>("GET", "/permissions", { query: listQuery(page, pageSize, filter) }),
-    create: (key: string) => request<PermissionDto>("POST", "/permissions", { body: { key } }),
-    update: (id: number, key: string) => request<PermissionDto>("PUT", `/permissions/${id}`, { body: { key } }),
-    remove: (id: number) => request<null>("DELETE", `/permissions/${id}`),
   },
 
   conversations: {
@@ -279,14 +280,20 @@ export const api = {
     removeGlobal: (provider: LLMProvider) => request<null>("DELETE", `/provider-keys/${provider}`),
   },
 
-  resourcePermissions: {
+  resourceAccess: {
     list: (page?: number, pageSize?: number, filter?: DynamicFilter) =>
-      request<PagedList<ResourcePermissionDto>>("GET", "/resource-permissions", {
+      request<PagedList<ResourceAccessDto>>("GET", "/resource-access", {
         query: listQuery(page, pageSize, filter),
       }),
-    grant: (data: { userId: number; resourceType: string; resourceId: number; level: AccessLevel }) =>
-      request<null>("POST", "/resource-permissions", { body: data }),
-    revoke: (id: number) => request<null>("DELETE", `/resource-permissions/${id}`),
+    grant: (data: {
+      granteeType: GranteeType
+      granteeId: number
+      resourceType: string
+      resourceId: number
+      level: AccessLevel
+      effect: ResourceEffect
+    }) => request<null>("POST", "/resource-access", { body: data }),
+    revoke: (id: number) => request<null>("DELETE", `/resource-access/${id}`),
   },
 }
 

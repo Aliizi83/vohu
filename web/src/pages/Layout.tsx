@@ -1,34 +1,44 @@
-import { KeyRound, KeySquare, LogOut, MessageSquare, Server, Shield, ShieldCheck, Users } from "lucide-react"
+import { KeySquare, LogOut, MessageSquare, Server, Shield, ShieldCheck, Users } from "lucide-react"
 import { NavLink, Outlet } from "react-router-dom"
 import { Button } from "@/components/ui/button"
+import type { AccessLevel } from "@/lib/api"
 import { useAccess } from "@/lib/access"
 import { useAuth } from "@/lib/auth"
 import { LANGUAGE_OPTIONS, useLanguage } from "@/lib/i18n"
 import { cn } from "cn"
 
-// requiredPermission is undefined for items open to every authenticated
-// user (Chat, SSH Connections — visibility of *records* there is filtered
-// server-side per user rather than gated by a flat permission at all,
-// API Keys — self-service). Items with one are hidden unless the user's
-// /me/access profile includes that key, matching what would otherwise
-// just 403.
-const navItems = [
-  { to: "/chat", labelKey: "nav.chat", icon: MessageSquare, requiredPermission: undefined },
-  { to: "/ssh-connections", labelKey: "nav.sshConnections", icon: Server, requiredPermission: undefined },
-  { to: "/provider-keys", labelKey: "nav.apiKeys", icon: KeySquare, requiredPermission: undefined },
-  { to: "/users", labelKey: "nav.users", icon: Users, requiredPermission: "user:read" },
-  { to: "/roles", labelKey: "nav.roles", icon: Shield, requiredPermission: "rbac:manage" },
-  { to: "/permissions", labelKey: "nav.permissions", icon: KeyRound, requiredPermission: "rbac:manage" },
-  { to: "/resource-access", labelKey: "nav.resourceAccess", icon: ShieldCheck, requiredPermission: "rbac:manage" },
-] as const
+// required is undefined for items open to every authenticated user (Chat,
+// SSH Connections — visibility of *records* there is filtered server-side
+// per user rather than gated by a required level at all, API Keys —
+// self-service). Items with one are hidden unless the user's /me/access
+// profile's level for that resource type satisfies it, matching what
+// would otherwise just 403.
+const navItems: {
+  to: string
+  labelKey: string
+  icon: typeof MessageSquare
+  required?: { resourceType: string; level: AccessLevel }
+}[] = [
+  { to: "/chat", labelKey: "nav.chat", icon: MessageSquare },
+  { to: "/ssh-connections", labelKey: "nav.sshConnections", icon: Server },
+  { to: "/provider-keys", labelKey: "nav.apiKeys", icon: KeySquare },
+  { to: "/users", labelKey: "nav.users", icon: Users, required: { resourceType: "user", level: "read" } },
+  { to: "/roles", labelKey: "nav.roles", icon: Shield, required: { resourceType: "role", level: "manage" } },
+  {
+    to: "/resource-access",
+    labelKey: "nav.resourceAccess",
+    icon: ShieldCheck,
+    required: { resourceType: "resource_access", level: "manage" },
+  },
+]
 
 export default function Layout() {
   const { logout } = useAuth()
-  const { hasPermission } = useAccess()
+  const { hasLevel } = useAccess()
   const { t, language, setLanguage } = useLanguage()
 
   const visibleNavItems = navItems.filter(
-    (item) => item.requiredPermission === undefined || hasPermission(item.requiredPermission),
+    (item) => item.required === undefined || hasLevel(item.required.resourceType, item.required.level),
   )
 
   return (
