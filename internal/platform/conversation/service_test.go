@@ -95,6 +95,39 @@ func TestGet_AllowsNonOwnerWithResourceAccess(t *testing.T) {
 	}
 }
 
+// TestGet_AllowsNonOwnerViaAccessToOwnerAsUserResource is the actual "a
+// support role can read a regular user's conversations" capability: no
+// grant exists directly on the conversation itself, only on its owner as
+// a "user" resource (which is how rbac.Service.HasAccessLevel's
+// role-cascade — access to a role reaching every user who holds it —
+// actually reaches conversations at all, since the cascade only knows
+// about resourceType "user").
+func TestGet_AllowsNonOwnerViaAccessToOwnerAsUserResource(t *testing.T) {
+	check := func(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) (bool, error) {
+		if resourceType == "user" {
+			return true, nil // access granted on the owner as a user resource
+		}
+		return false, nil // nothing granted directly on the conversation itself
+	}
+	service := conversation.NewService(conversation.NewRepository(setupConversationTestDB(t)), check)
+	ctx := context.Background()
+
+	conv, err := service.Create(ctx, 1, conversation.CreateConversationRequest{
+		Title: "private", Provider: "gemini", Model: "gemini-2.0-flash",
+	})
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	got, err := service.Get(ctx, 2, conv.ID)
+	if err != nil {
+		t.Fatalf("expected access to the owner (as a user resource) to be sufficient, got %v", err)
+	}
+	if got.ID != conv.ID {
+		t.Fatalf("expected conversation %d, got %d", conv.ID, got.ID)
+	}
+}
+
 func TestAppendHistory_ThenLoadHistory_RoundTripsMessagesInOrder(t *testing.T) {
 	service := newTestService(t)
 	ctx := context.Background()

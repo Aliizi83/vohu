@@ -67,15 +67,35 @@ func (s *service) Get(ctx context.Context, userID uint, id uint) (*Conversation,
 		return conv, nil
 	}
 
-	// Not the owner — fall back to resource-level access (e.g. a support
-	// role granted read access to every user with a given role's
-	// conversations). Still default-deny: no grant means shared.ErrNotFound,
-	// same as if the conversation didn't exist at all.
-	allowed, err := s.hasAccessLevel(ctx, userID, resourceTypeConversation, conv.ID, "read")
+	// Not the owner — two independent paths can still grant access:
+	//
+	//  1. A grant directly on this conversation (resourceType
+	//     "conversation") — for sharing one specific thread.
+	//  2. A grant on the conversation's *owner* as a "user" resource —
+	//     this is what makes "a support role can read every regular
+	//     user's conversations" actually work: rbac.Service.HasAccessLevel
+	//     already cascades a role-level grant on resourceType "role" to
+	//     every user holding that role (see its doc comment), so checking
+	//     "user"/conv.UserID here reuses that cascade instead of needing
+	//     a duplicate one for conversations specifically. A per-user
+	//     prohibited row (the same mechanism that carves a user out of
+	//     the cascade for their own profile) carves them out of this too.
+	//
+	// Still default-deny overall: neither path granting means
+	// shared.ErrNotFound, same as if the conversation didn't exist.
+	allowedDirect, err := s.hasAccessLevel(ctx, userID, resourceTypeConversation, conv.ID, "read")
 	if err != nil {
 		return nil, err
 	}
-	if !allowed {
+	if allowedDirect {
+		return conv, nil
+	}
+
+	allowedViaOwner, err := s.hasAccessLevel(ctx, userID, "user", conv.UserID, "read")
+	if err != nil {
+		return nil, err
+	}
+	if !allowedViaOwner {
 		return nil, shared.ErrNotFound
 	}
 
