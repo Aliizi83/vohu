@@ -11,8 +11,9 @@ import (
 // injected the same way every cross-module dependency is in this
 // codebase — a function value, so this module never imports rbac. Called
 // once, right after a connection is created, so its creator isn't locked
-// out of the row they just made.
-type GrantCreatorAccess func(ctx context.Context, userID uint, resourceType string, resourceID uint, effect string) error
+// out of the row they just made. level is a plain string
+// (rbac.AccessLevel's underlying type).
+type GrantCreatorAccess func(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) error
 
 const ResourceTypeSSHConnection = "ssh_connection"
 
@@ -66,10 +67,11 @@ func (s *service) Create(ctx context.Context, userID uint, req CreateSSHConnecti
 		return nil, err
 	}
 
-	// The creator can always reach their own connection — otherwise
-	// nobody could use a connection they just made, since resource
-	// access is default-deny.
-	if err := s.grantAccess(ctx, userID, ResourceTypeSSHConnection, conn.ID, "accepted"); err != nil {
+	// The creator gets full (manage) access to their own connection —
+	// otherwise nobody could use a connection they just made, since
+	// resource access is default-deny. "manage" rather than a lower level
+	// so the creator can also grant others access to it later.
+	if err := s.grantAccess(ctx, userID, ResourceTypeSSHConnection, conn.ID, "manage"); err != nil {
 		return nil, err
 	}
 

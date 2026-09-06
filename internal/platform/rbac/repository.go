@@ -31,8 +31,10 @@ type Repository interface {
 
 	GetPermissionKeysForUser(ctx context.Context, userID uint) ([]string, error)
 
-	UpsertResourcePermission(ctx context.Context, userID uint, resourceType string, resourceID uint, effect Effect) error
+	UpsertResourcePermission(ctx context.Context, userID uint, resourceType string, resourceID uint, level AccessLevel) error
 	FindResourcePermission(ctx context.Context, userID uint, resourceType string, resourceID uint) (*ResourcePermission, error)
+	ListResourcePermissions(ctx context.Context, filter shared.DynamicFilter, page shared.Pagination) ([]ResourcePermission, int64, error)
+	DeleteResourcePermission(ctx context.Context, id uint) error
 }
 
 // gormRepository holds one generic repository per entity it manages (named
@@ -42,16 +44,18 @@ type Repository interface {
 // name/key lookups, the role<->permission and user<->role join tables, and
 // the permission-keys-for-a-user query.
 type gormRepository struct {
-	db          *gorm.DB
-	roles       *shared.GenericRepository[Role]
-	permissions *shared.GenericRepository[Permission]
+	db                  *gorm.DB
+	roles               *shared.GenericRepository[Role]
+	permissions         *shared.GenericRepository[Permission]
+	resourcePermissions *shared.GenericRepository[ResourcePermission]
 }
 
 func NewRepository(db *gorm.DB) Repository {
 	return &gormRepository{
-		db:          db,
-		roles:       shared.NewGenericRepository[Role](db),
-		permissions: shared.NewGenericRepository[Permission](db),
+		db:                  db,
+		roles:               shared.NewGenericRepository[Role](db),
+		permissions:         shared.NewGenericRepository[Permission](db),
+		resourcePermissions: shared.NewGenericRepository[ResourcePermission](db),
 	}
 }
 
@@ -166,7 +170,7 @@ func (r *gormRepository) UpsertResourcePermission(
 	userID uint,
 	resourceType string,
 	resourceID uint,
-	effect Effect,
+	level AccessLevel,
 ) error {
 	existing, err := r.FindResourcePermission(ctx, userID, resourceType, resourceID)
 	if err != nil && !errors.Is(err, shared.ErrNotFound) {
@@ -174,7 +178,7 @@ func (r *gormRepository) UpsertResourcePermission(
 	}
 
 	if existing != nil {
-		existing.Effect = effect
+		existing.Level = level
 		return r.db.WithContext(ctx).Save(existing).Error
 	}
 
@@ -182,8 +186,20 @@ func (r *gormRepository) UpsertResourcePermission(
 		UserID:       userID,
 		ResourceType: resourceType,
 		ResourceID:   resourceID,
-		Effect:       effect,
+		Level:        level,
 	}).Error
+}
+
+func (r *gormRepository) ListResourcePermissions(
+	ctx context.Context,
+	filter shared.DynamicFilter,
+	page shared.Pagination,
+) ([]ResourcePermission, int64, error) {
+	return r.resourcePermissions.List(ctx, filter, page)
+}
+
+func (r *gormRepository) DeleteResourcePermission(ctx context.Context, id uint) error {
+	return r.resourcePermissions.Delete(ctx, id)
 }
 
 func (r *gormRepository) FindResourcePermission(

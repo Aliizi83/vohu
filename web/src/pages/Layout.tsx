@@ -1,4 +1,4 @@
-import { KeyRound, KeySquare, LogOut, MessageSquare, Server, Shield, Users } from "lucide-react"
+import { KeyRound, KeySquare, LogOut, MessageSquare, Server, Shield, ShieldCheck, Users } from "lucide-react"
 import { NavLink, Outlet } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth"
@@ -12,6 +12,7 @@ const navItems = [
   { to: "/users", labelKey: "nav.users", icon: Users },
   { to: "/roles", labelKey: "nav.roles", icon: Shield },
   { to: "/permissions", labelKey: "nav.permissions", icon: KeyRound },
+  { to: "/resource-access", labelKey: "nav.resourceAccess", icon: ShieldCheck },
 ] as const
 
 export default function Layout() {

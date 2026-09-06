@@ -136,58 +136,77 @@ func TestDeleteRole_NotFound(t *testing.T) {
 	}
 }
 
-func TestCanAccessResource_DefaultDenyWithNoRow(t *testing.T) {
+func TestHasAccessLevel_DefaultDenyWithNoRow(t *testing.T) {
 	service := rbac.NewService(rbac.NewRepository(setupRBACTestDB(t)))
 
-	allowed, err := service.CanAccessResource(context.Background(), 1, "ssh_connection", 5)
+	allowed, err := service.HasAccessLevel(context.Background(), 1, "ssh_connection", 5, rbac.AccessRead)
 	if err != nil {
-		t.Fatalf("CanAccessResource failed: %v", err)
+		t.Fatalf("HasAccessLevel failed: %v", err)
 	}
 	if allowed {
 		t.Fatal("expected default deny when no resource_permission row exists")
 	}
 }
 
-func TestCanAccessResource_Accepted(t *testing.T) {
+func TestHasAccessLevel_HigherGrantSatisfiesLowerRequirement(t *testing.T) {
 	service := rbac.NewService(rbac.NewRepository(setupRBACTestDB(t)))
 	ctx := context.Background()
 
-	if err := service.GrantResourceAccess(ctx, 1, "ssh_connection", 5, rbac.EffectAccepted); err != nil {
+	if err := service.GrantResourceAccess(ctx, 1, "ssh_connection", 5, rbac.AccessManage); err != nil {
 		t.Fatalf("GrantResourceAccess failed: %v", err)
 	}
 
-	allowed, err := service.CanAccessResource(ctx, 1, "ssh_connection", 5)
-	if err != nil {
-		t.Fatalf("CanAccessResource failed: %v", err)
-	}
-	if !allowed {
-		t.Fatal("expected access after granting EffectAccepted")
+	for _, required := range []rbac.AccessLevel{rbac.AccessRead, rbac.AccessWrite, rbac.AccessManage} {
+		allowed, err := service.HasAccessLevel(ctx, 1, "ssh_connection", 5, required)
+		if err != nil {
+			t.Fatalf("HasAccessLevel failed: %v", err)
+		}
+		if !allowed {
+			t.Fatalf("expected a Manage grant to satisfy a %q requirement", required)
+		}
 	}
 
 	// A different resource ID (same type) must stay denied.
-	allowed, err = service.CanAccessResource(ctx, 1, "ssh_connection", 6)
+	allowed, err := service.HasAccessLevel(ctx, 1, "ssh_connection", 6, rbac.AccessRead)
 	if err != nil {
-		t.Fatalf("CanAccessResource failed: %v", err)
+		t.Fatalf("HasAccessLevel failed: %v", err)
 	}
 	if allowed {
 		t.Fatal("expected a grant on resource 5 to not leak into resource 6")
 	}
 }
 
-func TestCanAccessResource_Forbidden(t *testing.T) {
+func TestHasAccessLevel_LowerGrantDoesNotSatisfyHigherRequirement(t *testing.T) {
 	service := rbac.NewService(rbac.NewRepository(setupRBACTestDB(t)))
 	ctx := context.Background()
 
-	if err := service.GrantResourceAccess(ctx, 1, "ssh_connection", 5, rbac.EffectForbidden); err != nil {
+	if err := service.GrantResourceAccess(ctx, 1, "ssh_connection", 5, rbac.AccessRead); err != nil {
 		t.Fatalf("GrantResourceAccess failed: %v", err)
 	}
 
-	allowed, err := service.CanAccessResource(ctx, 1, "ssh_connection", 5)
+	allowed, err := service.HasAccessLevel(ctx, 1, "ssh_connection", 5, rbac.AccessWrite)
 	if err != nil {
-		t.Fatalf("CanAccessResource failed: %v", err)
+		t.Fatalf("HasAccessLevel failed: %v", err)
 	}
 	if allowed {
-		t.Fatal("expected EffectForbidden to deny access")
+		t.Fatal("expected a Read grant to NOT satisfy a Write requirement")
+	}
+}
+
+func TestHasAccessLevel_Forbidden(t *testing.T) {
+	service := rbac.NewService(rbac.NewRepository(setupRBACTestDB(t)))
+	ctx := context.Background()
+
+	if err := service.GrantResourceAccess(ctx, 1, "ssh_connection", 5, rbac.AccessForbidden); err != nil {
+		t.Fatalf("GrantResourceAccess failed: %v", err)
+	}
+
+	allowed, err := service.HasAccessLevel(ctx, 1, "ssh_connection", 5, rbac.AccessRead)
+	if err != nil {
+		t.Fatalf("HasAccessLevel failed: %v", err)
+	}
+	if allowed {
+		t.Fatal("expected AccessForbidden to deny even the lowest requirement")
 	}
 }
 
@@ -195,18 +214,90 @@ func TestGrantResourceAccess_UpsertsOnRepeatGrant(t *testing.T) {
 	service := rbac.NewService(rbac.NewRepository(setupRBACTestDB(t)))
 	ctx := context.Background()
 
-	if err := service.GrantResourceAccess(ctx, 1, "ssh_connection", 5, rbac.EffectAccepted); err != nil {
+	if err := service.GrantResourceAccess(ctx, 1, "ssh_connection", 5, rbac.AccessManage); err != nil {
 		t.Fatalf("first grant failed: %v", err)
 	}
-	if err := service.GrantResourceAccess(ctx, 1, "ssh_connection", 5, rbac.EffectForbidden); err != nil {
+	if err := service.GrantResourceAccess(ctx, 1, "ssh_connection", 5, rbac.AccessForbidden); err != nil {
 		t.Fatalf("second grant failed: %v", err)
 	}
 
-	allowed, err := service.CanAccessResource(ctx, 1, "ssh_connection", 5)
+	allowed, err := service.HasAccessLevel(ctx, 1, "ssh_connection", 5, rbac.AccessRead)
 	if err != nil {
-		t.Fatalf("CanAccessResource failed: %v", err)
+		t.Fatalf("HasAccessLevel failed: %v", err)
 	}
 	if allowed {
-		t.Fatal("expected the second grant (Forbidden) to overwrite the first (Accepted), not add a second row")
+		t.Fatal("expected the second grant (Forbidden) to overwrite the first (Manage), not add a second row")
+	}
+
+	list, total, err := service.ListResourcePermissions(ctx, shared.DynamicFilter{}, shared.Pagination{PageNumber: 1, PageSize: 10})
+	if err != nil {
+		t.Fatalf("ListResourcePermissions failed: %v", err)
+	}
+	if total != 1 || len(list) != 1 {
+		t.Fatalf("expected exactly 1 row after two grants to the same (user, resource), got total=%d len=%d", total, len(list))
+	}
+}
+
+func TestRevokeResourceAccess_FallsBackToDefaultDeny(t *testing.T) {
+	service := rbac.NewService(rbac.NewRepository(setupRBACTestDB(t)))
+	ctx := context.Background()
+
+	if err := service.GrantResourceAccess(ctx, 1, "ssh_connection", 5, rbac.AccessWrite); err != nil {
+		t.Fatalf("GrantResourceAccess failed: %v", err)
+	}
+
+	list, _, err := service.ListResourcePermissions(ctx, shared.DynamicFilter{}, shared.Pagination{PageNumber: 1, PageSize: 10})
+	if err != nil {
+		t.Fatalf("ListResourcePermissions failed: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("expected exactly 1 row, got %d", len(list))
+	}
+
+	if err := service.RevokeResourceAccess(ctx, list[0].ID); err != nil {
+		t.Fatalf("RevokeResourceAccess failed: %v", err)
+	}
+
+	allowed, err := service.HasAccessLevel(ctx, 1, "ssh_connection", 5, rbac.AccessRead)
+	if err != nil {
+		t.Fatalf("HasAccessLevel failed: %v", err)
+	}
+	if allowed {
+		t.Fatal("expected access to fall back to default-deny after revoking the only grant")
+	}
+}
+
+func TestRevokeResourceAccess_NotFound(t *testing.T) {
+	service := rbac.NewService(rbac.NewRepository(setupRBACTestDB(t)))
+
+	err := service.RevokeResourceAccess(context.Background(), 9999)
+	if err != shared.ErrNotFound {
+		t.Fatalf("expected shared.ErrNotFound, got %v", err)
+	}
+}
+
+func TestAccessLevel_Satisfies(t *testing.T) {
+	cases := []struct {
+		level    rbac.AccessLevel
+		required rbac.AccessLevel
+		want     bool
+	}{
+		{rbac.AccessManage, rbac.AccessRead, true},
+		{rbac.AccessManage, rbac.AccessWrite, true},
+		{rbac.AccessManage, rbac.AccessManage, true},
+		{rbac.AccessWrite, rbac.AccessRead, true},
+		{rbac.AccessWrite, rbac.AccessWrite, true},
+		{rbac.AccessWrite, rbac.AccessManage, false},
+		{rbac.AccessRead, rbac.AccessRead, true},
+		{rbac.AccessRead, rbac.AccessWrite, false},
+		{rbac.AccessForbidden, rbac.AccessRead, false},
+		{rbac.AccessForbidden, rbac.AccessForbidden, false},
+	}
+
+	for _, tc := range cases {
+		got := tc.level.Satisfies(tc.required)
+		if got != tc.want {
+			t.Errorf("%q.Satisfies(%q) = %v, want %v", tc.level, tc.required, got, tc.want)
+		}
 	}
 }

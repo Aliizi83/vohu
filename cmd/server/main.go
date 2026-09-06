@@ -49,11 +49,11 @@ func main() {
 	}
 
 	sshconnRepo := sshconn.NewRepository(db.GetDB())
-	// rbac.Effect is a named string type; GrantCreatorAccess takes a plain
-	// string so sshconn never has to import rbac — this closure is the
-	// only place that bridges the two.
-	grantCreatorAccess := func(ctx context.Context, userID uint, resourceType string, resourceID uint, effect string) error {
-		return rbacService.GrantResourceAccess(ctx, userID, resourceType, resourceID, rbac.Effect(effect))
+	// rbac.AccessLevel is a named string type; GrantCreatorAccess takes a
+	// plain string so sshconn never has to import rbac — this closure is
+	// the only place that bridges the two.
+	grantCreatorAccess := func(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) error {
+		return rbacService.GrantResourceAccess(ctx, userID, resourceType, resourceID, rbac.AccessLevel(level))
 	}
 	sshconnService := sshconn.NewService(sshconnRepo, secretBox, grantCreatorAccess)
 	sshconnHandler := sshconn.NewHandler(sshconnService)
@@ -83,7 +83,12 @@ func main() {
 	providerKeyHandler := providerkey.NewHandler(providerKeyService)
 	providerKeyPolicy := providerkey.NewPolicy(rbacService.HasPermission)
 
-	chatHandler := chat.NewHandler(conversationService, sshconnService, rbacService.CanAccessResource, sshCommandPolicy, providerKeyService)
+	// rbac.AccessLevel is a named string type; HasAccessLevel takes a
+	// plain string so chat never has to import rbac just for this check.
+	hasAccessLevel := func(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) (bool, error) {
+		return rbacService.HasAccessLevel(ctx, userID, resourceType, resourceID, rbac.AccessLevel(level))
+	}
+	chatHandler := chat.NewHandler(conversationService, sshconnService, hasAccessLevel, sshCommandPolicy, providerKeyService)
 
 	engine, v1 := httpserver.NewEngine(logger)
 

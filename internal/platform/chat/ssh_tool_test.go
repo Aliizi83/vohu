@@ -43,11 +43,11 @@ func (s *stubSSHConnService) DecryptSecret(*sshconn.SSHConnection) (string, erro
 	return s.secret, nil
 }
 
-func denyAccess(ctx context.Context, userID uint, resourceType string, resourceID uint) (bool, error) {
+func denyAccess(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) (bool, error) {
 	return false, nil
 }
 
-func allowAccess(ctx context.Context, userID uint, resourceType string, resourceID uint) (bool, error) {
+func allowAccess(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) (bool, error) {
 	return true, nil
 }
 
@@ -72,6 +72,21 @@ func TestSSHTool_Execute_MissingProgram(t *testing.T) {
 	}
 	if result.Success {
 		t.Fatal("expected failure when program is missing")
+	}
+}
+
+func TestSSHTool_Execute_RequestsWriteLevel(t *testing.T) {
+	var gotLevel string
+	spy := func(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) (bool, error) {
+		gotLevel = level
+		return false, nil // deny is fine — this test only cares which level was requested
+	}
+
+	tool := NewSSHTool(1, &stubSSHConnService{}, spy, noopPolicy{})
+	_, _ = tool.Execute(context.Background(), map[string]any{"connectionId": float64(5), "program": "ls"})
+
+	if gotLevel != "write" {
+		t.Fatalf("expected SSHTool to request level %q, got %q", "write", gotLevel)
 	}
 }
 

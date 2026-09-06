@@ -139,6 +139,16 @@ export interface ProviderKeyDto {
   workspaceId?: string
 }
 
+export type AccessLevel = "forbidden" | "read" | "write" | "manage"
+
+export interface ResourcePermissionDto {
+  id: number
+  userId: number
+  resourceType: string
+  resourceId: number
+  level: AccessLevel
+}
+
 export interface UserDto {
   id: number
   username: string
@@ -252,6 +262,16 @@ export const api = {
     setGlobal: (data: { provider: LLMProvider; apiKey: string; baseUrl?: string; workspaceId?: string }) =>
       request<null>("POST", "/provider-keys", { body: data }),
     removeGlobal: (provider: LLMProvider) => request<null>("DELETE", `/provider-keys/${provider}`),
+  },
+
+  resourcePermissions: {
+    list: (page?: number, pageSize?: number, filter?: DynamicFilter) =>
+      request<PagedList<ResourcePermissionDto>>("GET", "/resource-permissions", {
+        query: listQuery(page, pageSize, filter),
+      }),
+    grant: (data: { userId: number; resourceType: string; resourceId: number; level: AccessLevel }) =>
+      request<null>("POST", "/resource-permissions", { body: data }),
+    revoke: (id: number) => request<null>("DELETE", `/resource-permissions/${id}`),
   },
 }
 

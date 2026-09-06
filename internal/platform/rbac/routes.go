@@ -36,4 +36,11 @@ func RegisterRoutes(
 	}
 
 	v1.POST("/users/:id/roles", authMiddleware, manage, handler.AssignRoleToUser)
+
+	resourcePermissions := v1.Group("/resource-permissions", authMiddleware)
+	{
+		resourcePermissions.POST("", manage, handler.GrantResourceAccess)
+		resourcePermissions.GET("", manage, handler.ListResourcePermissions)
+		resourcePermissions.DELETE("/:id", manage, handler.RevokeResourceAccess)
+	}
 }

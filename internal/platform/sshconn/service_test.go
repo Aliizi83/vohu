@@ -83,7 +83,7 @@ func TestCreate_EncryptsSecretAndGrantsCreatorAccess(t *testing.T) {
 		t.Fatalf("expected exactly one grant-access call, got %d", len(*calls))
 	}
 	got := (*calls)[0]
-	if got.userID != 7 || got.resourceType != sshconn.ResourceTypeSSHConnection || got.resourceID != conn.ID || got.effect != "accepted" {
+	if got.userID != 7 || got.resourceType != sshconn.ResourceTypeSSHConnection || got.resourceID != conn.ID || got.effect != "manage" {
 		t.Fatalf("unexpected grant call: %+v", got)
 	}
 

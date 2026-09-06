@@ -8,6 +8,7 @@ import ChatPage from "@/pages/ChatPage"
 import Layout from "@/pages/Layout"
 import LoginPage from "@/pages/LoginPage"
 import PermissionsPage from "@/pages/PermissionsPage"
+import ResourceAccessPage from "@/pages/ResourceAccessPage"
 import RolesPage from "@/pages/RolesPage"
 import SSHConnectionsPage from "@/pages/SSHConnectionsPage"
 import UsersPage from "@/pages/UsersPage"
@@ -40,6 +41,7 @@ export default function App() {
               <Route path="users" element={<UsersPage />} />
               <Route path="roles" element={<RolesPage />} />
               <Route path="permissions" element={<PermissionsPage />} />
+              <Route path="resource-access" element={<ResourceAccessPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

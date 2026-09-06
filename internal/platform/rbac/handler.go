@@ -146,3 +146,34 @@ func (h *Handler) AssignRoleToUser(c *gin.Context) {
 
 	shared.RespondSuccess(c, http.StatusOK, nil)
 }
+
+// GrantResourceAccess handles POST /resource-permissions. Hand-written
+// rather than shared.CreateHandler because the service method upserts
+// (returns only an error, not the row) and the four fields all live
+// directly on the request body rather than one coming from a route param.
+func (h *Handler) GrantResourceAccess(c *gin.Context) {
+	var req GrantResourceAccessRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		shared.RespondValidationError(c, err)
+		return
+	}
+
+	err := h.service.GrantResourceAccess(c.Request.Context(), req.UserID, req.ResourceType, req.ResourceID, req.Level)
+	if err != nil {
+		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, errors.New("internal error"))
+		return
+	}
+
+	shared.RespondSuccess(c, http.StatusOK, nil)
+}
+
+func (h *Handler) ListResourcePermissions(c *gin.Context) {
+	shared.ListHandler(c,
+		func(p ResourcePermission) ResourcePermissionResponse { return toResourcePermissionResponse(p) },
+		h.service.ListResourcePermissions,
+	)
+}
+
+func (h *Handler) RevokeResourceAccess(c *gin.Context) {
+	shared.DeleteHandler(c, h.service.RevokeResourceAccess, mapError)
+}

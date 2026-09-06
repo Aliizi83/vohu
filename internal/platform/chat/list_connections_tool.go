@@ -9,20 +9,26 @@ import (
 	"github.com/Aliizi83/vohu/internal/tools"
 )
 
+// accessLevelRead is what merely appearing in this discovery listing
+// requires — lower than the Write level SSHTool needs to actually execute
+// anything, so a user can be granted "you may see this connection exists"
+// without also being able to use it.
+const accessLevelRead = "read"
+
 // ListSSHConnectionsTool lets the model discover which SSH connections
 // exist and their IDs before calling SSHTool — without it, the model has
 // no way to know a valid connectionId short of the user typing one into
-// the chat. Only connections CanAccessResource actually allows for this
-// user are returned; the point of the whole resource-permission system is
-// that a user shouldn't even learn a connection exists if they can't use
-// it.
+// the chat. Only connections HasAccessLevel grants at least Read on are
+// returned; the point of the whole resource-permission system is that a
+// user shouldn't even learn a connection exists if they can't reach it at
+// all.
 type ListSSHConnectionsTool struct {
 	userID    uint
 	sshconns  sshconn.Service
-	canAccess CanAccessResource
+	canAccess HasAccessLevel
 }
 
-func NewListSSHConnectionsTool(userID uint, sshconns sshconn.Service, canAccess CanAccessResource) *ListSSHConnectionsTool {
+func NewListSSHConnectionsTool(userID uint, sshconns sshconn.Service, canAccess HasAccessLevel) *ListSSHConnectionsTool {
 	return &ListSSHConnectionsTool{userID: userID, sshconns: sshconns, canAccess: canAccess}
 }
 
@@ -46,7 +52,7 @@ func (t *ListSSHConnectionsTool) Execute(ctx context.Context, args map[string]an
 
 	visible := make([]map[string]any, 0, len(items))
 	for _, conn := range items {
-		allowed, err := t.canAccess(ctx, t.userID, sshconn.ResourceTypeSSHConnection, conn.ID)
+		allowed, err := t.canAccess(ctx, t.userID, sshconn.ResourceTypeSSHConnection, conn.ID, accessLevelRead)
 		if err != nil || !allowed {
 			continue
 		}

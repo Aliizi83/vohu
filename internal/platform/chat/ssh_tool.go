@@ -11,28 +11,37 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// CanAccessResource is rbac.Service.CanAccessResource's shape, injected as
-// a function value like every cross-module dependency in this codebase —
-// this package never imports rbac just for one permission check.
-type CanAccessResource func(ctx context.Context, userID uint, resourceType string, resourceID uint) (bool, error)
+// HasAccessLevel is rbac.Service.HasAccessLevel's shape, injected as a
+// function value like every cross-module dependency in this codebase —
+// this package never imports rbac just for one permission check. level is
+// a plain string (rbac.AccessLevel's underlying type) for the same reason
+// sshconn's GrantCreatorAccess takes one instead of an rbac type.
+type HasAccessLevel func(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) (bool, error)
+
+// accessLevelWrite is what executing a command over a connection
+// requires — running anything, even something read-only in intent,
+// changes state on the remote system (a process runs, output is
+// produced), so it's gated at Write, not the bare Read that
+// ListSSHConnectionsTool's discovery-only listing requires.
+const accessLevelWrite = "write"
 
 // SSHTool is the platform's own tool — distinct from command.Tool, which
 // runs locally on whatever process it's in. It never constructs a
-// command.SSHExecutor until CanAccessResource has cleared the caller for
-// the specific connection they asked for; the connection's own
-// AuthMethod/secret never leaves this method (never returned to the
-// model, never logged).
+// command.SSHExecutor until HasAccessLevel has cleared the caller at
+// Write level for the specific connection they asked for; the
+// connection's own AuthMethod/secret never leaves this method (never
+// returned to the model, never logged).
 type SSHTool struct {
 	userID        uint
 	sshconns      sshconn.Service
-	canAccess     CanAccessResource
+	canAccess     HasAccessLevel
 	commandPolicy command.Policy
 }
 
 func NewSSHTool(
 	userID uint,
 	sshconns sshconn.Service,
-	canAccess CanAccessResource,
+	canAccess HasAccessLevel,
 	commandPolicy command.Policy,
 ) *SSHTool {
 	return &SSHTool{
@@ -86,7 +95,7 @@ func (t *SSHTool) Execute(ctx context.Context, args map[string]any) (tools.ToolR
 		return tools.ToolResult{Success: false, Data: err.Error()}, nil
 	}
 
-	allowed, err := t.canAccess(ctx, t.userID, sshconn.ResourceTypeSSHConnection, connectionID)
+	allowed, err := t.canAccess(ctx, t.userID, sshconn.ResourceTypeSSHConnection, connectionID, accessLevelWrite)
 	if err != nil {
 		return tools.ToolResult{Success: false, Data: fmt.Sprintf("permission check failed: %v", err)}, nil
 	}

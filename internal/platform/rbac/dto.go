@@ -41,3 +41,32 @@ func toRoleResponse(r Role) RoleResponse {
 func toPermissionResponse(p Permission) PermissionResponse {
 	return PermissionResponse{ID: p.ID, Key: p.Key}
 }
+
+// GrantResourceAccessRequest doubles as both "grant" and "update" —
+// granting again for the same (userId, resourceType, resourceId) upserts
+// the level rather than erroring or duplicating, so there's no separate
+// update request shape.
+type GrantResourceAccessRequest struct {
+	UserID       uint        `json:"userId" binding:"required"`
+	ResourceType string      `json:"resourceType" binding:"required,max=50"`
+	ResourceID   uint        `json:"resourceId" binding:"required"`
+	Level        AccessLevel `json:"level" binding:"required,oneof=forbidden read write manage"`
+}
+
+type ResourcePermissionResponse struct {
+	ID           uint        `json:"id"`
+	UserID       uint        `json:"userId"`
+	ResourceType string      `json:"resourceType"`
+	ResourceID   uint        `json:"resourceId"`
+	Level        AccessLevel `json:"level"`
+}
+
+func toResourcePermissionResponse(p ResourcePermission) ResourcePermissionResponse {
+	return ResourcePermissionResponse{
+		ID:           p.ID,
+		UserID:       p.UserID,
+		ResourceType: p.ResourceType,
+		ResourceID:   p.ResourceID,
+		Level:        p.Level,
+	}
+}

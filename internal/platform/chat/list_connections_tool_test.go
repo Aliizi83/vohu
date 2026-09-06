@@ -19,6 +19,26 @@ func (s *listStubSSHConnService) List(context.Context, shared.DynamicFilter, sha
 	return s.items, int64(len(s.items)), nil
 }
 
+func TestListSSHConnectionsTool_Execute_RequestsReadLevel(t *testing.T) {
+	svc := &listStubSSHConnService{items: []sshconn.SSHConnection{{Name: "box", Host: "1.1.1.1"}}}
+	svc.items[0].ID = 1
+
+	var gotLevel string
+	spy := func(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) (bool, error) {
+		gotLevel = level
+		return true, nil
+	}
+
+	tool := NewListSSHConnectionsTool(7, svc, spy)
+	if _, err := tool.Execute(context.Background(), nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if gotLevel != "read" {
+		t.Fatalf("expected ListSSHConnectionsTool to request level %q, got %q", "read", gotLevel)
+	}
+}
+
 func TestListSSHConnectionsTool_Execute_OnlyReturnsAccessibleConnections(t *testing.T) {
 	svc := &listStubSSHConnService{
 		items: []sshconn.SSHConnection{
@@ -29,7 +49,7 @@ func TestListSSHConnectionsTool_Execute_OnlyReturnsAccessibleConnections(t *test
 	svc.items[0].ID = 1
 	svc.items[1].ID = 2
 
-	canAccess := func(ctx context.Context, userID uint, resourceType string, resourceID uint) (bool, error) {
+	canAccess := func(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) (bool, error) {
 		return resourceID == 1, nil // only connection 1 is visible to this user
 	}
 

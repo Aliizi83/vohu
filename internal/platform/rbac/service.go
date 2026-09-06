@@ -32,15 +32,22 @@ type Service interface {
 
 	HasPermission(ctx context.Context, userID uint, key string) (bool, error)
 
-	// GrantResourceAccess records an explicit Accepted/Forbidden decision
-	// for one user on one (resourceType, resourceID) pair — an upsert, a
-	// repeat grant just updates the effect.
-	GrantResourceAccess(ctx context.Context, userID uint, resourceType string, resourceID uint, effect Effect) error
+	// GrantResourceAccess records a level for one user on one
+	// (resourceType, resourceID) pair — an upsert, a repeat grant just
+	// updates the level.
+	GrantResourceAccess(ctx context.Context, userID uint, resourceType string, resourceID uint, level AccessLevel) error
 
-	// CanAccessResource answers "can this user touch this specific row" —
-	// default deny when no row exists at all, same safe-by-default posture
-	// as command.CommandPolicy's accept mode.
-	CanAccessResource(ctx context.Context, userID uint, resourceType string, resourceID uint) (bool, error)
+	// HasAccessLevel answers "does this user's grant on this specific row
+	// meet or exceed the required level" — default deny when no row
+	// exists at all, same safe-by-default posture as
+	// command.CommandPolicy's accept mode.
+	HasAccessLevel(ctx context.Context, userID uint, resourceType string, resourceID uint, required AccessLevel) (bool, error)
+
+	// ListResourcePermissions/RevokeResourceAccess back the admin CRUD
+	// over grants — every ResourcePermission row across every user and
+	// resource, not scoped to a single one like the two methods above.
+	ListResourcePermissions(ctx context.Context, filter shared.DynamicFilter, page shared.Pagination) ([]ResourcePermission, int64, error)
+	RevokeResourceAccess(ctx context.Context, id uint) error
 }
 
 type service struct {
@@ -195,16 +202,17 @@ func (s *service) GrantResourceAccess(
 	userID uint,
 	resourceType string,
 	resourceID uint,
-	effect Effect,
+	level AccessLevel,
 ) error {
-	return s.repo.UpsertResourcePermission(ctx, userID, resourceType, resourceID, effect)
+	return s.repo.UpsertResourcePermission(ctx, userID, resourceType, resourceID, level)
 }
 
-func (s *service) CanAccessResource(
+func (s *service) HasAccessLevel(
 	ctx context.Context,
 	userID uint,
 	resourceType string,
 	resourceID uint,
+	required AccessLevel,
 ) (bool, error) {
 	permission, err := s.repo.FindResourcePermission(ctx, userID, resourceType, resourceID)
 	if errors.Is(err, shared.ErrNotFound) {
@@ -214,5 +222,17 @@ func (s *service) CanAccessResource(
 		return false, err
 	}
 
-	return permission.Effect == EffectAccepted, nil
+	return permission.Level.Satisfies(required), nil
+}
+
+func (s *service) ListResourcePermissions(
+	ctx context.Context,
+	filter shared.DynamicFilter,
+	page shared.Pagination,
+) ([]ResourcePermission, int64, error) {
+	return s.repo.ListResourcePermissions(ctx, filter, page)
+}
+
+func (s *service) RevokeResourceAccess(ctx context.Context, id uint) error {
+	return s.repo.DeleteResourcePermission(ctx, id)
 }
