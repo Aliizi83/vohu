@@ -20,6 +20,8 @@ func mapError(err error) (int, shared.ResultCode) {
 	switch {
 	case errors.Is(err, shared.ErrNotFound):
 		return http.StatusNotFound, shared.ResultNotFoundError
+	case errors.Is(err, ErrConnectionTestFailed):
+		return http.StatusBadRequest, shared.ResultValidationError
 	default:
 		return http.StatusInternalServerError, shared.ResultInternalError
 	}

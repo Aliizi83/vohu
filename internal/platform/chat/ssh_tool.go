@@ -102,26 +102,17 @@ func (t *SSHTool) Execute(ctx context.Context, args map[string]any) (tools.ToolR
 		return tools.ToolResult{Success: false, Data: fmt.Sprintf("connection not found: %v", err)}, nil
 	}
 
-	secret, err := t.sshconns.DecryptSecret(conn)
+	privateKey, err := t.sshconns.DecryptPrivateKey(conn)
 	if err != nil {
-		return tools.ToolResult{Success: false, Data: "failed to decrypt connection secret"}, nil
+		return tools.ToolResult{Success: false, Data: "failed to decrypt connection private key"}, nil
 	}
 
-	var auth ssh.AuthMethod
-	switch conn.AuthMethod {
-	case sshconn.AuthPassword:
-		auth = ssh.Password(secret)
-	case sshconn.AuthPrivateKey:
-		signer, err := ssh.ParsePrivateKey([]byte(secret))
-		if err != nil {
-			return tools.ToolResult{Success: false, Data: "failed to parse private key"}, nil
-		}
-		auth = ssh.PublicKeys(signer)
-	default:
-		return tools.ToolResult{Success: false, Data: "unknown auth method on this connection"}, nil
+	signer, err := ssh.ParsePrivateKey([]byte(privateKey))
+	if err != nil {
+		return tools.ToolResult{Success: false, Data: "failed to parse private key"}, nil
 	}
 
-	executor := command.NewSSHExecutor(conn.Host, conn.Port, conn.Username, auth, t.commandPolicy)
+	executor := command.NewSSHExecutor(conn.Host, conn.Port, conn.Username, ssh.PublicKeys(signer), t.commandPolicy)
 
 	output, err := executor.Execute(ctx, command.Command{Program: program, Args: commandArgs})
 	if err != nil {

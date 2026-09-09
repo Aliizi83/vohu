@@ -128,7 +128,6 @@ export interface SSHConnectionDto {
   host: string
   port: number
   username: string
-  authMethod: "password" | "private_key"
   createdByUserId: number
 }
 
@@ -276,8 +275,7 @@ export const api = {
       host: string
       port?: number
       username: string
-      authMethod: "password" | "private_key"
-      secret: string
+      privateKey: string
     }) => request<SSHConnectionDto>("POST", "/ssh-connections", { body: data }),
     remove: (id: number) => request<null>("DELETE", `/ssh-connections/${id}`),
   },

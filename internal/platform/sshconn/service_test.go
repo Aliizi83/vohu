@@ -2,6 +2,7 @@ package sshconn_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/Aliizi83/vohu/internal/platform/shared"
@@ -37,7 +38,35 @@ type grantCall struct {
 	effect       string
 }
 
+// testConnCall records the arguments of the last TestConnectionFunc
+// invocation so tests can assert Create passes through the right values
+// without needing a real SSH server.
+type testConnCall struct {
+	host       string
+	port       int
+	username   string
+	privateKey string
+}
+
+func alwaysSucceeds(ctx context.Context, host string, port int, username string, privateKey string) error {
+	return nil
+}
+
+var errConnectionUnreachable = errors.New("connection refused")
+
+func alwaysFails(ctx context.Context, host string, port int, username string, privateKey string) error {
+	return errConnectionUnreachable
+}
+
 func newTestService(t *testing.T, hasAccessLevel shared.AccessLevelCheck) (sshconn.Service, *[]grantCall) {
+	t.Helper()
+	service, calls, _ := newTestServiceWithTestConnection(t, hasAccessLevel, alwaysSucceeds)
+	return service, calls
+}
+
+func newTestServiceWithTestConnection(
+	t *testing.T, hasAccessLevel shared.AccessLevelCheck, testConnection sshconn.TestConnectionFunc,
+) (sshconn.Service, *[]grantCall, *[]testConnCall) {
 	t.Helper()
 
 	box, err := crypto.NewBox(testEncryptionKey)
@@ -51,8 +80,14 @@ func newTestService(t *testing.T, hasAccessLevel shared.AccessLevelCheck) (sshco
 		return nil
 	}
 
+	testCalls := &[]testConnCall{}
+	spyTestConnection := func(ctx context.Context, host string, port int, username string, privateKey string) error {
+		*testCalls = append(*testCalls, testConnCall{host, port, username, privateKey})
+		return testConnection(ctx, host, port, username, privateKey)
+	}
+
 	repo := sshconn.NewRepository(setupSSHConnTestDB(t))
-	return sshconn.NewService(repo, box, grant, hasAccessLevel), calls
+	return sshconn.NewService(repo, box, grant, hasAccessLevel, spyTestConnection), calls, testCalls
 }
 
 func denyAllLevels(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) (bool, error) {
@@ -63,7 +98,7 @@ func allowAllLevels(ctx context.Context, userID uint, resourceType string, resou
 	return true, nil
 }
 
-func TestCreate_EncryptsSecretAndGrantsCreatorManageAccess(t *testing.T) {
+func TestCreate_EncryptsPrivateKeyAndGrantsCreatorManageAccess(t *testing.T) {
 	service, calls := newTestService(t, denyAllLevels)
 	ctx := context.Background()
 
@@ -71,15 +106,14 @@ func TestCreate_EncryptsSecretAndGrantsCreatorManageAccess(t *testing.T) {
 		Name:       "prod-box",
 		Host:       "10.0.0.5",
 		Username:   "deploy",
-		AuthMethod: sshconn.AuthPassword,
-		Secret:     "hunter2",
+		PrivateKey: "-----BEGIN KEY-----",
 	})
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
 
-	if conn.EncryptedSecret == "hunter2" {
-		t.Fatal("expected the stored secret to be encrypted, not plaintext")
+	if conn.EncryptedPrivateKey == "-----BEGIN KEY-----" {
+		t.Fatal("expected the stored private key to be encrypted, not plaintext")
 	}
 	if conn.Port != 22 {
 		t.Fatalf("expected default port 22, got %d", conn.Port)
@@ -97,12 +131,12 @@ func TestCreate_EncryptsSecretAndGrantsCreatorManageAccess(t *testing.T) {
 		t.Fatalf("unexpected grant call: %+v", got)
 	}
 
-	plaintext, err := service.DecryptSecret(conn)
+	plaintext, err := service.DecryptPrivateKey(conn)
 	if err != nil {
-		t.Fatalf("DecryptSecret failed: %v", err)
+		t.Fatalf("DecryptPrivateKey failed: %v", err)
 	}
-	if plaintext != "hunter2" {
-		t.Fatalf("expected decrypted secret %q, got %q", "hunter2", plaintext)
+	if plaintext != "-----BEGIN KEY-----" {
+		t.Fatalf("expected decrypted private key %q, got %q", "-----BEGIN KEY-----", plaintext)
 	}
 }
 
@@ -114,8 +148,7 @@ func TestCreate_RespectsExplicitPort(t *testing.T) {
 		Host:       "example.com",
 		Port:       2222,
 		Username:   "root",
-		AuthMethod: sshconn.AuthPrivateKey,
-		Secret:     "-----BEGIN KEY-----",
+		PrivateKey: "-----BEGIN KEY-----",
 	})
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
@@ -125,16 +158,89 @@ func TestCreate_RespectsExplicitPort(t *testing.T) {
 	}
 }
 
-func TestUpdate_WithoutSecretKeepsExistingEncryptedValue(t *testing.T) {
+// TestCreate_TestsConnectionWithTheRightParamsBeforeSaving is the actual
+// feature this change exists for: Create must verify the connection
+// really works — dialing with the given host/port/username/private key —
+// before ever writing a row.
+func TestCreate_TestsConnectionWithTheRightParamsBeforeSaving(t *testing.T) {
+	service, _, testCalls := newTestServiceWithTestConnection(t, allowAllLevels, alwaysSucceeds)
+	ctx := context.Background()
+
+	if _, err := service.Create(ctx, 1, sshconn.CreateSSHConnectionRequest{
+		Name:       "box",
+		Host:       "10.0.0.9",
+		Port:       2200,
+		Username:   "deploy",
+		PrivateKey: "-----BEGIN KEY-----",
+	}); err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	if len(*testCalls) != 1 {
+		t.Fatalf("expected exactly one connection test, got %d", len(*testCalls))
+	}
+	got := (*testCalls)[0]
+	if got.host != "10.0.0.9" || got.port != 2200 || got.username != "deploy" || got.privateKey != "-----BEGIN KEY-----" {
+		t.Fatalf("unexpected connection test call: %+v", got)
+	}
+}
+
+// TestCreate_TestsConnectionWithDefaultPortWhenOmitted confirms the test
+// call sees the *resolved* port (22, not 0) when the caller didn't
+// specify one — Create's default-port logic must run before the test,
+// not after.
+func TestCreate_TestsConnectionWithDefaultPortWhenOmitted(t *testing.T) {
+	service, _, testCalls := newTestServiceWithTestConnection(t, allowAllLevels, alwaysSucceeds)
+	ctx := context.Background()
+
+	if _, err := service.Create(ctx, 1, sshconn.CreateSSHConnectionRequest{
+		Name: "box", Host: "10.0.0.9", Username: "deploy", PrivateKey: "-----BEGIN KEY-----",
+	}); err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	if len(*testCalls) != 1 || (*testCalls)[0].port != 22 {
+		t.Fatalf("expected the connection test to see the default port 22, got %+v", *testCalls)
+	}
+}
+
+// TestCreate_FailedConnectionTestIsNotPersisted is the other half of the
+// feature: a connection that doesn't actually work must never reach the
+// database, and the creator must never be granted access to a
+// nonexistent row.
+func TestCreate_FailedConnectionTestIsNotPersisted(t *testing.T) {
+	service, calls, _ := newTestServiceWithTestConnection(t, allowAllLevels, alwaysFails)
+	ctx := context.Background()
+
+	_, err := service.Create(ctx, 1, sshconn.CreateSSHConnectionRequest{
+		Name: "box", Host: "10.0.0.9", Username: "deploy", PrivateKey: "-----BEGIN KEY-----",
+	})
+	if !errors.Is(err, sshconn.ErrConnectionTestFailed) {
+		t.Fatalf("expected ErrConnectionTestFailed, got %v", err)
+	}
+	if !errors.Is(err, errConnectionUnreachable) {
+		t.Fatalf("expected the underlying dial error to be wrapped, got %v", err)
+	}
+
+	if len(*calls) != 0 {
+		t.Fatalf("expected no grant-access call for a connection that was never created, got %d", len(*calls))
+	}
+
+	items, total, err := service.List(ctx, shared.DynamicFilter{}, shared.Pagination{PageNumber: 1, PageSize: 10})
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if total != 0 || len(items) != 0 {
+		t.Fatalf("expected nothing to be persisted after a failed connection test, got total=%d len=%d", total, len(items))
+	}
+}
+
+func TestUpdate_WithoutPrivateKeyKeepsExistingEncryptedValue(t *testing.T) {
 	service, _ := newTestService(t, denyAllLevels)
 	ctx := context.Background()
 
 	conn, err := service.Create(ctx, 1, sshconn.CreateSSHConnectionRequest{
-		Name:       "box",
-		Host:       "1.2.3.4",
-		Username:   "user",
-		AuthMethod: sshconn.AuthPassword,
-		Secret:     "original-secret",
+		Name: "box", Host: "1.2.3.4", Username: "user", PrivateKey: "original-key",
 	})
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
@@ -150,43 +256,39 @@ func TestUpdate_WithoutSecretKeepsExistingEncryptedValue(t *testing.T) {
 		t.Fatalf("expected name to update, got %q", updated.Name)
 	}
 
-	plaintext, err := service.DecryptSecret(updated)
+	plaintext, err := service.DecryptPrivateKey(updated)
 	if err != nil {
-		t.Fatalf("DecryptSecret failed: %v", err)
+		t.Fatalf("DecryptPrivateKey failed: %v", err)
 	}
-	if plaintext != "original-secret" {
-		t.Fatalf("expected the secret to be left untouched, got %q", plaintext)
+	if plaintext != "original-key" {
+		t.Fatalf("expected the private key to be left untouched, got %q", plaintext)
 	}
 }
 
-func TestUpdate_WithNewSecretReEncrypts(t *testing.T) {
+func TestUpdate_WithNewPrivateKeyReEncrypts(t *testing.T) {
 	service, _ := newTestService(t, denyAllLevels)
 	ctx := context.Background()
 
 	conn, err := service.Create(ctx, 1, sshconn.CreateSSHConnectionRequest{
-		Name:       "box",
-		Host:       "1.2.3.4",
-		Username:   "user",
-		AuthMethod: sshconn.AuthPassword,
-		Secret:     "old-secret",
+		Name: "box", Host: "1.2.3.4", Username: "user", PrivateKey: "old-key",
 	})
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
 
 	updated, err := service.Update(ctx, conn.ID, sshconn.UpdateSSHConnectionRequest{
-		Secret: "new-secret",
+		PrivateKey: "new-key",
 	})
 	if err != nil {
 		t.Fatalf("Update failed: %v", err)
 	}
 
-	plaintext, err := service.DecryptSecret(updated)
+	plaintext, err := service.DecryptPrivateKey(updated)
 	if err != nil {
-		t.Fatalf("DecryptSecret failed: %v", err)
+		t.Fatalf("DecryptPrivateKey failed: %v", err)
 	}
-	if plaintext != "new-secret" {
-		t.Fatalf("expected the secret to be updated, got %q", plaintext)
+	if plaintext != "new-key" {
+		t.Fatalf("expected the private key to be updated, got %q", plaintext)
 	}
 }
 
@@ -204,12 +306,12 @@ func TestListForCaller_WithWildcardReadAccess_SeesEverything(t *testing.T) {
 	ctx := context.Background()
 
 	if _, err := service.Create(ctx, 1, sshconn.CreateSSHConnectionRequest{
-		Name: "a", Host: "1.1.1.1", Username: "u", AuthMethod: sshconn.AuthPassword, Secret: "s",
+		Name: "a", Host: "1.1.1.1", Username: "u", PrivateKey: "k",
 	}); err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
 	if _, err := service.Create(ctx, 2, sshconn.CreateSSHConnectionRequest{
-		Name: "b", Host: "2.2.2.2", Username: "u", AuthMethod: sshconn.AuthPassword, Secret: "s",
+		Name: "b", Host: "2.2.2.2", Username: "u", PrivateKey: "k",
 	}); err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
@@ -240,16 +342,16 @@ func TestListForCaller_WithoutWildcardAccess_SeesOnlyGrantedRows(t *testing.T) {
 	// production, Create is gated by the wildcard "write" route
 	// middleware, not exercised here); listing uses a restrictive one
 	// that only allows the specific connection this test expects visible.
-	creator := sshconn.NewService(repo, box, noopGrant, allowAllLevels)
+	creator := sshconn.NewService(repo, box, noopGrant, allowAllLevels, alwaysSucceeds)
 
 	connA, err := creator.Create(ctx, 1, sshconn.CreateSSHConnectionRequest{
-		Name: "a", Host: "1.1.1.1", Username: "u", AuthMethod: sshconn.AuthPassword, Secret: "s",
+		Name: "a", Host: "1.1.1.1", Username: "u", PrivateKey: "k",
 	})
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
 	if _, err := creator.Create(ctx, 1, sshconn.CreateSSHConnectionRequest{
-		Name: "b", Host: "2.2.2.2", Username: "u", AuthMethod: sshconn.AuthPassword, Secret: "s",
+		Name: "b", Host: "2.2.2.2", Username: "u", PrivateKey: "k",
 	}); err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
@@ -259,7 +361,7 @@ func TestListForCaller_WithoutWildcardAccess_SeesOnlyGrantedRows(t *testing.T) {
 			return false, nil
 		}
 		return resourceID == connA.ID, nil
-	})
+	}, alwaysSucceeds)
 
 	items, total, err := restrictive.ListForCaller(ctx, 42, shared.DynamicFilter{}, shared.Pagination{PageNumber: 1, PageSize: 10})
 	if err != nil {
@@ -278,7 +380,7 @@ func TestListForCaller_NoAccessAtAll_SeesNothing(t *testing.T) {
 	ctx := context.Background()
 
 	if _, err := service.Create(ctx, 1, sshconn.CreateSSHConnectionRequest{
-		Name: "a", Host: "1.1.1.1", Username: "u", AuthMethod: sshconn.AuthPassword, Secret: "s",
+		Name: "a", Host: "1.1.1.1", Username: "u", PrivateKey: "k",
 	}); err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}

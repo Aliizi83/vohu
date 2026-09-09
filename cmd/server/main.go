@@ -58,8 +58,14 @@ func main() {
 		logger.Fatal(err, logging.General, logging.Startup, err.Error(), nil)
 	}
 
+	// TestConnectionFunc lives in internal/tools/command (the package that
+	// already owns every SSH-dialing concern) so sshconn itself never
+	// imports it directly — same injected-function pattern as
+	// grantCreatorAccess/hasAccessLevel above.
+	testSSHConnection := command.TestDial
+
 	sshconnRepo := sshconn.NewRepository(db.GetDB())
-	sshconnService := sshconn.NewService(sshconnRepo, secretBox, grantCreatorAccess, hasAccessLevel)
+	sshconnService := sshconn.NewService(sshconnRepo, secretBox, grantCreatorAccess, hasAccessLevel, testSSHConnection)
 	sshconnHandler := sshconn.NewHandler(sshconnService)
 
 	authService := auth.NewService(cfg, userService)

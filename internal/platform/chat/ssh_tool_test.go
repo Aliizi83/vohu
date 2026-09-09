@@ -11,8 +11,8 @@ import (
 )
 
 // stubSSHConnService is a minimal sshconn.Service double — only GetByID
-// and DecryptSecret are ever reached by SSHTool.Execute, so the rest just
-// panic if a test somehow calls them.
+// and DecryptPrivateKey are ever reached by SSHTool.Execute, so the rest
+// just panic if a test somehow calls them.
 type stubSSHConnService struct {
 	conn      *sshconn.SSHConnection
 	getErr    error
@@ -42,7 +42,7 @@ func (s *stubSSHConnService) ListForCaller(context.Context, uint, shared.Dynamic
 func (s *stubSSHConnService) GetByIDForCaller(context.Context, uint, uint) (*sshconn.SSHConnection, error) {
 	panic("not used by SSHTool")
 }
-func (s *stubSSHConnService) DecryptSecret(*sshconn.SSHConnection) (string, error) {
+func (s *stubSSHConnService) DecryptPrivateKey(*sshconn.SSHConnection) (string, error) {
 	if s.secretErr != nil {
 		return "", s.secretErr
 	}
@@ -131,10 +131,10 @@ func TestSSHTool_Execute_ConnectionNotFound(t *testing.T) {
 	}
 }
 
-func TestSSHTool_Execute_UnknownAuthMethod(t *testing.T) {
+func TestSSHTool_Execute_UnparseablePrivateKey(t *testing.T) {
 	svc := &stubSSHConnService{
-		conn:   &sshconn.SSHConnection{Host: "example.com", Port: 22, Username: "u", AuthMethod: "carrier_pigeon"},
-		secret: "irrelevant",
+		conn:   &sshconn.SSHConnection{Host: "example.com", Port: 22, Username: "u"},
+		secret: "not a real private key",
 	}
 	tool := NewSSHTool(1, svc, allowAccess, noopPolicy{})
 
@@ -146,7 +146,7 @@ func TestSSHTool_Execute_UnknownAuthMethod(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if result.Success {
-		t.Fatal("expected failure for an unrecognized auth method")
+		t.Fatal("expected failure for an unparseable private key")
 	}
 }
 

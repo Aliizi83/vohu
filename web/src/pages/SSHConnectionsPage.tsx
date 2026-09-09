@@ -14,13 +14,6 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
@@ -99,7 +92,6 @@ export default function SSHConnectionsPage() {
               <TableHead>{t("sshConnections.columnName")}</TableHead>
               <TableHead>{t("sshConnections.columnHost")}</TableHead>
               <TableHead>{t("sshConnections.columnUsername")}</TableHead>
-              <TableHead>{t("sshConnections.columnAuth")}</TableHead>
               <TableHead className="text-end">{t("common.actions")}</TableHead>
             </TableRow>
           </TableHeader>
@@ -107,7 +99,7 @@ export default function SSHConnectionsPage() {
             {connections === null &&
               Array.from({ length: 3 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell colSpan={6}>
+                  <TableCell colSpan={5}>
                     <Skeleton className="h-6 w-full" />
                   </TableCell>
                 </TableRow>
@@ -115,7 +107,7 @@ export default function SSHConnectionsPage() {
 
             {connections?.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                <TableCell colSpan={5} className="text-center text-muted-foreground">
                   {debouncedSearch ? t("common.noSearchResults") : t("sshConnections.empty")}
                 </TableCell>
               </TableRow>
@@ -129,9 +121,6 @@ export default function SSHConnectionsPage() {
                   {conn.host}:{conn.port}
                 </TableCell>
                 <TableCell>{conn.username}</TableCell>
-                <TableCell className="text-muted-foreground">
-                  {conn.authMethod === "password" ? t("sshConnections.authPassword") : t("sshConnections.authPrivateKey")}
-                </TableCell>
                 <TableCell className="text-end">
                   {hasLevel("ssh_connection", "manage") && (
                     <Button variant="destructive" size="sm" onClick={() => handleDelete(conn)}>
@@ -155,8 +144,7 @@ function CreateConnectionDialog({ onCreated }: { onCreated: () => void }) {
   const [host, setHost] = useState("")
   const [port, setPort] = useState("22")
   const [username, setUsername] = useState("")
-  const [authMethod, setAuthMethod] = useState<"password" | "private_key">("password")
-  const [secret, setSecret] = useState("")
+  const [privateKey, setPrivateKey] = useState("")
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: FormEvent) {
@@ -168,8 +156,7 @@ function CreateConnectionDialog({ onCreated }: { onCreated: () => void }) {
         host,
         port: Number(port) || undefined,
         username,
-        authMethod,
-        secret,
+        privateKey,
       })
       toast.success(t("sshConnections.created", { name }))
       setOpen(false)
@@ -177,10 +164,13 @@ function CreateConnectionDialog({ onCreated }: { onCreated: () => void }) {
       setHost("")
       setPort("22")
       setUsername("")
-      setAuthMethod("password")
-      setSecret("")
+      setPrivateKey("")
       onCreated()
     } catch (err) {
+      // A failed connection test comes back as a plain error message from
+      // the server (e.g. "ssh connection test failed: dial: ..."), the
+      // same path as any other ApiError — surfaced here rather than a
+      // generic fallback so the user knows *why* it didn't save.
       toast.error(err instanceof ApiError ? err.message : t("sshConnections.createFailed"))
     } finally {
       setLoading(false)
@@ -226,40 +216,22 @@ function CreateConnectionDialog({ onCreated }: { onCreated: () => void }) {
               />
             </div>
             <div className="space-y-2">
-              <Label>{t("sshConnections.authMethod")}</Label>
-              <Select
-                value={authMethod}
-                onValueChange={(value) => setAuthMethod((value as "password" | "private_key") ?? "password")}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue>
-                    {(value: string) =>
-                      value === "password" ? t("sshConnections.authPassword") : t("sshConnections.authPrivateKey")
-                    }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="password">{t("sshConnections.authPassword")}</SelectItem>
-                  <SelectItem value="private_key">{t("sshConnections.authPrivateKey")}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="conn-secret">
-                {authMethod === "password" ? t("sshConnections.secretPassword") : t("sshConnections.secretPrivateKey")}
-              </Label>
-              <Input
-                id="conn-secret"
-                type={authMethod === "password" ? "password" : "text"}
-                value={secret}
-                onChange={(e) => setSecret(e.target.value)}
+              <Label htmlFor="conn-private-key">{t("sshConnections.privateKey")}</Label>
+              <textarea
+                id="conn-private-key"
+                value={privateKey}
+                onChange={(e) => setPrivateKey(e.target.value)}
+                placeholder={t("sshConnections.privateKeyPlaceholder")}
                 required
+                rows={6}
+                spellCheck={false}
+                className="w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1.5 font-mono text-xs transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
               />
             </div>
           </div>
           <DialogFooter>
             <Button type="submit" disabled={loading}>
-              {loading ? t("common.creating") : t("common.create")}
+              {loading ? t("sshConnections.testingConnection") : t("common.create")}
             </Button>
           </DialogFooter>
         </form>

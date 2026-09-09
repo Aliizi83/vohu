@@ -2,6 +2,8 @@ package sshconn
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"github.com/Aliizi83/vohu/pkg/crypto"
@@ -15,6 +17,21 @@ import (
 // (rbac.AccessLevel/ResourceEffect's underlying type).
 type GrantCreatorAccess func(ctx context.Context, userID uint, resourceType string, resourceID uint, level string, effect string) error
 
+// TestConnectionFunc verifies a private key actually authenticates
+// against a host before Service.Create ever writes a row — injected the
+// same way every cross-cutting capability this package needs from outside
+// is (GrantCreatorAccess, shared.AccessLevelCheck): a function value, so
+// this package never imports internal/tools/command directly (only
+// chat.Handler does — see its doc comment). The concrete implementation
+// (command.TestDial) is wired up in cmd/server/main.go.
+type TestConnectionFunc func(ctx context.Context, host string, port int, username string, privateKey string) error
+
+// ErrConnectionTestFailed wraps whatever TestConnectionFunc returned —
+// errors.Is(err, ErrConnectionTestFailed) is how the handler recognizes
+// "the input was well-formed but the connection doesn't actually work"
+// and reports it as a 400 rather than a 500.
+var ErrConnectionTestFailed = errors.New("ssh connection test failed")
+
 const ResourceTypeSSHConnection = "ssh_connection"
 
 // Service is what the chat module depends on — never Repository directly.
@@ -24,6 +41,10 @@ const ResourceTypeSSHConnection = "ssh_connection"
 // falls back to a wildcard grant, then their roles', before ever reaching
 // the handler), so by the time these run the caller is already cleared.
 type Service interface {
+	// Create tests the connection (dials the host, completes the SSH auth
+	// handshake with the given private key) before writing anything — a
+	// connection that doesn't actually work is never persisted at all,
+	// see ErrConnectionTestFailed.
 	Create(ctx context.Context, userID uint, req CreateSSHConnectionRequest) (*SSHConnection, error)
 	GetByID(ctx context.Context, id uint) (*SSHConnection, error)
 	Update(ctx context.Context, id uint, req UpdateSSHConnectionRequest) (*SSHConnection, error)
@@ -39,10 +60,10 @@ type Service interface {
 	// connections they hold at least Read-level resource access to.
 	ListForCaller(ctx context.Context, userID uint, filter shared.DynamicFilter, page shared.Pagination) ([]SSHConnection, int64, error)
 
-	// DecryptSecret returns a connection's plaintext password/private key
-	// — only ever called server-side, right before dialing, never
-	// exposed through any HTTP response.
-	DecryptSecret(conn *SSHConnection) (string, error)
+	// DecryptPrivateKey returns a connection's plaintext private key —
+	// only ever called server-side, right before dialing, never exposed
+	// through any HTTP response.
+	DecryptPrivateKey(conn *SSHConnection) (string, error)
 }
 
 type service struct {
@@ -50,6 +71,7 @@ type service struct {
 	box            *crypto.Box
 	grantAccess    GrantCreatorAccess
 	hasAccessLevel shared.AccessLevelCheck
+	testConnection TestConnectionFunc
 }
 
 func NewService(
@@ -57,34 +79,39 @@ func NewService(
 	box *crypto.Box,
 	grantAccess GrantCreatorAccess,
 	hasAccessLevel shared.AccessLevelCheck,
+	testConnection TestConnectionFunc,
 ) Service {
 	return &service{
 		repo:           repo,
 		box:            box,
 		grantAccess:    grantAccess,
 		hasAccessLevel: hasAccessLevel,
+		testConnection: testConnection,
 	}
 }
 
 func (s *service) Create(ctx context.Context, userID uint, req CreateSSHConnectionRequest) (*SSHConnection, error) {
-	encrypted, err := s.box.Encrypt(req.Secret)
-	if err != nil {
-		return nil, err
-	}
-
 	port := req.Port
 	if port == 0 {
 		port = 22
 	}
 
+	if err := s.testConnection(ctx, req.Host, port, req.Username, req.PrivateKey); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrConnectionTestFailed, err)
+	}
+
+	encrypted, err := s.box.Encrypt(req.PrivateKey)
+	if err != nil {
+		return nil, err
+	}
+
 	conn := &SSHConnection{
-		Name:            req.Name,
-		Host:            req.Host,
-		Port:            port,
-		Username:        req.Username,
-		AuthMethod:      req.AuthMethod,
-		EncryptedSecret: encrypted,
-		CreatedByUserID: userID,
+		Name:                req.Name,
+		Host:                req.Host,
+		Port:                port,
+		Username:            req.Username,
+		EncryptedPrivateKey: encrypted,
+		CreatedByUserID:     userID,
 	}
 
 	if err := s.repo.Create(ctx, conn); err != nil {
@@ -124,15 +151,12 @@ func (s *service) Update(ctx context.Context, id uint, req UpdateSSHConnectionRe
 	if req.Username != "" {
 		conn.Username = req.Username
 	}
-	if req.AuthMethod != "" {
-		conn.AuthMethod = req.AuthMethod
-	}
-	if req.Secret != "" {
-		encrypted, err := s.box.Encrypt(req.Secret)
+	if req.PrivateKey != "" {
+		encrypted, err := s.box.Encrypt(req.PrivateKey)
 		if err != nil {
 			return nil, err
 		}
-		conn.EncryptedSecret = encrypted
+		conn.EncryptedPrivateKey = encrypted
 	}
 
 	if err := s.repo.Update(ctx, conn); err != nil {
@@ -154,8 +178,8 @@ func (s *service) List(
 	return s.repo.List(ctx, filter, page)
 }
 
-func (s *service) DecryptSecret(conn *SSHConnection) (string, error) {
-	return s.box.Decrypt(conn.EncryptedSecret)
+func (s *service) DecryptPrivateKey(conn *SSHConnection) (string, error) {
+	return s.box.Decrypt(conn.EncryptedPrivateKey)
 }
 
 func (s *service) ListForCaller(
