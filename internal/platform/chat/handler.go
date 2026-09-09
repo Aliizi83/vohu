@@ -9,6 +9,7 @@ import (
 	"github.com/Aliizi83/vohu/internal/agent"
 	"github.com/Aliizi83/vohu/internal/ai_model"
 	"github.com/Aliizi83/vohu/internal/platform/conversation"
+	"github.com/Aliizi83/vohu/internal/platform/custommodel"
 	"github.com/Aliizi83/vohu/internal/platform/providerkey"
 	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"github.com/Aliizi83/vohu/internal/platform/sshconn"
@@ -28,6 +29,7 @@ type Handler struct {
 	canAccess     shared.AccessLevelCheck
 	commandPolicy command.Policy
 	providerKeys  providerkey.Service
+	customModels  custommodel.Service
 }
 
 func NewHandler(
@@ -36,6 +38,7 @@ func NewHandler(
 	canAccess shared.AccessLevelCheck,
 	commandPolicy command.Policy,
 	providerKeys providerkey.Service,
+	customModels custommodel.Service,
 ) *Handler {
 	return &Handler{
 		conversations: conversations,
@@ -43,6 +46,7 @@ func NewHandler(
 		canAccess:     canAccess,
 		commandPolicy: commandPolicy,
 		providerKeys:  providerKeys,
+		customModels:  customModels,
 	}
 }
 
@@ -101,6 +105,17 @@ func (h *Handler) ListConversations(c *gin.Context) {
 	shared.RespondSuccess(c, http.StatusOK, shared.NewPagedList(responses, total, page))
 }
 
+type listMessagesQuery struct {
+	PageNumber int `form:"pageNumber"`
+	PageSize   int `form:"pageSize"`
+}
+
+// GetMessages returns one page of a conversation's messages — page 1 is
+// the most recent, higher page numbers reach further into the past — for
+// a chat view that loads older history as the user scrolls up rather than
+// fetching the whole conversation up front. This is separate from what
+// SendMessage feeds the agent (conversations.LoadHistory), which always
+// needs the full conversation for context regardless of what's on screen.
 func (h *Handler) GetMessages(c *gin.Context) {
 	userID, ok := shared.GetUserID(c)
 	if !ok {
@@ -114,7 +129,14 @@ func (h *Handler) GetMessages(c *gin.Context) {
 		return
 	}
 
-	history, err := h.conversations.LoadHistory(c.Request.Context(), userID, id)
+	var q listMessagesQuery
+	if err := c.ShouldBindQuery(&q); err != nil {
+		shared.RespondValidationError(c, err)
+		return
+	}
+	page := shared.Pagination{PageNumber: q.PageNumber, PageSize: q.PageSize}
+
+	items, total, err := h.conversations.ListMessages(c.Request.Context(), userID, id, page)
 	if err != nil {
 		if errors.Is(err, shared.ErrNotFound) {
 			shared.RespondError(c, http.StatusNotFound, shared.ResultNotFoundError, err)
@@ -124,12 +146,12 @@ func (h *Handler) GetMessages(c *gin.Context) {
 		return
 	}
 
-	responses := make([]MessageResponse, 0, len(history))
-	for _, msg := range history {
+	responses := make([]MessageResponse, 0, len(items))
+	for _, msg := range items {
 		responses = append(responses, toMessageResponse(msg))
 	}
 
-	shared.RespondSuccess(c, http.StatusOK, responses)
+	shared.RespondSuccess(c, http.StatusOK, shared.NewPagedList(responses, total, page))
 }
 
 // SendMessage is the actual turn: load history, run the agent (with the
@@ -166,7 +188,7 @@ func (h *Handler) SendMessage(c *gin.Context) {
 		return
 	}
 
-	llm, err := buildLLM(c.Request.Context(), h.providerKeys, userID, conv.Provider)
+	llm, err := buildLLM(c.Request.Context(), h.providerKeys, h.customModels, userID, conv.Provider, conv.CustomModelID)
 	if err != nil {
 		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, err)
 		return

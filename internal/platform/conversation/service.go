@@ -27,6 +27,13 @@ type Service interface {
 	// shape agent.Agent.Run takes directly.
 	LoadHistory(ctx context.Context, userID uint, conversationID uint) ([]ai_model.Message, error)
 
+	// ListMessages is the UI-facing counterpart to LoadHistory — one page
+	// at a time (page 1 = most recent) rather than the whole conversation,
+	// for a chat view that loads older messages as the user scrolls up
+	// instead of fetching everything up front. LoadHistory is left as-is
+	// for the agent, which always needs the full conversation for context.
+	ListMessages(ctx context.Context, userID uint, conversationID uint, page shared.Pagination) ([]ai_model.Message, int64, error)
+
 	// AppendHistory persists new messages produced by one agent turn —
 	// typically everything Agent.Run returned beyond what LoadHistory
 	// handed it.
@@ -44,10 +51,11 @@ func NewService(repo Repository, hasAccessLevel shared.AccessLevelCheck) Service
 
 func (s *service) Create(ctx context.Context, userID uint, req CreateConversationRequest) (*Conversation, error) {
 	conv := &Conversation{
-		UserID:   userID,
-		Title:    req.Title,
-		Provider: req.Provider,
-		Model:    req.Model,
+		UserID:        userID,
+		Title:         req.Title,
+		Provider:      req.Provider,
+		Model:         req.Model,
+		CustomModelID: req.CustomModelID,
 	}
 
 	if err := s.repo.CreateConversation(ctx, conv); err != nil {
@@ -130,6 +138,30 @@ func (s *service) LoadHistory(ctx context.Context, userID uint, conversationID u
 	}
 
 	return messages, nil
+}
+
+func (s *service) ListMessages(
+	ctx context.Context, userID uint, conversationID uint, page shared.Pagination,
+) ([]ai_model.Message, int64, error) {
+	if _, err := s.Get(ctx, userID, conversationID); err != nil {
+		return nil, 0, err
+	}
+
+	rows, total, err := s.repo.ListMessagesPage(ctx, conversationID, page)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	messages := make([]ai_model.Message, 0, len(rows))
+	for _, row := range rows {
+		msg, err := toAgentMessage(row)
+		if err != nil {
+			return nil, 0, err
+		}
+		messages = append(messages, msg)
+	}
+
+	return messages, total, nil
 }
 
 func (s *service) AppendHistory(ctx context.Context, conversationID uint, messages []ai_model.Message) error {

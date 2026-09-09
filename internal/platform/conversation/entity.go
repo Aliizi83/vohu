@@ -11,6 +11,15 @@ type Conversation struct {
 	Title    string `gorm:"type:varchar(255)"`
 	Provider string `gorm:"type:varchar(50);not null"`
 	Model    string `gorm:"type:varchar(100);not null"`
+
+	// CustomModelID is set when Provider is "openai" and the caller picked
+	// one of their (or a global) custommodel.CustomModel presets rather
+	// than the single per-user/global "openai" providerkey.Key slot — nil
+	// for every other conversation. Kept as a plain nullable ID, not a
+	// foreign key, same decoupling rule every cross-module reference in
+	// this codebase already follows (no import of custommodel here);
+	// chat.buildLLM is what actually resolves it.
+	CustomModelID *uint
 }
 
 func (Conversation) TableName() string { return "conversations" }

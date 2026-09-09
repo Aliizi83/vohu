@@ -207,6 +207,124 @@ func TestLoadHistory_DeniesNonOwnerWithNoResourceAccess(t *testing.T) {
 	}
 }
 
+// appendPlainMessages is a small helper for ListMessages tests below —
+// it appends N distinguishable user messages via AppendHistory, the same
+// path SendMessage uses, without needing tool calls/results in the fixture.
+func appendPlainMessages(t *testing.T, service conversation.Service, conversationID uint, contents ...string) {
+	t.Helper()
+	turn := make([]ai_model.Message, 0, len(contents))
+	for _, content := range contents {
+		turn = append(turn, ai_model.Message{Role: ai_model.RoleUser, Content: content})
+	}
+	if err := service.AppendHistory(context.Background(), conversationID, turn); err != nil {
+		t.Fatalf("AppendHistory failed: %v", err)
+	}
+}
+
+// TestListMessages_Page1ReturnsMostRecentInChronologicalOrder checks the
+// core contract: page 1 is the *last* pageSize messages, but returned
+// oldest-to-newest within that page — "newest first" only decides which
+// page a message lands on, not the order within one page.
+func TestListMessages_Page1ReturnsMostRecentInChronologicalOrder(t *testing.T) {
+	service := newTestService(t)
+	ctx := context.Background()
+
+	conv, err := service.Create(ctx, 1, conversation.CreateConversationRequest{
+		Title: "chat", Provider: "gemini", Model: "m",
+	})
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	appendPlainMessages(t, service, conv.ID, "one", "two", "three", "four", "five")
+
+	page, total, err := service.ListMessages(ctx, 1, conv.ID, shared.Pagination{PageNumber: 1, PageSize: 3})
+	if err != nil {
+		t.Fatalf("ListMessages failed: %v", err)
+	}
+	if total != 5 {
+		t.Fatalf("expected total=5, got %d", total)
+	}
+	if len(page) != 3 {
+		t.Fatalf("expected 3 messages on page 1, got %d", len(page))
+	}
+	got := []string{page[0].Content, page[1].Content, page[2].Content}
+	want := []string{"three", "four", "five"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("expected page 1 = %v (oldest-to-newest within the most recent 3), got %v", want, got)
+		}
+	}
+}
+
+// TestListMessages_Page2ReachesFurtherIntoThePast checks that higher page
+// numbers walk backward through history, and that the boundary page
+// (fewer than a full pageSize left) still comes back in order.
+func TestListMessages_Page2ReachesFurtherIntoThePast(t *testing.T) {
+	service := newTestService(t)
+	ctx := context.Background()
+
+	conv, err := service.Create(ctx, 1, conversation.CreateConversationRequest{
+		Title: "chat", Provider: "gemini", Model: "m",
+	})
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	appendPlainMessages(t, service, conv.ID, "one", "two", "three", "four", "five")
+
+	page, total, err := service.ListMessages(ctx, 1, conv.ID, shared.Pagination{PageNumber: 2, PageSize: 3})
+	if err != nil {
+		t.Fatalf("ListMessages failed: %v", err)
+	}
+	if total != 5 {
+		t.Fatalf("expected total=5, got %d", total)
+	}
+	if len(page) != 2 {
+		t.Fatalf("expected 2 messages on the boundary page, got %d", len(page))
+	}
+	if page[0].Content != "one" || page[1].Content != "two" {
+		t.Fatalf("expected page 2 = [one two], got [%s %s]", page[0].Content, page[1].Content)
+	}
+}
+
+func TestListMessages_DeniesNonOwnerWithNoResourceAccess(t *testing.T) {
+	service := newTestService(t)
+	ctx := context.Background()
+
+	conv, err := service.Create(ctx, 1, conversation.CreateConversationRequest{
+		Title: "private", Provider: "gemini", Model: "m",
+	})
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	appendPlainMessages(t, service, conv.ID, "secret")
+
+	_, _, err = service.ListMessages(ctx, 2, conv.ID, shared.Pagination{PageNumber: 1, PageSize: 10})
+	if err != shared.ErrNotFound {
+		t.Fatalf("expected shared.ErrNotFound for a non-owner with no resource access, got %v", err)
+	}
+}
+
+func TestListMessages_AllowsNonOwnerWithResourceAccess(t *testing.T) {
+	service := conversation.NewService(conversation.NewRepository(setupConversationTestDB(t)), allowAccessLevel)
+	ctx := context.Background()
+
+	conv, err := service.Create(ctx, 1, conversation.CreateConversationRequest{
+		Title: "shared", Provider: "gemini", Model: "m",
+	})
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	appendPlainMessages(t, service, conv.ID, "hello")
+
+	page, total, err := service.ListMessages(ctx, 2, conv.ID, shared.Pagination{PageNumber: 1, PageSize: 10})
+	if err != nil {
+		t.Fatalf("expected a non-owner with resource-level read access to succeed, got %v", err)
+	}
+	if total != 1 || len(page) != 1 || page[0].Content != "hello" {
+		t.Fatalf("expected the shared message to come back, got total=%d page=%+v", total, page)
+	}
+}
+
 func TestList_OnlyReturnsCallersConversations(t *testing.T) {
 	service := newTestService(t)
 	ctx := context.Background()

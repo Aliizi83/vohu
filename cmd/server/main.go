@@ -7,6 +7,7 @@ import (
 	"github.com/Aliizi83/vohu/internal/platform/auth"
 	"github.com/Aliizi83/vohu/internal/platform/chat"
 	"github.com/Aliizi83/vohu/internal/platform/conversation"
+	"github.com/Aliizi83/vohu/internal/platform/custommodel"
 	"github.com/Aliizi83/vohu/internal/platform/httpserver"
 	"github.com/Aliizi83/vohu/internal/platform/migrations"
 	"github.com/Aliizi83/vohu/internal/platform/providerkey"
@@ -84,7 +85,11 @@ func main() {
 	providerKeyService := providerkey.NewService(providerKeyRepo, secretBox)
 	providerKeyHandler := providerkey.NewHandler(providerKeyService)
 
-	chatHandler := chat.NewHandler(conversationService, sshconnService, hasAccessLevel, sshCommandPolicy, providerKeyService)
+	customModelRepo := custommodel.NewRepository(db.GetDB())
+	customModelService := custommodel.NewService(customModelRepo, secretBox)
+	customModelHandler := custommodel.NewHandler(customModelService)
+
+	chatHandler := chat.NewHandler(conversationService, sshconnService, hasAccessLevel, sshCommandPolicy, providerKeyService, customModelService)
 
 	engine, v1 := httpserver.NewEngine(logger)
 
@@ -94,6 +99,7 @@ func main() {
 	rbac.RegisterRoutes(v1, rbacHandler, authMiddleware, rbacService)
 	sshconn.RegisterRoutes(v1, sshconnHandler, authMiddleware, hasAccessLevel)
 	providerkey.RegisterRoutes(v1, providerKeyHandler, authMiddleware, hasAccessLevel)
+	custommodel.RegisterRoutes(v1, customModelHandler, authMiddleware, hasAccessLevel)
 	chat.RegisterRoutes(v1, chatHandler, authMiddleware)
 	auth.RegisterRoutes(v1, authHandler)
 

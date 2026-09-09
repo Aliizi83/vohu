@@ -14,6 +14,12 @@ type Repository interface {
 
 	AppendMessages(ctx context.Context, rows []Message) error
 	ListMessages(ctx context.Context, conversationID uint) ([]Message, error)
+
+	// ListMessagesPage is the UI-facing counterpart to ListMessages — that
+	// one always reads the whole conversation for the agent's own context
+	// (LoadHistory), this one reads one page at a time for display. Page 1
+	// is the most recent messages; higher page numbers reach further back.
+	ListMessagesPage(ctx context.Context, conversationID uint, page shared.Pagination) ([]Message, int64, error)
 }
 
 // gormRepository holds a generic repository for Conversation's plain CRUD
@@ -88,4 +94,41 @@ func (r *gormRepository) ListMessages(ctx context.Context, conversationID uint) 
 		Find(&rows).Error
 
 	return rows, err
+}
+
+// ListMessagesPage fetches the Nth most-recent chunk (page 1 = newest)
+// via ORDER BY id DESC + offset/limit, the same pattern
+// ListConversationsByUser uses, then reverses that chunk back to
+// chronological order — callers want to render a page top-to-bottom like
+// the rest of the conversation, "newest first" is only how pages are
+// numbered, not how a single page reads.
+func (r *gormRepository) ListMessagesPage(
+	ctx context.Context,
+	conversationID uint,
+	page shared.Pagination,
+) ([]Message, int64, error) {
+	var items []Message
+	var total int64
+
+	query := r.db.WithContext(ctx).Model(&Message{}).Where("conversation_id = ?", conversationID)
+
+	countQuery := query.Session(&gorm.Session{})
+	if err := countQuery.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	err := query.
+		Order("id DESC").
+		Offset(page.Offset()).
+		Limit(page.Limit()).
+		Find(&items).Error
+	if err != nil {
+		return nil, 0, err
+	}
+
+	for i, j := 0, len(items)-1; i < j; i, j = i+1, j-1 {
+		items[i], items[j] = items[j], items[i]
+	}
+
+	return items, total, nil
 }

@@ -135,6 +135,7 @@ export const en = {
     send: "Send",
     loadConversationsFailed: "Failed to load conversations",
     loadMessagesFailed: "Failed to load messages",
+    loadingOlderMessages: "Loading older messages…",
     callingTool: "→ calling {{name}}({{args}})",
     toolError: "error: {{error}}",
     newConversationDialogTitle: "New conversation",
@@ -177,6 +178,29 @@ export const en = {
     workspaceIdPlaceholder: "Only needed for a multi-workspace organization",
     saved: "{{label}} key saved",
     saveFailed: "Failed to save key",
+
+    myCustomModelsTitle: "My custom OpenAI-compatible models",
+    myCustomModelsDescription:
+      "Any number of named presets, each with its own URL, API key, and model — a local Ollama server and a DeepSeek account can coexist, unlike the single OpenAI-compatible slot above.",
+    globalCustomModelsTitle: "Global custom OpenAI-compatible models",
+    globalCustomModelsDescription: "Presets every user can pick when starting a new chat, not just you.",
+    columnName: "Name",
+    columnModelName: "Model",
+    noCustomModels: "No custom models yet.",
+    addCustomModel: "Add",
+    addCustomModelDialogTitle: "Add a custom OpenAI-compatible model",
+    addCustomModelDialogDescription:
+      "The API key is encrypted before it's stored and is never returned by the API again.",
+    customModelNameLabel: "Name",
+    customModelNamePlaceholder: "e.g. My local Ollama",
+    customModelBaseUrlLabel: "Base URL",
+    customModelBaseUrlPlaceholder: "e.g. http://localhost:11434/v1",
+    modelNameLabel: "Model name",
+    modelNamePlaceholder: "e.g. llama3, deepseek-chat",
+    customModelAdded: '"{{name}}" added',
+    addCustomModelFailed: "Failed to add custom model",
+    confirmRemoveCustomModel: 'Remove "{{name}}"? Conversations already using it will stop working.',
+    removedCustomModel: '"{{name}}" removed',
   },
 
   resourceAccess: {

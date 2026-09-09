@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
@@ -26,10 +26,16 @@ import {
   ApiError,
   streamMessage,
   type ConversationDto,
+  type CustomModelDto,
   type MessageDto,
   type SSHConnectionDto,
 } from "@/lib/api"
 import { cn } from "cn"
+
+// How many messages a page of chat history holds — small enough that
+// older history doesn't get fetched until the user actually scrolls up
+// for it, large enough that a normal-length conversation loads in one page.
+const MESSAGES_PAGE_SIZE = 30
 
 const MODEL_OPTIONS = [
   { label: "Gemini Flash", provider: "gemini", model: "gemini-3.7-flash" },
@@ -46,6 +52,8 @@ export default function ChatPage() {
   const [connections, setConnections] = useState<SSHConnectionDto[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [messages, setMessages] = useState<MessageDto[] | null>(null)
+  const [hasMoreMessages, setHasMoreMessages] = useState(false)
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false)
 
   const [pendingUserContent, setPendingUserContent] = useState<string | null>(null)
   const [streamingText, setStreamingText] = useState("")
@@ -53,6 +61,21 @@ export default function ChatPage() {
   const [input, setInput] = useState("")
 
   const scrollRef = useRef<HTMLDivElement>(null)
+  // The next page to fetch when the user scrolls up for older history —
+  // page 1 (the most recent messages) is always loaded up front when a
+  // conversation is selected, so this starts at 2.
+  const nextOlderPageRef = useRef(2)
+  // Set right before a state update that should jump the view to the
+  // bottom (a freshly selected conversation, a newly sent/received
+  // message) — read and cleared by the layout effect below, since
+  // "messages changed" alone doesn't say whether that's from the bottom
+  // (scroll down) or the top (scroll-up load, keep position).
+  const shouldScrollToBottomRef = useRef(false)
+  // Set right before prepending an older page, holding the scroll
+  // metrics from just before the DOM grows — the layout effect uses it to
+  // keep the same message in view instead of the prepend visually
+  // yanking the reader back to a different spot.
+  const preserveScrollRef = useRef<{ height: number; top: number } | null>(null)
 
   const loadConversations = useCallback(async () => {
     try {
@@ -84,12 +107,19 @@ export default function ChatPage() {
   useEffect(() => {
     if (selectedId === null) {
       setMessages(null)
+      setHasMoreMessages(false)
       return
     }
     setMessages(null)
+    setHasMoreMessages(false)
+    nextOlderPageRef.current = 2
     api.conversations
-      .messages(selectedId)
-      .then(setMessages)
+      .messages(selectedId, 1, MESSAGES_PAGE_SIZE)
+      .then((page) => {
+        shouldScrollToBottomRef.current = true
+        setMessages(page.items)
+        setHasMoreMessages(page.hasNextPage)
+      })
       .catch((err) => {
         toast.error(err instanceof ApiError ? err.message : t("chat.loadMessagesFailed"))
         setMessages([])
@@ -98,9 +128,63 @@ export default function ChatPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId])
 
+  // Fires when the reader scrolls near the top of the currently loaded
+  // history — fetches the next (older) page and prepends it, preserving
+  // scroll position via preserveScrollRef instead of jumping the view.
+  const loadOlderMessages = useCallback(() => {
+    const el = scrollRef.current
+    if (!el || selectedId === null || !hasMoreMessages || loadingOlderMessages) return
+
+    setLoadingOlderMessages(true)
+    preserveScrollRef.current = { height: el.scrollHeight, top: el.scrollTop }
+    api.conversations
+      .messages(selectedId, nextOlderPageRef.current, MESSAGES_PAGE_SIZE)
+      .then((page) => {
+        nextOlderPageRef.current += 1
+        setMessages((prev) => [...page.items, ...(prev ?? [])])
+        setHasMoreMessages(page.hasNextPage)
+      })
+      .catch((err) => {
+        preserveScrollRef.current = null
+        toast.error(err instanceof ApiError ? err.message : t("chat.loadMessagesFailed"))
+      })
+      .finally(() => setLoadingOlderMessages(false))
+  }, [selectedId, hasMoreMessages, loadingOlderMessages, t])
+
+  function handleScroll() {
+    const el = scrollRef.current
+    if (!el || el.scrollTop > 80) return
+    loadOlderMessages()
+  }
+
+  // Scrolls to the bottom while the assistant's reply streams in, or
+  // while the optimistic pending user bubble is showing — both only ever
+  // add content at the bottom, unlike `messages` changing below.
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })
-  }, [messages, streamingText, pendingUserContent])
+  }, [streamingText, pendingUserContent])
+
+  // `messages` changes for two different reasons that need opposite
+  // scroll behavior: a freshly loaded conversation or a newly appended
+  // turn should jump to the bottom (shouldScrollToBottomRef); an older
+  // page prepended from a scroll-up load should instead keep the
+  // reader's current position in view (preserveScrollRef).
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+
+    if (preserveScrollRef.current) {
+      const { height, top } = preserveScrollRef.current
+      el.scrollTop = el.scrollHeight - height + top
+      preserveScrollRef.current = null
+      return
+    }
+
+    if (shouldScrollToBottomRef.current) {
+      el.scrollTop = el.scrollHeight
+      shouldScrollToBottomRef.current = false
+    }
+  }, [messages])
 
   async function handleSend(e: FormEvent) {
     e.preventDefault()
@@ -115,6 +199,7 @@ export default function ChatPage() {
     await streamMessage(selectedId, content, {
       onChunk: (chunk) => setStreamingText((prev) => prev + chunk),
       onDone: (newMessages) => {
+        shouldScrollToBottomRef.current = true
         setMessages((prev) => [...(prev ?? []), ...newMessages])
         setPendingUserContent(null)
         setStreamingText("")
@@ -197,9 +282,13 @@ export default function ChatPage() {
               </p>
             </div>
 
-            <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+            <div ref={scrollRef} onScroll={handleScroll} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
               {messages === null &&
                 Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-12 w-2/3" />)}
+
+              {loadingOlderMessages && (
+                <p className="text-center text-xs text-muted-foreground">{t("chat.loadingOlderMessages")}</p>
+              )}
 
               {messages?.map((msg, i) => (
                 <MessageBubble key={i} message={msg} />
@@ -279,28 +368,60 @@ function MessageBubble({ message, pending }: { message: MessageDto; pending?: bo
   )
 }
 
+// A selection in the model picker is either one of the hardcoded
+// MODEL_OPTIONS (key "builtin:<index>") or one of the caller's saved
+// custommodel presets (key "custom:<id>") — a plain index into
+// MODEL_OPTIONS alone can't represent the dynamic, per-user preset list,
+// so every option in the picker gets one of these string keys instead.
+function builtinKey(index: number) {
+  return `builtin:${index}`
+}
+function customKey(id: number) {
+  return `custom:${id}`
+}
+
 function NewConversationDialog({ onCreated }: { onCreated: (conv: ConversationDto) => void }) {
   const { t } = useLanguage()
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState("")
-  const [optionIndex, setOptionIndex] = useState("0")
+  const [selectedKey, setSelectedKey] = useState(builtinKey(0))
   const [customModel, setCustomModel] = useState("")
   const [loading, setLoading] = useState(false)
+  const [presets, setPresets] = useState<CustomModelDto[]>([])
 
-  const option = MODEL_OPTIONS[Number(optionIndex)]
-  const isCustom = option.provider === "openai" && option.model === ""
+  useEffect(() => {
+    if (!open) return
+    api.customModels
+      .listAvailable()
+      .then(setPresets)
+      .catch(() => {
+        // Non-fatal — the hardcoded MODEL_OPTIONS still work without it.
+      })
+  }, [open])
+
+  const selectedPreset = selectedKey.startsWith("custom:")
+    ? presets.find((p) => customKey(p.id) === selectedKey)
+    : undefined
+  const builtinIndex = selectedKey.startsWith("builtin:") ? Number(selectedKey.slice("builtin:".length)) : -1
+  const builtinOption = builtinIndex >= 0 ? MODEL_OPTIONS[builtinIndex] : undefined
+  const isFreeformCustom = builtinOption?.provider === "openai" && builtinOption.model === ""
+
+  const selectedLabel = selectedPreset?.name ?? builtinOption?.label ?? t("chat.modelLabel")
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    const model = isCustom ? customModel.trim() : option.model
-    if (!model) return
+
+    const provider = selectedPreset ? "openai" : builtinOption?.provider
+    const model = selectedPreset ? selectedPreset.modelName : isFreeformCustom ? customModel.trim() : builtinOption?.model
+    if (!provider || !model) return
 
     setLoading(true)
     try {
       const conv = await api.conversations.create({
         title: title.trim() || t("chat.titlePlaceholder"),
-        provider: option.provider,
+        provider,
         model,
+        customModelId: selectedPreset?.id,
       })
       toast.success(t("chat.conversationCreated"))
       setOpen(false)
@@ -335,22 +456,25 @@ function NewConversationDialog({ onCreated }: { onCreated: (conv: ConversationDt
             </div>
             <div className="space-y-2">
               <Label>{t("chat.modelLabel")}</Label>
-              <Select value={optionIndex} onValueChange={(value) => setOptionIndex(value ?? "0")}>
+              <Select value={selectedKey} onValueChange={(value) => setSelectedKey(value ?? builtinKey(0))}>
                 <SelectTrigger className="w-full">
-                  <SelectValue>
-                    {(value: string) => MODEL_OPTIONS[Number(value)]?.label ?? t("chat.modelLabel")}
-                  </SelectValue>
+                  <SelectValue>{() => selectedLabel}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {MODEL_OPTIONS.map((opt, i) => (
-                    <SelectItem key={opt.label} value={String(i)}>
+                    <SelectItem key={builtinKey(i)} value={builtinKey(i)}>
                       {opt.label}
+                    </SelectItem>
+                  ))}
+                  {presets.map((preset) => (
+                    <SelectItem key={customKey(preset.id)} value={customKey(preset.id)}>
+                      {preset.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            {isCustom && (
+            {isFreeformCustom && (
               <div className="space-y-2">
                 <Label htmlFor="conv-custom-model">{t("chat.modelNameLabel")}</Label>
                 <Input
@@ -364,7 +488,7 @@ function NewConversationDialog({ onCreated }: { onCreated: (conv: ConversationDt
             )}
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={loading || (isCustom && !customModel.trim())}>
+            <Button type="submit" disabled={loading || (isFreeformCustom && !customModel.trim())}>
               {loading ? t("common.creating") : t("common.create")}
             </Button>
           </DialogFooter>

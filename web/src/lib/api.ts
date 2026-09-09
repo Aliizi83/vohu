@@ -99,6 +99,7 @@ export interface ConversationDto {
   title: string
   provider: string
   model: string
+  customModelId?: number
 }
 
 export interface ToolCallDto {
@@ -137,6 +138,18 @@ export interface ProviderKeyDto {
   provider: LLMProvider
   baseUrl?: string
   workspaceId?: string
+}
+
+// CustomModelDto is one named OpenAI-compatible preset (see
+// custommodel.CustomModel on the backend) — unlike ProviderKeyDto there
+// can be any number of these per user, which is the point: two different
+// OpenAI-compatible endpoints (a local Ollama server and a DeepSeek
+// account, say) need two different (baseUrl, apiKey) pairs, not one.
+export interface CustomModelDto {
+  id: number
+  name: string
+  baseUrl: string
+  modelName: string
 }
 
 export type AccessLevel = "read" | "write" | "manage"
@@ -247,9 +260,10 @@ export const api = {
   conversations: {
     list: (page?: number, pageSize?: number) =>
       request<PagedList<ConversationDto>>("GET", "/conversations", { query: listQuery(page, pageSize) }),
-    create: (data: { title: string; provider: string; model: string }) =>
+    create: (data: { title: string; provider: string; model: string; customModelId?: number }) =>
       request<ConversationDto>("POST", "/conversations", { body: data }),
-    messages: (id: number) => request<MessageDto[]>("GET", `/conversations/${id}/messages`),
+    messages: (id: number, page?: number, pageSize?: number) =>
+      request<PagedList<MessageDto>>("GET", `/conversations/${id}/messages`, { query: listQuery(page, pageSize) }),
   },
 
   sshConnections: {
@@ -278,6 +292,23 @@ export const api = {
     setGlobal: (data: { provider: LLMProvider; apiKey: string; baseUrl?: string; workspaceId?: string }) =>
       request<null>("POST", "/provider-keys", { body: data }),
     removeGlobal: (provider: LLMProvider) => request<null>("DELETE", `/provider-keys/${provider}`),
+  },
+
+  customModels: {
+    // The new-chat picker's read path — every authenticated user's own
+    // presets plus every global one, regardless of whether they're
+    // allowed to manage (create/delete) global presets.
+    listAvailable: () => request<CustomModelDto[]>("GET", "/custom-models/available"),
+
+    listMine: () => request<CustomModelDto[]>("GET", "/custom-models/me"),
+    createMine: (data: { name: string; baseUrl: string; modelName: string; apiKey: string }) =>
+      request<CustomModelDto>("POST", "/custom-models/me", { body: data }),
+    removeMine: (id: number) => request<null>("DELETE", `/custom-models/me/${id}`),
+
+    listGlobal: () => request<CustomModelDto[]>("GET", "/custom-models"),
+    createGlobal: (data: { name: string; baseUrl: string; modelName: string; apiKey: string }) =>
+      request<CustomModelDto>("POST", "/custom-models", { body: data }),
+    removeGlobal: (id: number) => request<null>("DELETE", `/custom-models/${id}`),
   },
 
   resourceAccess: {

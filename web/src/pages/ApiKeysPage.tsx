@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/table"
 import { useConfirm } from "@/components/ConfirmDialog"
 import { useLanguage } from "@/lib/i18n"
-import { api, ApiError, type LLMProvider, type ProviderKeyDto } from "@/lib/api"
+import { api, ApiError, type CustomModelDto, type LLMProvider, type ProviderKeyDto } from "@/lib/api"
 
 const PROVIDERS: { value: LLMProvider; label: string }[] = [
   { value: "gemini", label: "Gemini" },
@@ -39,6 +39,10 @@ export default function ApiKeysPage() {
   // manage global keys at all (403), so that section is hidden entirely
   // rather than shown broken.
   const [canManageGlobal, setCanManageGlobal] = useState<boolean | null>(null)
+
+  const [myCustomModels, setMyCustomModels] = useState<CustomModelDto[] | null>(null)
+  const [globalCustomModels, setGlobalCustomModels] = useState<CustomModelDto[] | null>(null)
+  const [canManageGlobalCustomModels, setCanManageGlobalCustomModels] = useState<boolean | null>(null)
 
   const loadMine = useCallback(async () => {
     try {
@@ -61,10 +65,33 @@ export default function ApiKeysPage() {
     }
   }, [t])
 
+  const loadMyCustomModels = useCallback(async () => {
+    try {
+      setMyCustomModels(await api.customModels.listMine())
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("apiKeys.loadMineFailed"))
+    }
+  }, [t])
+
+  const loadGlobalCustomModels = useCallback(async () => {
+    try {
+      setGlobalCustomModels(await api.customModels.listGlobal())
+      setCanManageGlobalCustomModels(true)
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 403) {
+        setCanManageGlobalCustomModels(false)
+        return
+      }
+      toast.error(err instanceof ApiError ? err.message : t("apiKeys.loadGlobalFailed"))
+    }
+  }, [t])
+
   useEffect(() => {
     loadMine()
     loadGlobal()
-  }, [loadMine, loadGlobal])
+    loadMyCustomModels()
+    loadGlobalCustomModels()
+  }, [loadMine, loadGlobal, loadMyCustomModels, loadGlobalCustomModels])
 
   return (
     <div className="space-y-8">
@@ -102,8 +129,56 @@ export default function ApiKeysPage() {
           }}
         />
       )}
+
+      <CustomModelSection
+        title={t("apiKeys.myCustomModelsTitle")}
+        description={t("apiKeys.myCustomModelsDescription")}
+        models={myCustomModels}
+        suggestions={collectModelNameSuggestions(myCustomModels, globalCustomModels)}
+        onCreate={async (data) => {
+          await api.customModels.createMine(data)
+          await loadMyCustomModels()
+        }}
+        onRemove={async (id) => {
+          await api.customModels.removeMine(id)
+          await loadMyCustomModels()
+        }}
+      />
+
+      {canManageGlobalCustomModels && (
+        <CustomModelSection
+          title={t("apiKeys.globalCustomModelsTitle")}
+          description={t("apiKeys.globalCustomModelsDescription")}
+          models={globalCustomModels}
+          suggestions={collectModelNameSuggestions(myCustomModels, globalCustomModels)}
+          onCreate={async (data) => {
+            await api.customModels.createGlobal(data)
+            await loadGlobalCustomModels()
+          }}
+          onRemove={async (id) => {
+            await api.customModels.removeGlobal(id)
+            await loadGlobalCustomModels()
+          }}
+        />
+      )}
     </div>
   )
+}
+
+// collectModelNameSuggestions is the "suggest from the database" feature —
+// a plain distinct-values list from whatever presets are already loaded
+// (the caller's own plus any visible global ones), fed into the Add
+// dialog's <datalist> below. No dedicated backend endpoint: the page
+// already has to fetch these lists to render the tables, so there's
+// nothing more to ask the server for.
+function collectModelNameSuggestions(
+  mine: CustomModelDto[] | null,
+  global: CustomModelDto[] | null,
+): string[] {
+  const names = new Set<string>()
+  for (const m of mine ?? []) names.add(m.modelName)
+  for (const m of global ?? []) names.add(m.modelName)
+  return Array.from(names).sort()
 }
 
 function ProviderKeyTable({
@@ -280,6 +355,194 @@ function SetKeyDialog({
           </div>
           <DialogFooter>
             <Button type="submit" disabled={loading || !apiKey}>
+              {loading ? t("common.saving") : t("common.save")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function CustomModelSection({
+  title,
+  description,
+  models,
+  suggestions,
+  onCreate,
+  onRemove,
+}: {
+  title: string
+  description: string
+  models: CustomModelDto[] | null
+  suggestions: string[]
+  onCreate: (data: { name: string; baseUrl: string; modelName: string; apiKey: string }) => Promise<void>
+  onRemove: (id: number) => Promise<void>
+}) {
+  const { t } = useLanguage()
+  const { confirm, confirmDialog } = useConfirm()
+
+  async function handleRemove(model: CustomModelDto) {
+    const ok = await confirm({ description: t("apiKeys.confirmRemoveCustomModel", { name: model.name }) })
+    if (!ok) return
+    try {
+      await onRemove(model.id)
+      toast.success(t("apiKeys.removedCustomModel", { name: model.name }))
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("apiKeys.removeFailed"))
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      {confirmDialog}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-medium">{title}</h3>
+          <p className="text-sm text-muted-foreground">{description}</p>
+        </div>
+        <AddCustomModelDialog suggestions={suggestions} onCreate={onCreate} />
+      </div>
+
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("apiKeys.columnName")}</TableHead>
+              <TableHead>{t("apiKeys.columnModelName")}</TableHead>
+              <TableHead>{t("apiKeys.columnBaseUrlWorkspace")}</TableHead>
+              <TableHead className="text-end">{t("common.actions")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {models === null &&
+              Array.from({ length: 2 }).map((_, i) => (
+                <TableRow key={i}>
+                  <TableCell colSpan={4} className="text-muted-foreground">
+                    …
+                  </TableCell>
+                </TableRow>
+              ))}
+
+            {models?.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center text-muted-foreground">
+                  {t("apiKeys.noCustomModels")}
+                </TableCell>
+              </TableRow>
+            )}
+
+            {models?.map((model) => (
+              <TableRow key={model.id}>
+                <TableCell className="font-medium">{model.name}</TableCell>
+                <TableCell className="text-muted-foreground">{model.modelName}</TableCell>
+                <TableCell className="text-muted-foreground">{model.baseUrl}</TableCell>
+                <TableCell className="text-end">
+                  <Button variant="destructive" size="sm" onClick={() => handleRemove(model)}>
+                    {t("apiKeys.remove")}
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  )
+}
+
+function AddCustomModelDialog({
+  suggestions,
+  onCreate,
+}: {
+  suggestions: string[]
+  onCreate: (data: { name: string; baseUrl: string; modelName: string; apiKey: string }) => Promise<void>
+}) {
+  const { t } = useLanguage()
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState("")
+  const [baseUrl, setBaseUrl] = useState("")
+  const [modelName, setModelName] = useState("")
+  const [apiKey, setApiKey] = useState("")
+  const [loading, setLoading] = useState(false)
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      await onCreate({ name, baseUrl, modelName, apiKey })
+      toast.success(t("apiKeys.customModelAdded", { name }))
+      setOpen(false)
+      setName("")
+      setBaseUrl("")
+      setModelName("")
+      setApiKey("")
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("apiKeys.addCustomModelFailed"))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger render={<Button size="sm">{t("apiKeys.addCustomModel")}</Button>} />
+      <DialogContent>
+        <form onSubmit={handleSubmit}>
+          <DialogHeader>
+            <DialogTitle>{t("apiKeys.addCustomModelDialogTitle")}</DialogTitle>
+            <DialogDescription>{t("apiKeys.addCustomModelDialogDescription")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="custom-model-name">{t("apiKeys.customModelNameLabel")}</Label>
+              <Input
+                id="custom-model-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={t("apiKeys.customModelNamePlaceholder")}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="custom-model-base-url">{t("apiKeys.customModelBaseUrlLabel")}</Label>
+              <Input
+                id="custom-model-base-url"
+                value={baseUrl}
+                onChange={(e) => setBaseUrl(e.target.value)}
+                placeholder={t("apiKeys.customModelBaseUrlPlaceholder")}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="custom-model-model-name">{t("apiKeys.modelNameLabel")}</Label>
+              <Input
+                id="custom-model-model-name"
+                list="custom-model-name-suggestions"
+                value={modelName}
+                onChange={(e) => setModelName(e.target.value)}
+                placeholder={t("apiKeys.modelNamePlaceholder")}
+                required
+              />
+              <datalist id="custom-model-name-suggestions">
+                {suggestions.map((s) => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="custom-model-api-key">{t("apiKeys.apiKeyLabel")}</Label>
+              <Input
+                id="custom-model-api-key"
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                required
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={loading || !name || !baseUrl || !modelName || !apiKey}>
               {loading ? t("common.saving") : t("common.save")}
             </Button>
           </DialogFooter>
