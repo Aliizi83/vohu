@@ -38,6 +38,7 @@ func (e *LocalExecutor) Execute(
 		command.Program,
 		command.Args...,
 	)
+	cmd.Dir = command.Dir
 
 	output, err := cmd.CombinedOutput()
 

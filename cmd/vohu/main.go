@@ -14,6 +14,7 @@ import (
 	"github.com/Aliizi83/vohu/internal/ai_model/models"
 	"github.com/Aliizi83/vohu/internal/tools"
 	"github.com/Aliizi83/vohu/internal/tools/command"
+	"github.com/Aliizi83/vohu/internal/tools/filesystem"
 	"github.com/Aliizi83/vohu/internal/tools/system_tools"
 )
 
@@ -191,9 +192,27 @@ func main() {
 
 	executor := command.NewLocalExecutor(policy)
 
+	// Rooted at the directory vohu was launched from — every filesystem
+	// tool call is confined to this tree (see filesystem.Workspace), the
+	// same boundary a terminal coding agent's user already expects.
+	cwd, err := os.Getwd()
+	if err != nil {
+		log.Fatalf("failed to determine the working directory: %v", err)
+	}
+	workspace, err := filesystem.NewWorkspace(cwd)
+	if err != nil {
+		log.Fatalf("failed to open workspace at %s: %v", cwd, err)
+	}
+	readTracker := filesystem.NewReadTracker()
+
 	toolRegistry := tools.NewRegistry()
 	toolRegistry.Register(system_tools.NewCurrentSystemTime())
 	toolRegistry.Register(command.NewTool(executor))
+	toolRegistry.Register(command.NewShellTool(executor))
+	toolRegistry.Register(filesystem.NewReadFileTool(workspace, readTracker))
+	toolRegistry.Register(filesystem.NewWriteFileTool(workspace, readTracker))
+	toolRegistry.Register(filesystem.NewEditFileTool(workspace))
+	toolRegistry.Register(filesystem.NewListDirectoryTool(workspace))
 
 	vohuAgent := agent.New(llm, toolRegistry, choice.model)
 
