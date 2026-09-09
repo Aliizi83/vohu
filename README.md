@@ -33,7 +33,7 @@ export GEMINI_API_KEY=...      # or ANTHROPIC_API_KEY, or nothing (pick "OpenAI-
 go run ./cmd/vohu
 ```
 
-You'll be prompted to pick a model, then you're chatting — with `execute_command` and `get_current_system_time` available as tools out of the box.
+You'll be prompted to pick a model, then you're chatting — with the full tool set below available out of the box, rooted at the directory you ran it from.
 
 ### Platform (server + web app)
 
@@ -61,7 +61,9 @@ The agent core knows nothing about HTTP, databases, or multiple users — that s
 | [`internal/ai_model/models`](internal/ai_model/models) | `LLM` implementations — Gemini ([`google.golang.org/genai`](https://pkg.go.dev/google.golang.org/genai)), Anthropic ([`anthropic-sdk-go`](https://github.com/anthropics/anthropic-sdk-go)), and OpenAI/OpenAI-compatible ([`openai-go`](https://github.com/openai/openai-go), any base URL — DeepSeek, Groq, a local Ollama server, ...). |
 | [`internal/agent`](internal/agent) | The loop itself: calls the model, executes requested tools through the registry, feeds results back, repeats until the model stops asking for tools. No knowledge of terminals, providers, or specific tools. |
 | [`internal/tools`](internal/tools) | The `Tool` interface and `Registry` — register a tool, and its model-facing definition is auto-derived. Nothing to keep in sync by hand. |
-| [`internal/tools/command`](internal/tools/command) | `Command`, a rule-based `Policy` (allow-list or deny-list, matched on program + argument prefixes), a `LocalExecutor` and `SSHExecutor` that check the policy before anything runs, and `TestDial` for verifying an SSH key works before a connection is ever saved. |
+| [`internal/tools/command`](internal/tools/command) | `Command`, a rule-based `Policy` (allow-list or deny-list, matched on program + argument prefixes), a `LocalExecutor`/`SSHExecutor` that check the policy before anything runs, `execute_command` (one program, no shell) and `execute_shell` (`sh -c`, so pipes/redirects work — policy is checked against shell execution as a whole, since there's no sound way to allow-list what's chained inside an arbitrary shell string), and `TestDial` for verifying an SSH key works before a connection is ever saved. |
+| [`internal/tools/filesystem`](internal/tools/filesystem) | `read_file`, `write_file` (refuses to overwrite a file that hasn't been read first), `edit_file` (exact-match str_replace), `list_directory`, `search_files` (grep), `find_files` (glob, `**` supported) — every one resolved through a shared `Workspace` that rejects any path escaping its root, string-based or via a symlink. |
+| [`internal/tools/network`](internal/tools/network) | `http_fetch` — HTML responses come back as extracted text, not raw markup. |
 | [`internal/tools/system_tools`](internal/tools/system_tools) | Example tool: current system time. |
 | [`cmd/vohu`](cmd/vohu) | Terminal entry point. |
 | [`cmd/server`](cmd/server) | HTTP entry point — composition root for every `internal/platform` module below. |
@@ -114,8 +116,11 @@ npm run lint     # oxlint
 - [x] SSH connections as agent tools, with pre-save connection testing
 - [x] Persisted, paginated conversations
 - [x] Web frontend (React, i18n, RTL)
+- [x] Filesystem tools (read/write/edit/list/search/find), scoped to a workspace root
+- [x] Shell + HTTP fetch tools
+- [ ] Web search
 - [ ] Structured parameter schemas for tool definitions
-- [ ] Additional tools (Docker, file I/O)
+- [ ] Additional tools (Docker, a persistent task list)
 - [ ] Broader test coverage
 
 ## License

@@ -15,6 +15,7 @@ import (
 	"github.com/Aliizi83/vohu/internal/tools"
 	"github.com/Aliizi83/vohu/internal/tools/command"
 	"github.com/Aliizi83/vohu/internal/tools/filesystem"
+	"github.com/Aliizi83/vohu/internal/tools/network"
 	"github.com/Aliizi83/vohu/internal/tools/system_tools"
 )
 
@@ -212,6 +213,9 @@ func main() {
 	toolRegistry.Register(filesystem.NewReadFileTool(workspace, readTracker))
 	toolRegistry.Register(filesystem.NewWriteFileTool(workspace, readTracker))
 	toolRegistry.Register(filesystem.NewEditFileTool(workspace))
+	toolRegistry.Register(filesystem.NewSearchFilesTool(workspace))
+	toolRegistry.Register(filesystem.NewFindFilesTool(workspace))
+	toolRegistry.Register(network.NewHTTPFetchTool())
 	toolRegistry.Register(filesystem.NewListDirectoryTool(workspace))
 
 	vohuAgent := agent.New(llm, toolRegistry, choice.model)
