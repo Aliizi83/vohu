@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react"
 import { Navigate, useNavigate } from "react-router-dom"
 import { toast } from "sonner"
+import { Logo } from "@/components/Logo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -40,7 +41,8 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-muted/30 p-4">
+      <Logo className="size-14" />
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>{t("login.title")}</CardTitle>

@@ -1,3 +1,5 @@
+<img src="web/public/favicon.svg" alt="Vohu logo" width="72" height="72">
+
 # Vohu
 
 [![Go](https://github.com/Aliizi83/vohu/actions/workflows/go.yml/badge.svg)](https://github.com/Aliizi83/vohu/actions/workflows/go.yml)

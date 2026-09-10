@@ -1,5 +1,6 @@
 import { KeySquare, LogOut, MessageSquare, Server, Shield, ShieldCheck, Users } from "lucide-react"
 import { NavLink, Outlet } from "react-router-dom"
+import { Logo } from "@/components/Logo"
 import { Button } from "@/components/ui/button"
 import type { AccessLevel } from "@/lib/api"
 import { useAccess } from "@/lib/access"
@@ -44,9 +45,12 @@ export default function Layout() {
   return (
     <div className="flex min-h-screen">
       <aside className="flex w-60 flex-col gap-1 border-e bg-card p-4">
-        <div className="mb-4 px-2">
-          <h1 className="text-lg font-semibold">{t("nav.appName")}</h1>
-          <p className="text-xs text-muted-foreground">{t("nav.appTagline")}</p>
+        <div className="mb-4 flex items-center gap-2 px-2">
+          <Logo className="size-8 shrink-0" />
+          <div>
+            <h1 className="text-lg font-semibold">{t("nav.appName")}</h1>
+            <p className="text-xs text-muted-foreground">{t("nav.appTagline")}</p>
+          </div>
         </div>
 
         {visibleNavItems.map(({ to, labelKey, icon: Icon }) => (
