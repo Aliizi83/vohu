@@ -117,11 +117,12 @@ func LoadConfig(filename string, fileType string) (*viper.Viper, error) {
 // getConfigPath is relative to the repo root, since cmd/server is meant to
 // be run as `go run ./cmd/server` from there.
 func getConfigPath(env string) string {
-	if env == "docker" {
+	switch env {
+case "docker":
 		return "/app/config/config-docker"
-	} else if env == "production" {
+	case "production":
 		return "/config/config-production"
-	} else {
+	default:
 		return "config/config-development"
 	}
 }
