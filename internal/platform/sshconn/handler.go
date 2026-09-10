@@ -31,6 +31,18 @@ func mapError(err error) (int, shared.ResultCode) {
 // the authenticated user's ID (to record who owns the new connection and
 // auto-grant them access) — CreateHandler's create func has no room for
 // that.
+//
+//	@Summary		Create an SSH connection
+//	@Description	Registers a new SSH connection. Private-key auth only — the connection is test-dialed (real handshake, no command run) before it's saved, so a bad host or mismatched key fails loudly here instead of the first time the agent tries to use it. The key is encrypted at rest and never returned by any response. The creator is auto-granted "manage" on the new connection. Requires wildcard "write" access on resource type "ssh_connection".
+//	@Tags			ssh-connections
+//	@Accept			json
+//	@Produce		json
+//	@Param			request	body		CreateSSHConnectionRequest	true	"New connection"
+//	@Success		201		{object}	shared.BaseResponse{result=Response}
+//	@Failure		400		{object}	shared.BaseResponse	"Validation error, or the connection test failed (bad host/key)"
+//	@Failure		401		{object}	shared.BaseResponse
+//	@Security		BearerAuth
+//	@Router			/ssh-connections [post]
 func (h *Handler) Create(c *gin.Context) {
 	userID, ok := shared.GetUserID(c)
 	if !ok {
@@ -58,6 +70,17 @@ func (h *Handler) Create(c *gin.Context) {
 // this specific connection at all is already decided by
 // shared.RequireAccessLevelOnParam before this ever runs, so there's
 // nothing left for the handler itself to check.
+//
+//	@Summary		Get an SSH connection
+//	@Description	Returns one SSH connection by ID (never the private key). Requires at least "read" access to this specific connection.
+//	@Tags			ssh-connections
+//	@Produce		json
+//	@Param			id	path		int	true	"Connection ID"
+//	@Success		200	{object}	shared.BaseResponse{result=Response}
+//	@Failure		401	{object}	shared.BaseResponse
+//	@Failure		404	{object}	shared.BaseResponse
+//	@Security		BearerAuth
+//	@Router			/ssh-connections/{id} [get]
 func (h *Handler) Get(c *gin.Context) {
 	shared.GetByIDHandler(c,
 		func(conn *SSHConnection) Response { return toResponse(*conn) },
@@ -66,6 +89,21 @@ func (h *Handler) Get(c *gin.Context) {
 	)
 }
 
+// Update changes an SSH connection's fields.
+//
+//	@Summary		Update an SSH connection
+//	@Description	Changes an SSH connection's fields. Omitting privateKey keeps the existing key (there's no way to show it back to the client to prefill a form). Requires "write" access to this specific connection.
+//	@Tags			ssh-connections
+//	@Accept			json
+//	@Produce		json
+//	@Param			id		path		int							true	"Connection ID"
+//	@Param			request	body		UpdateSSHConnectionRequest	true	"Fields to update"
+//	@Success		200		{object}	shared.BaseResponse{result=Response}
+//	@Failure		400		{object}	shared.BaseResponse
+//	@Failure		401		{object}	shared.BaseResponse
+//	@Failure		404		{object}	shared.BaseResponse
+//	@Security		BearerAuth
+//	@Router			/ssh-connections/{id} [put]
 func (h *Handler) Update(c *gin.Context) {
 	shared.UpdateHandler(c,
 		shared.Identity[UpdateSSHConnectionRequest],
@@ -75,6 +113,18 @@ func (h *Handler) Update(c *gin.Context) {
 	)
 }
 
+// Delete removes an SSH connection.
+//
+//	@Summary		Delete an SSH connection
+//	@Description	Deletes an SSH connection. Requires "manage" access to this specific connection.
+//	@Tags			ssh-connections
+//	@Produce		json
+//	@Param			id	path		int	true	"Connection ID"
+//	@Success		200	{object}	shared.BaseResponse
+//	@Failure		401	{object}	shared.BaseResponse
+//	@Failure		404	{object}	shared.BaseResponse
+//	@Security		BearerAuth
+//	@Router			/ssh-connections/{id} [delete]
 func (h *Handler) Delete(c *gin.Context) {
 	shared.DeleteHandler(c, h.service.Delete, mapError)
 }
@@ -82,6 +132,18 @@ func (h *Handler) Delete(c *gin.Context) {
 // List is hand-written for the same reason Get is — the caller's ID
 // decides whether they see every connection or only the ones they hold
 // resource-level access to (see Service.ListForCaller).
+//
+//	@Summary		List SSH connections
+//	@Description	Lists SSH connections the caller holds at least "read" access to — every connection, if the caller holds a wildcard "read"/"manage" grant on resource type "ssh_connection".
+//	@Tags			ssh-connections
+//	@Produce		json
+//	@Param			pageNumber	query		int		false	"Page number, default 1"
+//	@Param			pageSize	query		int		false	"Page size, default 10"
+//	@Param			filter		query		string	false	"JSON-encoded shared.DynamicFilter"
+//	@Success		200			{object}	shared.BaseResponse{result=shared.PagedList[Response]}
+//	@Failure		401			{object}	shared.BaseResponse
+//	@Security		BearerAuth
+//	@Router			/ssh-connections [get]
 func (h *Handler) List(c *gin.Context) {
 	userID, ok := shared.GetUserID(c)
 	if !ok {

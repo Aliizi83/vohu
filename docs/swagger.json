@@ -1,0 +1,3285 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "HTTP API for Vohu's multi-user platform — users, roles, polymorphic resource access, SSH connections, conversations/chat, provider keys, custom models, and the agent tool catalog. Every endpoint responds through shared.BaseResponse (see internal/platform/shared/response.go) — {result, success, resultCode, validationErrors, error} — regardless of success or failure.",
+        "title": "Vohu Platform API",
+        "contact": {},
+        "version": "1.0"
+    },
+    "basePath": "/api/v1",
+    "paths": {
+        "/agent-tools": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists every public tool plus any private tool the caller holds at least \"read\" access to. Every tool in this catalog is SSH-connection-bound — its Go implementation always takes a connectionId argument and checks the caller's access to that specific connection separately, on every call.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "agent-tools"
+                ],
+                "summary": "List agent tools",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page number, default 1",
+                        "name": "pageNumber",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size, default 10",
+                        "name": "pageSize",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "JSON-encoded shared.DynamicFilter",
+                        "name": "filter",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_agenttool_Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/agent-tools/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns one catalog entry by ID. Requires at least \"read\" access to this specific tool.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "agent-tools"
+                ],
+                "summary": "Get an agent tool",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tool ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/internal_platform_agenttool.Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Changes a tool between public (available to everyone) and private (only whoever's been granted access). This is the only field the catalog lets an admin change — name/description/implemented are facts about the underlying Go implementation, not data this API owns. Requires \"manage\" access to this specific tool.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "agent-tools"
+                ],
+                "summary": "Update an agent tool's visibility",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tool ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New visibility",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_platform_agenttool.UpdateToolRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/internal_platform_agenttool.Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/login": {
+            "post": {
+                "description": "Exchanges a username and password for an access/refresh token pair. No auth required — this is the entry point that produces tokens.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Log in",
+                "parameters": [
+                    {
+                        "description": "Credentials",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_platform_auth.LoginRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/internal_platform_auth.TokenResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Missing username or password",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Invalid username or password",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/refresh": {
+            "post": {
+                "description": "Exchanges a valid refresh token for a new access/refresh token pair. No auth header required — the refresh token in the body is the credential.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Refresh a token pair",
+                "parameters": [
+                    {
+                        "description": "Refresh token",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_platform_auth.RefreshRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/internal_platform_auth.TokenResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Missing refresh token",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Invalid or expired refresh token",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/conversations": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists the caller's own conversations. There's no separate access-policy gate here beyond being authenticated — conversations are scoped to their owner by construction.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "List my conversations",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page number, default 1",
+                        "name": "pageNumber",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size, default 10",
+                        "name": "pageSize",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.PagedList-github_com_Aliizi83_vohu_internal_platform_conversation_Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Starts a new conversation — provider and model are fixed for its whole lifetime once created. customModelId, if set, names one of the caller's (or a global) custom model presets to use instead of the account's single per-provider key.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Create a conversation",
+                "parameters": [
+                    {
+                        "description": "New conversation",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_conversation.CreateConversationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_conversation.Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/conversations/{id}/messages": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns one page of a conversation's messages, newest first (page 1 is the most recent; higher page numbers reach further into the past) — for scroll-up-to-load-older-history. 404s for a conversation the caller doesn't own.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "List a conversation's messages",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Conversation ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number, default 1 (most recent)",
+                        "name": "pageNumber",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size, default 10",
+                        "name": "pageSize",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_chat_MessageResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Sends a message and streams the reply as a Server-Sent Events response (Content-Type: text/event-stream) — this is NOT a plain JSON endpoint despite the shared.BaseResponse envelope every other route uses; it's documented here for completeness but tools like \"Try it out\" won't render it usefully. Events, in order: zero or more \"chunk\" (data is a raw string — one piece of assistant text as it streams in), then either \"done\" (data is []MessageResponse — every message this turn produced: the assistant's reply and any tool call/result pairs, already persisted) or \"error\" (data is a plain error string; nothing was persisted).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Send a message (SSE stream)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Conversation ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Message content",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_platform_chat.SendMessageRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "SSE stream — see description for event shapes",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/custom-models": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists every account-wide custom model preset (never the API key values). Requires wildcard \"manage\" access on resource type \"custom_model\".",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "custom-models"
+                ],
+                "summary": "List global custom model presets",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/internal_platform_custommodel.Response"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Adds a named OpenAI-compatible preset every user can pick when starting a new chat, not just the creator. The key is encrypted at rest and never returned by any response. Requires wildcard \"manage\" access on resource type \"custom_model\".",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "custom-models"
+                ],
+                "summary": "Create a global custom model preset",
+                "parameters": [
+                    {
+                        "description": "New preset",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_platform_custommodel.CreateCustomModelRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/internal_platform_custommodel.Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/custom-models/available": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists every custom model preset the caller can pick when starting a new chat — their own presets plus every global one — regardless of whether they're allowed to manage global presets. Deliberately not gated by \"manage\" access, unlike the other routes in this module.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "custom-models"
+                ],
+                "summary": "List custom models available to me",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/internal_platform_custommodel.Response"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/custom-models/me": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists the caller's own named OpenAI-compatible presets (never the API key values).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "custom-models"
+                ],
+                "summary": "List my custom model presets",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/internal_platform_custommodel.Response"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Adds a named OpenAI-compatible preset (URL + key + model) owned by the caller — unlike provider-keys' single \"openai\" slot, any number of these can coexist (a local Ollama server and a DeepSeek account at once, say). The key is encrypted at rest and never returned by any response.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "custom-models"
+                ],
+                "summary": "Create my custom model preset",
+                "parameters": [
+                    {
+                        "description": "New preset",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_platform_custommodel.CreateCustomModelRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/internal_platform_custommodel.Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/custom-models/me/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Deletes one of the caller's own custom model presets by ID.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "custom-models"
+                ],
+                "summary": "Delete my custom model preset",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Preset ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/custom-models/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Deletes an account-wide custom model preset by ID. Requires wildcard \"manage\" access on resource type \"custom_model\".",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "custom-models"
+                ],
+                "summary": "Delete a global custom model preset",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Preset ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/me/access": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the caller's own complete access profile — every resource-access grant that's personally theirs (direct or via a role they hold), plus the best level they hold on each known resource type at large. The frontend uses this right after login to decide what nav items and buttons to show; it's a UX layer, every endpoint still enforces its own access independently regardless of what this reports.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "resource-access"
+                ],
+                "summary": "Get my access profile",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/internal_platform_rbac.MyAccessResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/provider-keys": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists every account-wide default provider key (never the key value itself). Requires wildcard \"manage\" access on resource type \"provider_key\".",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "provider-keys"
+                ],
+                "summary": "List global provider keys",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/internal_platform_providerkey.Response"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Sets (or replaces) the account-wide default API key for a provider — used for any user who hasn't set their own personal key. The key is encrypted at rest and never returned by any response. Requires wildcard \"manage\" access on resource type \"provider_key\".",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "provider-keys"
+                ],
+                "summary": "Set the global provider key",
+                "parameters": [
+                    {
+                        "description": "Provider key",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_platform_providerkey.SetKeyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/provider-keys/me": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists the caller's own personal provider keys (never the key values themselves).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "provider-keys"
+                ],
+                "summary": "List my provider keys",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/internal_platform_providerkey.Response"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Sets (or replaces) the caller's own personal API key for a provider — always takes priority over the global default for that caller's own chats. The key is encrypted at rest and never returned by any response.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "provider-keys"
+                ],
+                "summary": "Set my provider key",
+                "parameters": [
+                    {
+                        "description": "Provider key",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_platform_providerkey.SetKeyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/provider-keys/me/{provider}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Removes the caller's own personal key for a provider. Their chats fall back to the global default, if any.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "provider-keys"
+                ],
+                "summary": "Remove my provider key",
+                "parameters": [
+                    {
+                        "enum": [
+                            "gemini",
+                            "anthropic",
+                            "openai"
+                        ],
+                        "type": "string",
+                        "description": "Provider",
+                        "name": "provider",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/provider-keys/{provider}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Removes the account-wide default key for a provider. Chats using it fall back to any other configured key. Requires wildcard \"manage\" access on resource type \"provider_key\".",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "provider-keys"
+                ],
+                "summary": "Remove the global provider key",
+                "parameters": [
+                    {
+                        "enum": [
+                            "gemini",
+                            "anthropic",
+                            "openai"
+                        ],
+                        "type": "string",
+                        "description": "Provider",
+                        "name": "provider",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/resource-access": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists every resource-access grant in the system. Requires wildcard \"read\" access on resource type \"resource_access\".",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "resource-access"
+                ],
+                "summary": "List resource-access grants",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page number, default 1",
+                        "name": "pageNumber",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size, default 10",
+                        "name": "pageSize",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "JSON-encoded shared.DynamicFilter",
+                        "name": "filter",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_rbac_ResourceAccessResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Grants (or upserts, if one already exists for the same grantee+resource) a resource-access row. The caller must already hold \"manage\" on the target resource — granting access to X requires manage on X, no separate meta-permission.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "resource-access"
+                ],
+                "summary": "Grant resource access",
+                "parameters": [
+                    {
+                        "description": "Grant",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_platform_rbac.GrantResourceAccessRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Caller doesn't hold manage on the target resource",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/resource-access/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Deletes one resource-access grant by its own ID. The caller must hold \"manage\" on the resource that grant refers to.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "resource-access"
+                ],
+                "summary": "Revoke a resource-access grant",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Resource-access grant ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/roles": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists every role. Requires wildcard \"read\" access on resource type \"role\".",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "roles"
+                ],
+                "summary": "List roles",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page number, default 1",
+                        "name": "pageNumber",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size, default 10",
+                        "name": "pageSize",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "JSON-encoded shared.DynamicFilter",
+                        "name": "filter",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_rbac_RoleResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates a new role. Requires wildcard \"write\" access on resource type \"role\".",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "roles"
+                ],
+                "summary": "Create a role",
+                "parameters": [
+                    {
+                        "description": "New role",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_platform_rbac.CreateRoleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/internal_platform_rbac.RoleResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "A role with this name already exists",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/roles/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns one role by ID. Requires at least \"read\" access to this specific role.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "roles"
+                ],
+                "summary": "Get a role",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Role ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/internal_platform_rbac.RoleResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Renames a role. Requires \"write\" access to this specific role.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "roles"
+                ],
+                "summary": "Update a role",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Role ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New name",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_platform_rbac.UpdateRoleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/internal_platform_rbac.RoleResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Deletes a role. Requires \"manage\" access to this specific role. Users holding the role are not deleted, just lose whatever the role granted them.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "roles"
+                ],
+                "summary": "Delete a role",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Role ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ssh-connections": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists SSH connections the caller holds at least \"read\" access to — every connection, if the caller holds a wildcard \"read\"/\"manage\" grant on resource type \"ssh_connection\".",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ssh-connections"
+                ],
+                "summary": "List SSH connections",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page number, default 1",
+                        "name": "pageNumber",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size, default 10",
+                        "name": "pageSize",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "JSON-encoded shared.DynamicFilter",
+                        "name": "filter",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_sshconn_Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Registers a new SSH connection. Private-key auth only — the connection is test-dialed (real handshake, no command run) before it's saved, so a bad host or mismatched key fails loudly here instead of the first time the agent tries to use it. The key is encrypted at rest and never returned by any response. The creator is auto-granted \"manage\" on the new connection. Requires wildcard \"write\" access on resource type \"ssh_connection\".",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ssh-connections"
+                ],
+                "summary": "Create an SSH connection",
+                "parameters": [
+                    {
+                        "description": "New connection",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_platform_sshconn.CreateSSHConnectionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/internal_platform_sshconn.Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Validation error, or the connection test failed (bad host/key)",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ssh-connections/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns one SSH connection by ID (never the private key). Requires at least \"read\" access to this specific connection.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ssh-connections"
+                ],
+                "summary": "Get an SSH connection",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/internal_platform_sshconn.Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Changes an SSH connection's fields. Omitting privateKey keeps the existing key (there's no way to show it back to the client to prefill a form). Requires \"write\" access to this specific connection.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ssh-connections"
+                ],
+                "summary": "Update an SSH connection",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to update",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_platform_sshconn.UpdateSSHConnectionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/internal_platform_sshconn.Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Deletes an SSH connection. Requires \"manage\" access to this specific connection.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ssh-connections"
+                ],
+                "summary": "Delete an SSH connection",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/users": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists users the caller holds at least \"read\" access to — every user, if the caller holds a wildcard \"read\"/\"manage\" grant on resource type \"user\". filter is a JSON-encoded shared.DynamicFilter.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "List users",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page number, default 1",
+                        "name": "pageNumber",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size, default 10",
+                        "name": "pageSize",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "JSON-encoded shared.DynamicFilter",
+                        "name": "filter",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_user_Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates a new user account. Requires wildcard \"write\" access on resource type \"user\".",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Create a user",
+                "parameters": [
+                    {
+                        "description": "New user",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_platform_user.CreateUserRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/internal_platform_user.Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Validation error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Username already taken",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns one user by ID. Requires at least \"read\" access to this specific user (a direct grant, a wildcard grant, or a grant on a role this user holds).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Get a user",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/internal_platform_user.Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not found, or not permitted (existence isn't leaked to a caller with no access)",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Changes a user's email and/or enabled flag. Requires \"write\" access to this specific user.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Update a user",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to update",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_platform_user.UpdateUserRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/internal_platform_user.Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Deletes a user account. Requires \"manage\" access to this specific user.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Delete a user",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/{id}/roles": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Grants a user every resource access attached to the given role. Requires \"manage\" access to the target user.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "roles"
+                ],
+                "summary": "Assign a role to a user",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Role to assign",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_platform_rbac.AssignRoleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "github_com_Aliizi83_vohu_internal_ai_model.ToolCall": {
+            "type": "object",
+            "properties": {
+                "arguments": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "id": {
+                    "type": "string"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_Aliizi83_vohu_internal_platform_conversation.CreateConversationRequest": {
+            "type": "object",
+            "required": [
+                "model",
+                "provider",
+                "title"
+            ],
+            "properties": {
+                "customModelId": {
+                    "description": "CustomModelID, when set, names one of the caller's (or a global)\ncustommodel.CustomModel presets to use for this conversation's\ncredentials instead of the single per-user/global \"openai\" key —\nsee Conversation.CustomModelID. Not validated here (conversation\nnever imports custommodel); chat.buildLLM resolves and checks\nownership lazily the first time the conversation is actually used.",
+                    "type": "integer"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string",
+                    "maxLength": 255
+                }
+            }
+        },
+        "github_com_Aliizi83_vohu_internal_platform_conversation.Response": {
+            "type": "object",
+            "properties": {
+                "customModelId": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "result": {},
+                "resultCode": {
+                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.ResultCode"
+                },
+                "success": {
+                    "type": "boolean"
+                },
+                "validationErrors": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.ValidationError"
+                    }
+                }
+            }
+        },
+        "github_com_Aliizi83_vohu_internal_platform_shared.PagedList-github_com_Aliizi83_vohu_internal_platform_conversation_Response": {
+            "type": "object",
+            "properties": {
+                "hasNextPage": {
+                    "type": "boolean"
+                },
+                "hasPreviousPage": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_conversation.Response"
+                    }
+                },
+                "pageNumber": {
+                    "type": "integer"
+                },
+                "pageSize": {
+                    "type": "integer"
+                },
+                "totalPages": {
+                    "type": "integer"
+                },
+                "totalRows": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_agenttool_Response": {
+            "type": "object",
+            "properties": {
+                "hasNextPage": {
+                    "type": "boolean"
+                },
+                "hasPreviousPage": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_platform_agenttool.Response"
+                    }
+                },
+                "pageNumber": {
+                    "type": "integer"
+                },
+                "pageSize": {
+                    "type": "integer"
+                },
+                "totalPages": {
+                    "type": "integer"
+                },
+                "totalRows": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_chat_MessageResponse": {
+            "type": "object",
+            "properties": {
+                "hasNextPage": {
+                    "type": "boolean"
+                },
+                "hasPreviousPage": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_platform_chat.MessageResponse"
+                    }
+                },
+                "pageNumber": {
+                    "type": "integer"
+                },
+                "pageSize": {
+                    "type": "integer"
+                },
+                "totalPages": {
+                    "type": "integer"
+                },
+                "totalRows": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_rbac_ResourceAccessResponse": {
+            "type": "object",
+            "properties": {
+                "hasNextPage": {
+                    "type": "boolean"
+                },
+                "hasPreviousPage": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_platform_rbac.ResourceAccessResponse"
+                    }
+                },
+                "pageNumber": {
+                    "type": "integer"
+                },
+                "pageSize": {
+                    "type": "integer"
+                },
+                "totalPages": {
+                    "type": "integer"
+                },
+                "totalRows": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_rbac_RoleResponse": {
+            "type": "object",
+            "properties": {
+                "hasNextPage": {
+                    "type": "boolean"
+                },
+                "hasPreviousPage": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_platform_rbac.RoleResponse"
+                    }
+                },
+                "pageNumber": {
+                    "type": "integer"
+                },
+                "pageSize": {
+                    "type": "integer"
+                },
+                "totalPages": {
+                    "type": "integer"
+                },
+                "totalRows": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_sshconn_Response": {
+            "type": "object",
+            "properties": {
+                "hasNextPage": {
+                    "type": "boolean"
+                },
+                "hasPreviousPage": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_platform_sshconn.Response"
+                    }
+                },
+                "pageNumber": {
+                    "type": "integer"
+                },
+                "pageSize": {
+                    "type": "integer"
+                },
+                "totalPages": {
+                    "type": "integer"
+                },
+                "totalRows": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_user_Response": {
+            "type": "object",
+            "properties": {
+                "hasNextPage": {
+                    "type": "boolean"
+                },
+                "hasPreviousPage": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_platform_user.Response"
+                    }
+                },
+                "pageNumber": {
+                    "type": "integer"
+                },
+                "pageSize": {
+                    "type": "integer"
+                },
+                "totalPages": {
+                    "type": "integer"
+                },
+                "totalRows": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_Aliizi83_vohu_internal_platform_shared.ResultCode": {
+            "type": "integer",
+            "enum": [
+                0,
+                40001,
+                40101,
+                40301,
+                40401,
+                40901,
+                50001
+            ],
+            "x-enum-varnames": [
+                "ResultSuccess",
+                "ResultValidationError",
+                "ResultAuthError",
+                "ResultForbiddenError",
+                "ResultNotFoundError",
+                "ResultConflictError",
+                "ResultInternalError"
+            ]
+        },
+        "github_com_Aliizi83_vohu_internal_platform_shared.ValidationError": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                },
+                "property": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_platform_agenttool.Response": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "implemented": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "visibility": {
+                    "$ref": "#/definitions/internal_platform_agenttool.Visibility"
+                }
+            }
+        },
+        "internal_platform_agenttool.UpdateToolRequest": {
+            "type": "object",
+            "required": [
+                "visibility"
+            ],
+            "properties": {
+                "visibility": {
+                    "enum": [
+                        "public",
+                        "private"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/internal_platform_agenttool.Visibility"
+                        }
+                    ]
+                }
+            }
+        },
+        "internal_platform_agenttool.Visibility": {
+            "type": "string",
+            "enum": [
+                "public",
+                "private"
+            ],
+            "x-enum-varnames": [
+                "VisibilityPublic",
+                "VisibilityPrivate"
+            ]
+        },
+        "internal_platform_auth.LoginRequest": {
+            "type": "object",
+            "required": [
+                "password",
+                "username"
+            ],
+            "properties": {
+                "password": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_platform_auth.RefreshRequest": {
+            "type": "object",
+            "required": [
+                "refreshToken"
+            ],
+            "properties": {
+                "refreshToken": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_platform_auth.TokenResponse": {
+            "type": "object",
+            "properties": {
+                "accessToken": {
+                    "type": "string"
+                },
+                "accessTokenExpiresAt": {
+                    "type": "integer"
+                },
+                "refreshToken": {
+                    "type": "string"
+                },
+                "refreshTokenExpiresAt": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_platform_chat.MessageResponse": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                },
+                "toolCalls": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_ai_model.ToolCall"
+                    }
+                },
+                "toolResults": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_platform_chat.ToolResultResponse"
+                    }
+                }
+            }
+        },
+        "internal_platform_chat.SendMessageRequest": {
+            "type": "object",
+            "required": [
+                "content"
+            ],
+            "properties": {
+                "content": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_platform_chat.ToolResultResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "result": {},
+                "toolCallId": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_platform_custommodel.CreateCustomModelRequest": {
+            "type": "object",
+            "required": [
+                "apiKey",
+                "baseUrl",
+                "modelName",
+                "name"
+            ],
+            "properties": {
+                "apiKey": {
+                    "type": "string"
+                },
+                "baseUrl": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "modelName": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 100
+                }
+            }
+        },
+        "internal_platform_custommodel.Response": {
+            "type": "object",
+            "properties": {
+                "baseUrl": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "modelName": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_platform_providerkey.Provider": {
+            "type": "string",
+            "enum": [
+                "gemini",
+                "anthropic",
+                "openai"
+            ],
+            "x-enum-varnames": [
+                "ProviderGemini",
+                "ProviderAnthropic",
+                "ProviderOpenAI"
+            ]
+        },
+        "internal_platform_providerkey.Response": {
+            "type": "object",
+            "properties": {
+                "baseUrl": {
+                    "type": "string"
+                },
+                "provider": {
+                    "$ref": "#/definitions/internal_platform_providerkey.Provider"
+                },
+                "workspaceId": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_platform_providerkey.SetKeyRequest": {
+            "type": "object",
+            "required": [
+                "apiKey",
+                "provider"
+            ],
+            "properties": {
+                "apiKey": {
+                    "type": "string"
+                },
+                "baseUrl": {
+                    "type": "string"
+                },
+                "provider": {
+                    "enum": [
+                        "gemini",
+                        "anthropic",
+                        "openai"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/internal_platform_providerkey.Provider"
+                        }
+                    ]
+                },
+                "workspaceId": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_platform_rbac.AccessLevel": {
+            "type": "string",
+            "enum": [
+                "read",
+                "write",
+                "manage"
+            ],
+            "x-enum-varnames": [
+                "AccessRead",
+                "AccessWrite",
+                "AccessManage"
+            ]
+        },
+        "internal_platform_rbac.AssignRoleRequest": {
+            "type": "object",
+            "required": [
+                "roleId"
+            ],
+            "properties": {
+                "roleId": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_platform_rbac.CreateRoleRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "maxLength": 50,
+                    "minLength": 2
+                }
+            }
+        },
+        "internal_platform_rbac.GrantResourceAccessRequest": {
+            "type": "object",
+            "required": [
+                "effect",
+                "granteeId",
+                "granteeType",
+                "level",
+                "resourceType"
+            ],
+            "properties": {
+                "effect": {
+                    "enum": [
+                        "accepted",
+                        "prohibited"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/internal_platform_rbac.ResourceEffect"
+                        }
+                    ]
+                },
+                "granteeId": {
+                    "type": "integer"
+                },
+                "granteeType": {
+                    "enum": [
+                        "user",
+                        "role"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/internal_platform_rbac.GranteeType"
+                        }
+                    ]
+                },
+                "level": {
+                    "enum": [
+                        "read",
+                        "write",
+                        "manage"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/internal_platform_rbac.AccessLevel"
+                        }
+                    ]
+                },
+                "resourceId": {
+                    "type": "integer"
+                },
+                "resourceType": {
+                    "type": "string",
+                    "maxLength": 50
+                }
+            }
+        },
+        "internal_platform_rbac.GranteeType": {
+            "type": "string",
+            "enum": [
+                "user",
+                "role"
+            ],
+            "x-enum-varnames": [
+                "GranteeUser",
+                "GranteeRole"
+            ]
+        },
+        "internal_platform_rbac.MyAccessResponse": {
+            "type": "object",
+            "properties": {
+                "levels": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/internal_platform_rbac.AccessLevel"
+                    }
+                },
+                "resourceAccess": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_platform_rbac.ResourceAccessResponse"
+                    }
+                }
+            }
+        },
+        "internal_platform_rbac.ResourceAccessResponse": {
+            "type": "object",
+            "properties": {
+                "effect": {
+                    "$ref": "#/definitions/internal_platform_rbac.ResourceEffect"
+                },
+                "granteeId": {
+                    "type": "integer"
+                },
+                "granteeType": {
+                    "$ref": "#/definitions/internal_platform_rbac.GranteeType"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "level": {
+                    "$ref": "#/definitions/internal_platform_rbac.AccessLevel"
+                },
+                "resourceId": {
+                    "type": "integer"
+                },
+                "resourceType": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_platform_rbac.ResourceEffect": {
+            "type": "string",
+            "enum": [
+                "accepted",
+                "prohibited"
+            ],
+            "x-enum-varnames": [
+                "EffectAccepted",
+                "EffectProhibited"
+            ]
+        },
+        "internal_platform_rbac.RoleResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_platform_rbac.UpdateRoleRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "maxLength": 50,
+                    "minLength": 2
+                }
+            }
+        },
+        "internal_platform_sshconn.CreateSSHConnectionRequest": {
+            "type": "object",
+            "required": [
+                "host",
+                "name",
+                "privateKey",
+                "username"
+            ],
+            "properties": {
+                "host": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 100
+                },
+                "port": {
+                    "type": "integer",
+                    "maximum": 65535,
+                    "minimum": 1
+                },
+                "privateKey": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string",
+                    "maxLength": 100
+                }
+            }
+        },
+        "internal_platform_sshconn.Response": {
+            "type": "object",
+            "properties": {
+                "createdByUserId": {
+                    "type": "integer"
+                },
+                "host": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "port": {
+                    "type": "integer"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_platform_sshconn.UpdateSSHConnectionRequest": {
+            "type": "object",
+            "properties": {
+                "host": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 100
+                },
+                "port": {
+                    "type": "integer",
+                    "maximum": 65535,
+                    "minimum": 1
+                },
+                "privateKey": {
+                    "description": "PrivateKey is optional on update — omitted means \"keep the existing\nkey,\" since there is no way to show it back to the client to\nprefill a form.",
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string",
+                    "maxLength": 100
+                }
+            }
+        },
+        "internal_platform_user.CreateUserRequest": {
+            "type": "object",
+            "required": [
+                "password",
+                "username"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string",
+                    "minLength": 8
+                },
+                "username": {
+                    "type": "string",
+                    "maxLength": 50,
+                    "minLength": 3
+                }
+            }
+        },
+        "internal_platform_user.Response": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_platform_user.UpdateUserRequest": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                }
+            }
+        }
+    },
+    "securityDefinitions": {
+        "BearerAuth": {
+            "description": "Type \"Bearer\" followed by a space and the access token from POST /auth/login or /auth/refresh.",
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
+        }
+    }
+}

@@ -25,6 +25,19 @@ func mapError(err error) (int, shared.ResultCode) {
 	}
 }
 
+// SetGlobal sets the account-wide default key for a provider.
+//
+//	@Summary		Set the global provider key
+//	@Description	Sets (or replaces) the account-wide default API key for a provider — used for any user who hasn't set their own personal key. The key is encrypted at rest and never returned by any response. Requires wildcard "manage" access on resource type "provider_key".
+//	@Tags			provider-keys
+//	@Accept			json
+//	@Produce		json
+//	@Param			request	body		SetKeyRequest	true	"Provider key"
+//	@Success		200		{object}	shared.BaseResponse
+//	@Failure		400		{object}	shared.BaseResponse
+//	@Failure		401		{object}	shared.BaseResponse
+//	@Security		BearerAuth
+//	@Router			/provider-keys [post]
 func (h *Handler) SetGlobal(c *gin.Context) {
 	var req SetKeyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -41,6 +54,16 @@ func (h *Handler) SetGlobal(c *gin.Context) {
 	shared.RespondSuccess(c, http.StatusOK, nil)
 }
 
+// ListGlobal lists every global provider key.
+//
+//	@Summary		List global provider keys
+//	@Description	Lists every account-wide default provider key (never the key value itself). Requires wildcard "manage" access on resource type "provider_key".
+//	@Tags			provider-keys
+//	@Produce		json
+//	@Success		200	{object}	shared.BaseResponse{result=[]Response}
+//	@Failure		401	{object}	shared.BaseResponse
+//	@Security		BearerAuth
+//	@Router			/provider-keys [get]
 func (h *Handler) ListGlobal(c *gin.Context) {
 	items, err := h.service.ListGlobal(c.Request.Context())
 	if err != nil {
@@ -50,6 +73,18 @@ func (h *Handler) ListGlobal(c *gin.Context) {
 	shared.RespondSuccess(c, http.StatusOK, items)
 }
 
+// DeleteGlobal removes the global key for a provider.
+//
+//	@Summary		Remove the global provider key
+//	@Description	Removes the account-wide default key for a provider. Chats using it fall back to any other configured key. Requires wildcard "manage" access on resource type "provider_key".
+//	@Tags			provider-keys
+//	@Produce		json
+//	@Param			provider	path		string	true	"Provider"	Enums(gemini, anthropic, openai)
+//	@Success		200			{object}	shared.BaseResponse
+//	@Failure		401			{object}	shared.BaseResponse
+//	@Failure		404			{object}	shared.BaseResponse
+//	@Security		BearerAuth
+//	@Router			/provider-keys/{provider} [delete]
 func (h *Handler) DeleteGlobal(c *gin.Context) {
 	provider := Provider(c.Param("provider"))
 	if err := h.service.DeleteGlobal(c.Request.Context(), provider); err != nil {
@@ -60,6 +95,19 @@ func (h *Handler) DeleteGlobal(c *gin.Context) {
 	shared.RespondSuccess(c, http.StatusOK, nil)
 }
 
+// SetMine sets the caller's own personal key for a provider.
+//
+//	@Summary		Set my provider key
+//	@Description	Sets (or replaces) the caller's own personal API key for a provider — always takes priority over the global default for that caller's own chats. The key is encrypted at rest and never returned by any response.
+//	@Tags			provider-keys
+//	@Accept			json
+//	@Produce		json
+//	@Param			request	body		SetKeyRequest	true	"Provider key"
+//	@Success		200		{object}	shared.BaseResponse
+//	@Failure		400		{object}	shared.BaseResponse
+//	@Failure		401		{object}	shared.BaseResponse
+//	@Security		BearerAuth
+//	@Router			/provider-keys/me [post]
 func (h *Handler) SetMine(c *gin.Context) {
 	userID, ok := shared.GetUserID(c)
 	if !ok {
@@ -82,6 +130,16 @@ func (h *Handler) SetMine(c *gin.Context) {
 	shared.RespondSuccess(c, http.StatusOK, nil)
 }
 
+// ListMine lists the caller's own provider keys.
+//
+//	@Summary		List my provider keys
+//	@Description	Lists the caller's own personal provider keys (never the key values themselves).
+//	@Tags			provider-keys
+//	@Produce		json
+//	@Success		200	{object}	shared.BaseResponse{result=[]Response}
+//	@Failure		401	{object}	shared.BaseResponse
+//	@Security		BearerAuth
+//	@Router			/provider-keys/me [get]
 func (h *Handler) ListMine(c *gin.Context) {
 	userID, ok := shared.GetUserID(c)
 	if !ok {
@@ -97,6 +155,18 @@ func (h *Handler) ListMine(c *gin.Context) {
 	shared.RespondSuccess(c, http.StatusOK, items)
 }
 
+// DeleteMine removes the caller's own key for a provider.
+//
+//	@Summary		Remove my provider key
+//	@Description	Removes the caller's own personal key for a provider. Their chats fall back to the global default, if any.
+//	@Tags			provider-keys
+//	@Produce		json
+//	@Param			provider	path		string	true	"Provider"	Enums(gemini, anthropic, openai)
+//	@Success		200			{object}	shared.BaseResponse
+//	@Failure		401			{object}	shared.BaseResponse
+//	@Failure		404			{object}	shared.BaseResponse
+//	@Security		BearerAuth
+//	@Router			/provider-keys/me/{provider} [delete]
 func (h *Handler) DeleteMine(c *gin.Context) {
 	userID, ok := shared.GetUserID(c)
 	if !ok {

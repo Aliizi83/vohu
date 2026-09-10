@@ -52,6 +52,19 @@ func NewHandler(
 	}
 }
 
+// CreateConversation starts a new conversation.
+//
+//	@Summary		Create a conversation
+//	@Description	Starts a new conversation — provider and model are fixed for its whole lifetime once created. customModelId, if set, names one of the caller's (or a global) custom model presets to use instead of the account's single per-provider key.
+//	@Tags			chat
+//	@Accept			json
+//	@Produce		json
+//	@Param			request	body		conversation.CreateConversationRequest	true	"New conversation"
+//	@Success		201		{object}	shared.BaseResponse{result=conversation.Response}
+//	@Failure		400		{object}	shared.BaseResponse
+//	@Failure		401		{object}	shared.BaseResponse
+//	@Security		BearerAuth
+//	@Router			/conversations [post]
 func (h *Handler) CreateConversation(c *gin.Context) {
 	userID, ok := shared.GetUserID(c)
 	if !ok {
@@ -79,6 +92,18 @@ type listConversationsQuery struct {
 	PageSize   int `form:"pageSize"`
 }
 
+// ListConversations lists the caller's own conversations.
+//
+//	@Summary		List my conversations
+//	@Description	Lists the caller's own conversations. There's no separate access-policy gate here beyond being authenticated — conversations are scoped to their owner by construction.
+//	@Tags			chat
+//	@Produce		json
+//	@Param			pageNumber	query		int	false	"Page number, default 1"
+//	@Param			pageSize	query		int	false	"Page size, default 10"
+//	@Success		200			{object}	shared.BaseResponse{result=shared.PagedList[conversation.Response]}
+//	@Failure		401			{object}	shared.BaseResponse
+//	@Security		BearerAuth
+//	@Router			/conversations [get]
 func (h *Handler) ListConversations(c *gin.Context) {
 	userID, ok := shared.GetUserID(c)
 	if !ok {
@@ -118,6 +143,19 @@ type listMessagesQuery struct {
 // fetching the whole conversation up front. This is separate from what
 // SendMessage feeds the agent (conversations.LoadHistory), which always
 // needs the full conversation for context regardless of what's on screen.
+//
+//	@Summary		List a conversation's messages
+//	@Description	Returns one page of a conversation's messages, newest first (page 1 is the most recent; higher page numbers reach further into the past) — for scroll-up-to-load-older-history. 404s for a conversation the caller doesn't own.
+//	@Tags			chat
+//	@Produce		json
+//	@Param			id			path		int	true	"Conversation ID"
+//	@Param			pageNumber	query		int	false	"Page number, default 1 (most recent)"
+//	@Param			pageSize	query		int	false	"Page size, default 10"
+//	@Success		200			{object}	shared.BaseResponse{result=shared.PagedList[MessageResponse]}
+//	@Failure		401			{object}	shared.BaseResponse
+//	@Failure		404			{object}	shared.BaseResponse
+//	@Security		BearerAuth
+//	@Router			/conversations/{id}/messages [get]
 func (h *Handler) GetMessages(c *gin.Context) {
 	userID, ok := shared.GetUserID(c)
 	if !ok {
@@ -157,10 +195,24 @@ func (h *Handler) GetMessages(c *gin.Context) {
 }
 
 // SendMessage is the actual turn: load history, run the agent (with the
-// system-time tool and this request's SSHTool registered), and stream the
-// assistant's text back over SSE as it arrives instead of buffering the
-// whole reply. The new user message and everything the agent produced are
-// persisted only after the turn finishes.
+// caller's accessible agent-tool catalog registered, see buildRegistry),
+// and stream the assistant's text back over SSE as it arrives instead of
+// buffering the whole reply. The new user message and everything the
+// agent produced are persisted only after the turn finishes.
+//
+//	@Summary		Send a message (SSE stream)
+//	@Description	Sends a message and streams the reply as a Server-Sent Events response (Content-Type: text/event-stream) — this is NOT a plain JSON endpoint despite the shared.BaseResponse envelope every other route uses; it's documented here for completeness but tools like "Try it out" won't render it usefully. Events, in order: zero or more "chunk" (data is a raw string — one piece of assistant text as it streams in), then either "done" (data is []MessageResponse — every message this turn produced: the assistant's reply and any tool call/result pairs, already persisted) or "error" (data is a plain error string; nothing was persisted).
+//	@Tags			chat
+//	@Accept			json
+//	@Produce		text/event-stream
+//	@Param			id		path	int					true	"Conversation ID"
+//	@Param			request	body	SendMessageRequest	true	"Message content"
+//	@Success		200		{string}	string	"SSE stream — see description for event shapes"
+//	@Failure		400		{object}	shared.BaseResponse
+//	@Failure		401		{object}	shared.BaseResponse
+//	@Failure		404		{object}	shared.BaseResponse
+//	@Security		BearerAuth
+//	@Router			/conversations/{id}/messages [post]
 func (h *Handler) SendMessage(c *gin.Context) {
 	userID, ok := shared.GetUserID(c)
 	if !ok {
