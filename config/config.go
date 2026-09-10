@@ -118,7 +118,7 @@ func LoadConfig(filename string, fileType string) (*viper.Viper, error) {
 // be run as `go run ./cmd/server` from there.
 func getConfigPath(env string) string {
 	switch env {
-case "docker":
+	case "docker":
 		return "/app/config/config-docker"
 	case "production":
 		return "/config/config-production"
