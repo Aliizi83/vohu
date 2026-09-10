@@ -93,6 +93,17 @@ Two independent mechanisms, not one blanket guardrail:
 - **What a tool is allowed to do** — every command (local or over SSH) is checked against a `command.Policy` *before* it runs: an accept-mode allow-list or a prohibited-mode deny-list, matched on the program name and argument prefixes. The model can ask for anything; only what the policy permits actually executes.
 - **What a user is allowed to see** — in the platform, every resource (an SSH connection, a conversation, another user) is gated by `rbac.ResourceAccess`. A caller with no grant on a conversation gets a 404, not a 403 — existence itself isn't leaked to someone with no access.
 
+## API docs
+
+Every `cmd/server` endpoint (all 42 of them) is documented with Swagger/OpenAPI — generated from `@Summary`/`@Param`/`@Success`/... comments on each handler via [swaggo/swag](https://github.com/swaggo/swag). With the server running, open `/swagger/index.html` for the interactive UI (`/swagger/doc.json` for the raw spec).
+
+A handler's annotations changing means regenerating `docs/` (committed, since `cmd/server` imports it — the build doesn't call `swag` itself):
+
+```bash
+go install github.com/swaggo/swag/cmd/swag@latest
+swag init -g cmd/server/main.go -o docs --parseDependency --parseInternal
+```
+
 ## Development
 
 ```bash
