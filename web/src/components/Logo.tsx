@@ -1,8 +1,10 @@
 import { useId } from "react"
 
-// A spark above a converging "V" — thought (the spark) resolving into
-// action (the V), and the initial letter of the name. Single-color mark
-// on a warm gradient badge so it stays legible at favicon size.
+// An abstracted winged sun disc — the Achaemenid/Zoroastrian-era emblem
+// of Ahura Mazda and royal protection carved above the gates at
+// Persepolis and Pasargadae, reduced here to a circle and two swept
+// wings so it stays legible at favicon size. Pre-Islamic Persian, not a
+// generic Middle Eastern motif.
 export function Logo({ className }: { className?: string }) {
   const gradientId = useId()
 
@@ -10,20 +12,16 @@ export function Logo({ className }: { className?: string }) {
     <svg viewBox="0 0 64 64" className={className} role="img" aria-label="Vohu">
       <defs>
         <linearGradient id={gradientId} x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#fbbf24" />
-          <stop offset="1" stopColor="#ea580c" />
+          <stop offset="0" stopColor="#1e3a8a" />
+          <stop offset="1" stopColor="#3b82f6" />
         </linearGradient>
       </defs>
       <circle cx="32" cy="32" r="32" fill={`url(#${gradientId})`} />
-      <circle cx="32" cy="13.5" r="3.4" fill="#fff" />
-      <path
-        d="M20 21 L32 43 L44 21"
-        fill="none"
-        stroke="#fff"
-        strokeWidth="7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <ellipse cx="44" cy="31" rx="11" ry="3.6" fill="#fff" transform="rotate(-6 44 31)" />
+      <ellipse cx="53" cy="33.5" rx="7.5" ry="2.8" fill="#fff" transform="rotate(6 53 33.5)" />
+      <ellipse cx="20" cy="31" rx="11" ry="3.6" fill="#fff" transform="rotate(6 20 31)" />
+      <ellipse cx="11" cy="33.5" rx="7.5" ry="2.8" fill="#fff" transform="rotate(-6 11 33.5)" />
+      <circle cx="32" cy="32" r="6.5" fill="#fff" />
     </svg>
   )
 }
