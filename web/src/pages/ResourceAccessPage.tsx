@@ -48,7 +48,15 @@ import {
 // The free-string resource types the backend currently knows about
 // (rbac.KnownResourceTypes) — kept in sync by hand since the frontend
 // never imports Go code.
-const RESOURCE_TYPES = ["user", "role", "ssh_connection", "provider_key", "conversation", "resource_access"] as const
+const RESOURCE_TYPES = [
+  "user",
+  "role",
+  "ssh_connection",
+  "provider_key",
+  "conversation",
+  "resource_access",
+  "agent_tool",
+] as const
 
 const RESOURCE_TYPE_SSH_CONNECTION = "ssh_connection"
 

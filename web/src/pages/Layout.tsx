@@ -1,4 +1,4 @@
-import { KeySquare, LogOut, MessageSquare, Server, Shield, ShieldCheck, Users } from "lucide-react"
+import { KeySquare, LogOut, MessageSquare, Server, Shield, ShieldCheck, Users, Wrench } from "lucide-react"
 import { NavLink, Outlet } from "react-router-dom"
 import { Logo } from "@/components/Logo"
 import { Button } from "@/components/ui/button"
@@ -22,6 +22,7 @@ const navItems: {
 }[] = [
   { to: "/chat", labelKey: "nav.chat", icon: MessageSquare },
   { to: "/ssh-connections", labelKey: "nav.sshConnections", icon: Server },
+  { to: "/agent-tools", labelKey: "nav.agentTools", icon: Wrench },
   { to: "/provider-keys", labelKey: "nav.apiKeys", icon: KeySquare },
   { to: "/users", labelKey: "nav.users", icon: Users, required: { resourceType: "user", level: "read" } },
   { to: "/roles", labelKey: "nav.roles", icon: Shield, required: { resourceType: "role", level: "manage" } },

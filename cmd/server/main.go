@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/Aliizi83/vohu/config"
+	"github.com/Aliizi83/vohu/internal/platform/agenttool"
 	"github.com/Aliizi83/vohu/internal/platform/auth"
 	"github.com/Aliizi83/vohu/internal/platform/chat"
 	"github.com/Aliizi83/vohu/internal/platform/conversation"
@@ -95,7 +96,13 @@ func main() {
 	customModelService := custommodel.NewService(customModelRepo, secretBox)
 	customModelHandler := custommodel.NewHandler(customModelService)
 
-	chatHandler := chat.NewHandler(conversationService, sshconnService, hasAccessLevel, sshCommandPolicy, providerKeyService, customModelService)
+	agentToolRepo := agenttool.NewRepository(db.GetDB())
+	agentToolService := agenttool.NewService(agentToolRepo, hasAccessLevel)
+	agentToolHandler := agenttool.NewHandler(agentToolService)
+
+	chatHandler := chat.NewHandler(
+		conversationService, sshconnService, hasAccessLevel, sshCommandPolicy, providerKeyService, customModelService, agentToolService,
+	)
 
 	engine, v1 := httpserver.NewEngine(logger)
 
@@ -106,6 +113,7 @@ func main() {
 	sshconn.RegisterRoutes(v1, sshconnHandler, authMiddleware, hasAccessLevel)
 	providerkey.RegisterRoutes(v1, providerKeyHandler, authMiddleware, hasAccessLevel)
 	custommodel.RegisterRoutes(v1, customModelHandler, authMiddleware, hasAccessLevel)
+	agenttool.RegisterRoutes(v1, agentToolHandler, authMiddleware, hasAccessLevel)
 	chat.RegisterRoutes(v1, chatHandler, authMiddleware)
 	auth.RegisterRoutes(v1, authHandler)
 

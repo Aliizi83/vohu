@@ -22,6 +22,7 @@ export const fa: Dictionary = {
     appTagline: "پنل مدیریت پلتفرم",
     chat: "گفتگو",
     sshConnections: "اتصالات SSH",
+    agentTools: "ابزارهای ایجنت",
     resourceAccess: "دسترسی به منابع",
     apiKeys: "کلیدهای API",
     users: "کاربران",
@@ -119,6 +120,27 @@ export const fa: Dictionary = {
     testingConnection: "در حال تست اتصال...",
     created: "اتصال «{{name}}» ایجاد شد",
     createFailed: "ایجاد اتصال ناموفق بود",
+  },
+
+  agentTools: {
+    title: "ابزارهای ایجنت",
+    subtitle:
+      "هر tool ای که ایجنت می‌تواند صدا بزند، موقع اجرا یک اتصال SSH مشخص می‌گیرد — هیچ tool ای روی خود این سرور اجرا نمی‌شود. ابزار عمومی برای همه در دسترس است؛ ابزار خصوصی فقط برای کسی که صراحتاً دسترسی گرفته — برای اعطای دسترسی به صفحه دسترسی به منابع مراجعه کنید.",
+    searchPlaceholder: "جستجو بر اساس نام...",
+    columnName: "نام",
+    columnDescription: "توضیحات",
+    columnStatus: "وضعیت",
+    columnVisibility: "دسترسی‌پذیری",
+    empty: "هنوز ابزاری وجود ندارد.",
+    loadFailed: "خطا در بارگذاری ابزارها",
+    updateFailed: "به‌روزرسانی ناموفق بود",
+    implemented: "پیاده‌سازی‌شده",
+    notImplemented: "هنوز پیاده‌سازی نشده",
+    visibilityPublic: "عمومی",
+    visibilityPrivate: "خصوصی",
+    makePublic: "عمومی کن",
+    makePrivate: "خصوصی کن",
+    visibilityChanged: "{{name}} به‌روزرسانی شد",
   },
 
   chat: {

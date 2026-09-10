@@ -8,14 +8,13 @@ import (
 
 	"github.com/Aliizi83/vohu/internal/agent"
 	"github.com/Aliizi83/vohu/internal/ai_model"
+	"github.com/Aliizi83/vohu/internal/platform/agenttool"
 	"github.com/Aliizi83/vohu/internal/platform/conversation"
 	"github.com/Aliizi83/vohu/internal/platform/custommodel"
 	"github.com/Aliizi83/vohu/internal/platform/providerkey"
 	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"github.com/Aliizi83/vohu/internal/platform/sshconn"
-	"github.com/Aliizi83/vohu/internal/tools"
 	"github.com/Aliizi83/vohu/internal/tools/command"
-	"github.com/Aliizi83/vohu/internal/tools/system_tools"
 	"github.com/gin-gonic/gin"
 )
 
@@ -30,6 +29,7 @@ type Handler struct {
 	commandPolicy command.Policy
 	providerKeys  providerkey.Service
 	customModels  custommodel.Service
+	agentTools    agenttool.Service
 }
 
 func NewHandler(
@@ -39,6 +39,7 @@ func NewHandler(
 	commandPolicy command.Policy,
 	providerKeys providerkey.Service,
 	customModels custommodel.Service,
+	agentTools agenttool.Service,
 ) *Handler {
 	return &Handler{
 		conversations: conversations,
@@ -47,6 +48,7 @@ func NewHandler(
 		commandPolicy: commandPolicy,
 		providerKeys:  providerKeys,
 		customModels:  customModels,
+		agentTools:    agentTools,
 	}
 }
 
@@ -204,10 +206,11 @@ func (h *Handler) SendMessage(c *gin.Context) {
 	turnInput := append(history, userMessage)
 	originalLen := len(history)
 
-	registry := tools.NewRegistry()
-	registry.Register(system_tools.NewCurrentSystemTime())
-	registry.Register(NewListSSHConnectionsTool(userID, h.sshconns, h.canAccess))
-	registry.Register(NewSSHTool(userID, h.sshconns, h.canAccess, h.commandPolicy))
+	registry, err := buildRegistry(c.Request.Context(), userID, h.agentTools, h.sshconns, h.canAccess, h.commandPolicy)
+	if err != nil {
+		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, err)
+		return
+	}
 
 	vohuAgent := agent.New(llm, registry, conv.Model)
 

@@ -5,6 +5,7 @@ import type { AccessLevel } from "@/lib/api"
 import { AccessProvider, useAccess } from "@/lib/access"
 import { AuthProvider, useAuth } from "@/lib/auth"
 import { LanguageProvider } from "@/lib/i18n"
+import AgentToolsPage from "@/pages/AgentToolsPage"
 import ApiKeysPage from "@/pages/ApiKeysPage"
 import ChatPage from "@/pages/ChatPage"
 import Layout from "@/pages/Layout"
@@ -60,6 +61,7 @@ export default function App() {
                 <Route index element={<Navigate to="/chat" replace />} />
                 <Route path="chat" element={<ChatPage />} />
                 <Route path="ssh-connections" element={<SSHConnectionsPage />} />
+                <Route path="agent-tools" element={<AgentToolsPage />} />
                 <Route path="provider-keys" element={<ApiKeysPage />} />
                 <Route
                   path="users"

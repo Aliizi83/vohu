@@ -151,6 +151,22 @@ export interface CustomModelDto {
   modelName: string
 }
 
+export type AgentToolVisibility = "public" | "private"
+
+// AgentToolDto is one entry in the SSH-connection-bound tool catalog
+// (see internal/platform/agenttool.Tool) — every tool the agent can call
+// in chat takes a connectionId at execution time, no exceptions;
+// implemented is false for one whose Go Execute is still a stub (checks
+// connection access, then reports "not implemented yet") pending the
+// lightweight remote execution agent this catalog is structured around.
+export interface AgentToolDto {
+  id: number
+  name: string
+  description: string
+  visibility: AgentToolVisibility
+  implemented: boolean
+}
+
 export type AccessLevel = "read" | "write" | "manage"
 export type GranteeType = "user" | "role"
 export type ResourceEffect = "accepted" | "prohibited"
@@ -307,6 +323,18 @@ export const api = {
     createGlobal: (data: { name: string; baseUrl: string; modelName: string; apiKey: string }) =>
       request<CustomModelDto>("POST", "/custom-models", { body: data }),
     removeGlobal: (id: number) => request<null>("DELETE", `/custom-models/${id}`),
+  },
+
+  agentTools: {
+    // Every public tool plus whatever private ones the caller holds at
+    // least Read-level resource access to — see
+    // agenttool.Service.ListForCaller.
+    list: (page?: number, pageSize?: number, filter?: DynamicFilter) =>
+      request<PagedList<AgentToolDto>>("GET", "/agent-tools", {
+        query: listQuery(page, pageSize, filter),
+      }),
+    setVisibility: (id: number, visibility: AgentToolVisibility) =>
+      request<AgentToolDto>("PUT", `/agent-tools/${id}`, { body: { visibility } }),
   },
 
   resourceAccess: {

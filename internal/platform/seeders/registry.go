@@ -12,4 +12,5 @@ var Seeders = []SeederFunc{
 	seedUsers,
 	seedUserRoles,
 	seedAdminAccess,
+	seedAgentTools,
 }

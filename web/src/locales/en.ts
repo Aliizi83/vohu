@@ -21,6 +21,7 @@ export const en = {
     appTagline: "Platform admin",
     chat: "Chat",
     sshConnections: "SSH Connections",
+    agentTools: "Agent Tools",
     apiKeys: "API Keys",
     users: "Users",
     roles: "Roles",
@@ -118,6 +119,27 @@ export const en = {
     testingConnection: "Testing connection...",
     created: 'Connection "{{name}}" created',
     createFailed: "Failed to create connection",
+  },
+
+  agentTools: {
+    title: "Agent Tools",
+    subtitle:
+      "Every tool the agent can call takes a specific SSH connection at execution time — there's no tool that runs locally on this server. Public tools are available to everyone; a private one only to whoever's been granted access — see Resource Access.",
+    searchPlaceholder: "Search by name...",
+    columnName: "Name",
+    columnDescription: "Description",
+    columnStatus: "Status",
+    columnVisibility: "Visibility",
+    empty: "No tools yet.",
+    loadFailed: "Failed to load tools",
+    updateFailed: "Failed to update",
+    implemented: "Implemented",
+    notImplemented: "Not implemented yet",
+    visibilityPublic: "Public",
+    visibilityPrivate: "Private",
+    makePublic: "Make public",
+    makePrivate: "Make private",
+    visibilityChanged: "{{name}} updated",
   },
 
   chat: {
