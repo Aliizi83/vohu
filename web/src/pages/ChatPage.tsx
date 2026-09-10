@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react"
 import { toast } from "sonner"
+import { Markdown } from "@/components/Markdown"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -37,6 +38,17 @@ import { cn } from "cn"
 // for it, large enough that a normal-length conversation loads in one page.
 const MESSAGES_PAGE_SIZE = 30
 
+// One conversation's in-flight-send state — see the streamStates doc
+// comment in ChatPage for why this is keyed per-conversation rather than
+// three plain useState values.
+interface StreamState {
+  pendingContent: string
+  streamingText: string
+  isStreaming: boolean
+}
+
+const EMPTY_STREAM_STATE: StreamState = { pendingContent: "", streamingText: "", isStreaming: false }
+
 const MODEL_OPTIONS = [
   { label: "Gemini Flash", provider: "gemini", model: "gemini-3.7-flash" },
   { label: "Gemini Flash Lite 3.5", provider: "gemini", model: "gemini-3.5-flash-lite" },
@@ -55,10 +67,31 @@ export default function ChatPage() {
   const [hasMoreMessages, setHasMoreMessages] = useState(false)
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false)
 
-  const [pendingUserContent, setPendingUserContent] = useState<string | null>(null)
-  const [streamingText, setStreamingText] = useState("")
-  const [isStreaming, setIsStreaming] = useState(false)
+  // streamStates holds one entry per conversation that currently has a
+  // send in flight, keyed by conversation ID — not three plain useState
+  // values, which is what made only one conversation's send able to be
+  // "in progress" at a time app-wide: switching conversations while one
+  // streamed disabled the composer everywhere (isStreaming was global)
+  // and, worse, would have appended that reply to whichever conversation
+  // happened to be selected when it finished (see selectedIdRef and
+  // onDone below — messages only ever gets a reply appended when the
+  // send that produced it belongs to the *currently selected*
+  // conversation; a send finishing in the background is still safely
+  // persisted server-side regardless, and shows up the next time that
+  // conversation is selected via the normal fetch-on-select below).
+  const [streamStates, setStreamStates] = useState<Record<number, StreamState>>({})
   const [input, setInput] = useState("")
+
+  // Always the latest selectedId, readable from inside streamMessage's
+  // callbacks — those close over whatever selectedId was at send time,
+  // which is stale by the time a reply actually arrives if the user has
+  // since switched conversations.
+  const selectedIdRef = useRef<number | null>(null)
+  useEffect(() => {
+    selectedIdRef.current = selectedId
+  }, [selectedId])
+
+  const currentStream = (selectedId !== null && streamStates[selectedId]) || EMPTY_STREAM_STATE
 
   const scrollRef = useRef<HTMLDivElement>(null)
   // The next page to fetch when the user scrolls up for older history —
@@ -159,10 +192,13 @@ export default function ChatPage() {
 
   // Scrolls to the bottom while the assistant's reply streams in, or
   // while the optimistic pending user bubble is showing — both only ever
-  // add content at the bottom, unlike `messages` changing below.
+  // add content at the bottom, unlike `messages` changing below. Reads
+  // off currentStream (the *selected* conversation's stream state) so
+  // this doesn't fire for a send progressing in some other, unselected
+  // conversation.
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })
-  }, [streamingText, pendingUserContent])
+  }, [currentStream.streamingText, currentStream.pendingContent])
 
   // `messages` changes for two different reasons that need opposite
   // scroll behavior: a freshly loaded conversation or a newly appended
@@ -186,30 +222,54 @@ export default function ChatPage() {
     }
   }, [messages])
 
-  async function handleSend(e: FormEvent) {
-    e.preventDefault()
-    if (!selectedId || !input.trim() || isStreaming) return
+  async function handleSend(e?: FormEvent) {
+    e?.preventDefault()
+    if (!selectedId || !input.trim() || currentStream.isStreaming) return
 
+    // Captured once, up front — streamMessage's callbacks fire later,
+    // possibly after the user has selected a different conversation, so
+    // they can't rely on reading selectedId directly (stale closure).
+    const conversationId = selectedId
     const content = input.trim()
     setInput("")
-    setPendingUserContent(content)
-    setStreamingText("")
-    setIsStreaming(true)
+    setStreamStates((prev) => ({
+      ...prev,
+      [conversationId]: { pendingContent: content, streamingText: "", isStreaming: true },
+    }))
 
-    await streamMessage(selectedId, content, {
-      onChunk: (chunk) => setStreamingText((prev) => prev + chunk),
+    await streamMessage(conversationId, content, {
+      onChunk: (chunk) => {
+        setStreamStates((prev) => ({
+          ...prev,
+          [conversationId]: {
+            ...(prev[conversationId] ?? EMPTY_STREAM_STATE),
+            streamingText: (prev[conversationId]?.streamingText ?? "") + chunk,
+          },
+        }))
+      },
       onDone: (newMessages) => {
-        shouldScrollToBottomRef.current = true
-        setMessages((prev) => [...(prev ?? []), ...newMessages])
-        setPendingUserContent(null)
-        setStreamingText("")
-        setIsStreaming(false)
+        // Only the currently-selected conversation's `messages` array is
+        // what's on screen — appending here when the user has switched
+        // away would inject this reply into whatever *other*
+        // conversation they're now looking at. The reply is already
+        // safely persisted server-side regardless; switching back to
+        // this conversation later fetches it normally (see the
+        // selectedId effect above).
+        if (selectedIdRef.current === conversationId) {
+          shouldScrollToBottomRef.current = true
+          setMessages((prev) => [...(prev ?? []), ...newMessages])
+        }
+        setStreamStates((prev) => {
+          const { [conversationId]: _done, ...rest } = prev
+          return rest
+        })
       },
       onError: (message) => {
         toast.error(message)
-        setPendingUserContent(null)
-        setStreamingText("")
-        setIsStreaming(false)
+        setStreamStates((prev) => {
+          const { [conversationId]: _failed, ...rest } = prev
+          return rest
+        })
       },
     })
   }
@@ -247,7 +307,15 @@ export default function ChatPage() {
                 : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
             )}
           >
-            <span className="w-full truncate font-medium">{conv.title}</span>
+            <span className="flex w-full items-center gap-1.5">
+              <span className="truncate font-medium">{conv.title}</span>
+              {streamStates[conv.id]?.isStreaming && (
+                <span
+                  className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary"
+                  title={t("chat.stillWorking")}
+                />
+              )}
+            </span>
             <span className="text-xs opacity-70">
               {conv.provider} · {conv.model}
             </span>
@@ -294,33 +362,89 @@ export default function ChatPage() {
                 <MessageBubble key={i} message={msg} />
               ))}
 
-              {pendingUserContent && (
-                <MessageBubble message={{ role: "user", content: pendingUserContent }} />
+              {currentStream.pendingContent && (
+                <MessageBubble message={{ role: "user", content: currentStream.pendingContent }} />
               )}
 
-              {isStreaming && (
+              {currentStream.isStreaming && (
                 <MessageBubble
-                  message={{ role: "assistant", content: streamingText || "…" }}
-                  pending={streamingText === ""}
+                  message={{ role: "assistant", content: currentStream.streamingText || "…" }}
+                  pending={currentStream.streamingText === ""}
                 />
               )}
             </div>
 
-            <form onSubmit={handleSend} className="flex gap-2 border-t p-3">
-              <Input
+            <form onSubmit={handleSend} className="flex items-end gap-2 border-t p-3">
+              <ComposerTextarea
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={setInput}
+                onSubmit={() => handleSend()}
+                disabled={currentStream.isStreaming}
                 placeholder={t("chat.composerPlaceholder")}
-                disabled={isStreaming}
               />
-              <Button type="submit" disabled={isStreaming || !input.trim()}>
-                {isStreaming ? t("chat.sending") : t("chat.send")}
+              <Button type="submit" disabled={currentStream.isStreaming || !input.trim()}>
+                {currentStream.isStreaming ? t("chat.sending") : t("chat.send")}
               </Button>
             </form>
           </>
         )}
       </section>
     </div>
+  )
+}
+
+const MAX_COMPOSER_HEIGHT_PX = 160
+
+// ComposerTextarea replaces a plain single-line <Input> — a chat message
+// can legitimately be many lines (a pasted stack trace, a multi-line code
+// block the user is asking about), which a single-line input can't hold
+// at all: pressing Enter inside one submits the surrounding <form>
+// immediately, so there's no way to type a second line to begin with.
+// Enter alone still sends (matching the single-line composer's old
+// behavior and every mainstream chat app); Shift+Enter inserts a literal
+// newline. Grows with content up to MAX_COMPOSER_HEIGHT_PX, then scrolls
+// internally rather than pushing the message list off-screen.
+function ComposerTextarea({
+  value,
+  onChange,
+  onSubmit,
+  disabled,
+  placeholder,
+}: {
+  value: string
+  onChange: (value: string) => void
+  onSubmit: () => void
+  disabled?: boolean
+  placeholder?: string
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = "auto"
+    el.style.height = `${Math.min(el.scrollHeight, MAX_COMPOSER_HEIGHT_PX)}px`
+  }, [value])
+
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => {
+        // isComposing guards IME input (Chinese/Japanese/Korean, ...) —
+        // Enter there confirms a character being composed, it isn't the
+        // user asking to send yet.
+        if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+          e.preventDefault()
+          onSubmit()
+        }
+      }}
+      disabled={disabled}
+      placeholder={placeholder}
+      rows={1}
+      className="max-h-40 min-h-9 flex-1 resize-none overflow-y-auto rounded-lg border border-input bg-transparent px-3 py-2 text-sm transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+    />
   )
 }
 
@@ -352,12 +476,12 @@ function MessageBubble({ message, pending }: { message: MessageDto; pending?: bo
     <div className={cn("flex flex-col gap-1", isUser ? "items-end" : "items-start")}>
       <div
         className={cn(
-          "max-w-[75%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap break-words",
+          "max-w-[75%] min-w-0 rounded-lg px-3 py-2",
           isUser ? "bg-primary text-primary-foreground" : "bg-muted",
           pending && "text-muted-foreground italic",
         )}
       >
-        {message.content}
+        <Markdown content={message.content ?? ""} />
       </div>
       {message.toolCalls?.map((call) => (
         <span key={call.id} className="text-xs text-muted-foreground">

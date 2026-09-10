@@ -28,6 +28,10 @@ export const en = {
     resourceAccess: "Resource Access",
     logOut: "Log out",
     language: "Language",
+    theme: "Theme",
+    themeLight: "Light",
+    themeDark: "Dark",
+    themeSystem: "System",
   },
 
   login: {
@@ -151,6 +155,7 @@ export const en = {
     selectPrompt: "Create or select a conversation to start chatting.",
     composerPlaceholder: "Ask the agent to do something, e.g. run `pwd` on one of your servers…",
     sending: "Sending…",
+    stillWorking: "Still working in the background",
     send: "Send",
     loadConversationsFailed: "Failed to load conversations",
     loadMessagesFailed: "Failed to load messages",

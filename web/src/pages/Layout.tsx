@@ -1,4 +1,5 @@
-import { KeySquare, LogOut, MessageSquare, Server, Shield, ShieldCheck, Users, Wrench } from "lucide-react"
+import { KeySquare, LogOut, MessageSquare, Monitor, Moon, Server, Shield, ShieldCheck, Sun, Users, Wrench } from "lucide-react"
+import { useTheme } from "next-themes"
 import { NavLink, Outlet } from "react-router-dom"
 import { Logo } from "@/components/Logo"
 import { Button } from "@/components/ui/button"
@@ -7,6 +8,12 @@ import { useAccess } from "@/lib/access"
 import { useAuth } from "@/lib/auth"
 import { LANGUAGE_OPTIONS, useLanguage } from "@/lib/i18n"
 import { cn } from "cn"
+
+const THEME_OPTIONS: { value: "light" | "dark" | "system"; icon: typeof Sun; labelKey: string }[] = [
+  { value: "light", icon: Sun, labelKey: "nav.themeLight" },
+  { value: "dark", icon: Moon, labelKey: "nav.themeDark" },
+  { value: "system", icon: Monitor, labelKey: "nav.themeSystem" },
+]
 
 // required is undefined for items open to every authenticated user (Chat,
 // SSH Connections — visibility of *records* there is filtered server-side
@@ -38,6 +45,7 @@ export default function Layout() {
   const { logout } = useAuth()
   const { hasLevel } = useAccess()
   const { t, language, setLanguage } = useLanguage()
+  const { theme, setTheme } = useTheme()
 
   const visibleNavItems = navItems.filter(
     (item) => item.required === undefined || hasLevel(item.required.resourceType, item.required.level),
@@ -87,6 +95,28 @@ export default function Layout() {
                   )}
                 >
                   {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1 px-2">
+            <span className="text-xs text-muted-foreground">{t("nav.theme")}:</span>
+            <div className="flex gap-1">
+              {THEME_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setTheme(option.value)}
+                  aria-label={t(option.labelKey)}
+                  title={t(option.labelKey)}
+                  className={cn(
+                    "rounded-md p-1 transition-colors",
+                    theme === option.value
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                  )}
+                >
+                  <option.icon className="size-3.5" />
                 </button>
               ))}
             </div>

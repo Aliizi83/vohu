@@ -29,6 +29,10 @@ export const fa: Dictionary = {
     roles: "نقش‌ها",
     logOut: "خروج",
     language: "زبان",
+    theme: "پوسته",
+    themeLight: "روشن",
+    themeDark: "تیره",
+    themeSystem: "سیستم",
   },
 
   login: {
@@ -152,6 +156,7 @@ export const fa: Dictionary = {
     selectPrompt: "برای شروع گفتگو، یک گفتگو بسازید یا انتخاب کنید.",
     composerPlaceholder: "از ایجنت بخواهید کاری انجام دهد، مثلاً روی یکی از سرورهایتان `pwd` را اجرا کند…",
     sending: "در حال ارسال…",
+    stillWorking: "هنوز در پس‌زمینه در حال کاره",
     send: "ارسال",
     loadConversationsFailed: "خطا در بارگذاری گفتگوها",
     loadMessagesFailed: "خطا در بارگذاری پیام‌ها",
