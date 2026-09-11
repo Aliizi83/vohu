@@ -58,7 +58,7 @@ func main() {
 		logger.Fatal(err, logging.Postgres, logging.Migration, err.Error(), nil)
 	}
 
-	rbacRepo := rbac.NewRepository(db.GetDB())
+	rbacRepo := rbac.NewCachedRepository(rbac.NewRepository(db.GetDB()), cache.GetRedis())
 	rbacService := rbac.NewService(rbacRepo)
 	rbacHandler := rbac.NewHandler(rbacService)
 
