@@ -12,6 +12,7 @@ import (
 type Config struct {
 	Server   ServerConfig
 	Postgres PostgresConfig
+	Redis    RedisConfig
 	Logger   LoggerConfig
 	JWT      JWTConfig
 	Secrets  SecretsConfig
@@ -44,6 +45,18 @@ type PostgresConfig struct {
 	MaxIdleConns    int
 	MaxOpenConns    int
 	ConnMaxLifetime time.Duration
+}
+
+type RedisConfig struct {
+	Host         string
+	Port         string
+	Password     string
+	Db           int
+	DialTimeout  time.Duration
+	ReadTimeout  time.Duration
+	WriteTimeout time.Duration
+	PoolSize     int
+	PoolTimeout  time.Duration
 }
 
 type JWTConfig struct {

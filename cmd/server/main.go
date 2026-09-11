@@ -16,6 +16,7 @@ import (
 	"github.com/Aliizi83/vohu/internal/platform/sshconn"
 	"github.com/Aliizi83/vohu/internal/platform/user"
 	"github.com/Aliizi83/vohu/internal/tools/command"
+	"github.com/Aliizi83/vohu/pkg/cache"
 	"github.com/Aliizi83/vohu/pkg/crypto"
 	"github.com/Aliizi83/vohu/pkg/db"
 	"github.com/Aliizi83/vohu/pkg/logging"
@@ -47,6 +48,11 @@ func main() {
 		logger.Fatal(err, logging.Postgres, logging.Startup, err.Error(), nil)
 	}
 	defer db.CloseDB()
+
+	if err := cache.InitRedis(cfg); err != nil {
+		logger.Fatal(err, logging.General, logging.Startup, err.Error(), nil)
+	}
+	defer cache.CloseRedis()
 
 	if err := migrations.UpP_1(db.GetDB(), logger); err != nil {
 		logger.Fatal(err, logging.Postgres, logging.Migration, err.Error(), nil)
