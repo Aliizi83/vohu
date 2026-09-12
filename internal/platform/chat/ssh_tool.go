@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/Aliizi83/vohu/internal/ai_model"
+	"github.com/Aliizi83/vohu/internal/platform/commandrule"
 	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"github.com/Aliizi83/vohu/internal/platform/sshconn"
 	"github.com/Aliizi83/vohu/internal/tools"
@@ -25,25 +26,49 @@ const accessLevelWrite = "write"
 // Write level for the specific connection they asked for; the
 // connection's own AuthMethod/secret never leaves this method (never
 // returned to the model, never logged).
+//
+// The command policy itself is per-connection, not a single policy
+// shared by every connection — commandRules.ListForConnection is read
+// fresh on every call (see buildCommandPolicy) rather than built once at
+// registry-construction time, since which connectionId a given call
+// names isn't known until the model actually asks for one.
 type SSHTool struct {
-	userID        uint
-	sshconns      sshconn.Service
-	canAccess     shared.AccessLevelCheck
-	commandPolicy command.Policy
+	userID       uint
+	sshconns     sshconn.Service
+	canAccess    shared.AccessLevelCheck
+	commandRules commandrule.Service
 }
 
 func NewSSHTool(
 	userID uint,
 	sshconns sshconn.Service,
 	canAccess shared.AccessLevelCheck,
-	commandPolicy command.Policy,
+	commandRules commandrule.Service,
 ) *SSHTool {
 	return &SSHTool{
-		userID:        userID,
-		sshconns:      sshconns,
-		canAccess:     canAccess,
-		commandPolicy: commandPolicy,
+		userID:       userID,
+		sshconns:     sshconns,
+		canAccess:    canAccess,
+		commandRules: commandRules,
 	}
+}
+
+// buildCommandPolicy converts one connection's stored rules into the
+// command package's own Policy shape — commandrule never imports
+// internal/tools/command itself (same decoupling rule every platform
+// module besides chat follows), so that conversion has to happen here.
+// Always accept-mode (allow-list): a connection with no rules permits
+// nothing, matching commandrule.Rule's own doc comment.
+func buildCommandPolicy(rules []commandrule.Rule) command.Policy {
+	converted := make([]command.Rule, 0, len(rules))
+	for _, r := range rules {
+		converted = append(converted, command.Rule{
+			Program:      r.Program,
+			ArgsPrefixes: [][]string(r.ArgsPrefixes),
+			Allowed:      r.Allowed,
+		})
+	}
+	return command.NewCommandPolicy(command.PolicyModeAccept, converted)
 }
 
 func (t *SSHTool) Name() string { return "ssh_execute" }
@@ -112,7 +137,13 @@ func (t *SSHTool) Execute(ctx context.Context, args map[string]any) (tools.ToolR
 		return tools.ToolResult{Success: false, Data: "failed to parse private key"}, nil
 	}
 
-	executor := command.NewSSHExecutor(conn.Host, conn.Port, conn.Username, ssh.PublicKeys(signer), t.commandPolicy)
+	rules, _, err := t.commandRules.ListForConnection(ctx, connectionID, shared.Pagination{PageNumber: 1, PageSize: 1000})
+	if err != nil {
+		return tools.ToolResult{Success: false, Data: fmt.Sprintf("failed to load command policy: %v", err)}, nil
+	}
+	policy := buildCommandPolicy(rules)
+
+	executor := command.NewSSHExecutor(conn.Host, conn.Port, conn.Username, ssh.PublicKeys(signer), policy)
 
 	output, err := executor.Execute(ctx, command.Command{Program: program, Args: commandArgs})
 	if err != nil {

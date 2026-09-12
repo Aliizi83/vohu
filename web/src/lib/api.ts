@@ -151,6 +151,20 @@ export interface CustomModelDto {
   modelName: string
 }
 
+// CommandRuleDto is one entry of an SSH connection's own command
+// allow-list (see internal/platform/commandrule.Rule) — evaluated
+// first-match-wins by connection; a connection with zero rules permits
+// nothing. argsPrefixes is an OR of prefixes: an empty array matches any
+// args at all, a non-empty one requires the command's args to start with
+// one of the listed word sequences.
+export interface CommandRuleDto {
+  id: number
+  sshConnectionId: number
+  program: string
+  argsPrefixes: string[][]
+  allowed: boolean
+}
+
 export type AgentToolVisibility = "public" | "private"
 
 // AgentToolDto is one entry in the SSH-connection-bound tool catalog
@@ -323,6 +337,25 @@ export const api = {
     createGlobal: (data: { name: string; baseUrl: string; modelName: string; apiKey: string }) =>
       request<CustomModelDto>("POST", "/custom-models", { body: data }),
     removeGlobal: (id: number) => request<null>("DELETE", `/custom-models/${id}`),
+  },
+
+  commandRules: {
+    // Rules are always fetched scoped to one connection — there's no
+    // "list every rule" endpoint, matching commandrule.Handler.List on the
+    // backend (it requires sshConnectionId as a query param).
+    list: (sshConnectionId: number) =>
+      request<PagedList<CommandRuleDto>>("GET", "/command-rules", {
+        query: { sshConnectionId: String(sshConnectionId), pageSize: "100" },
+      }),
+    create: (data: {
+      sshConnectionId: number
+      program: string
+      argsPrefixes?: string[][]
+      allowed?: boolean
+    }) => request<CommandRuleDto>("POST", "/command-rules", { body: data }),
+    update: (id: number, data: { allowed?: boolean }) =>
+      request<CommandRuleDto>("PUT", `/command-rules/${id}`, { body: data }),
+    remove: (id: number) => request<null>("DELETE", `/command-rules/${id}`),
   },
 
   agentTools: {

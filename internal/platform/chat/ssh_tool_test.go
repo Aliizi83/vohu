@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/Aliizi83/vohu/internal/platform/commandrule"
 	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"github.com/Aliizi83/vohu/internal/platform/sshconn"
-	"github.com/Aliizi83/vohu/internal/tools/command"
 )
 
 // stubSSHConnService is a minimal sshconn.Service double — only GetByID
@@ -58,7 +58,7 @@ func allowAccess(ctx context.Context, userID uint, resourceType string, resource
 }
 
 func TestSSHTool_Execute_MissingConnectionID(t *testing.T) {
-	tool := NewSSHTool(1, &stubSSHConnService{}, allowAccess, noopPolicy{})
+	tool := NewSSHTool(1, &stubSSHConnService{}, allowAccess, noopCommandRules{})
 
 	result, err := tool.Execute(context.Background(), map[string]any{"program": "ls"})
 	if err != nil {
@@ -70,7 +70,7 @@ func TestSSHTool_Execute_MissingConnectionID(t *testing.T) {
 }
 
 func TestSSHTool_Execute_MissingProgram(t *testing.T) {
-	tool := NewSSHTool(1, &stubSSHConnService{}, allowAccess, noopPolicy{})
+	tool := NewSSHTool(1, &stubSSHConnService{}, allowAccess, noopCommandRules{})
 
 	result, err := tool.Execute(context.Background(), map[string]any{"connectionId": float64(5)})
 	if err != nil {
@@ -88,7 +88,7 @@ func TestSSHTool_Execute_RequestsWriteLevel(t *testing.T) {
 		return false, nil // deny is fine — this test only cares which level was requested
 	}
 
-	tool := NewSSHTool(1, &stubSSHConnService{}, spy, noopPolicy{})
+	tool := NewSSHTool(1, &stubSSHConnService{}, spy, noopCommandRules{})
 	_, _ = tool.Execute(context.Background(), map[string]any{"connectionId": float64(5), "program": "ls"})
 
 	if gotLevel != "write" {
@@ -98,7 +98,7 @@ func TestSSHTool_Execute_RequestsWriteLevel(t *testing.T) {
 
 func TestSSHTool_Execute_DeniedAccessNeverReachesConnectionLookup(t *testing.T) {
 	svc := &stubSSHConnService{getErr: errors.New("GetByID should never be called")}
-	tool := NewSSHTool(1, svc, denyAccess, noopPolicy{})
+	tool := NewSSHTool(1, svc, denyAccess, noopCommandRules{})
 
 	result, err := tool.Execute(context.Background(), map[string]any{
 		"connectionId": float64(5),
@@ -117,7 +117,7 @@ func TestSSHTool_Execute_DeniedAccessNeverReachesConnectionLookup(t *testing.T) 
 
 func TestSSHTool_Execute_ConnectionNotFound(t *testing.T) {
 	svc := &stubSSHConnService{getErr: shared.ErrNotFound}
-	tool := NewSSHTool(1, svc, allowAccess, noopPolicy{})
+	tool := NewSSHTool(1, svc, allowAccess, noopCommandRules{})
 
 	result, err := tool.Execute(context.Background(), map[string]any{
 		"connectionId": float64(5),
@@ -136,7 +136,7 @@ func TestSSHTool_Execute_UnparseablePrivateKey(t *testing.T) {
 		conn:   &sshconn.SSHConnection{Host: "example.com", Port: 22, Username: "u"},
 		secret: "not a real private key",
 	}
-	tool := NewSSHTool(1, svc, allowAccess, noopPolicy{})
+	tool := NewSSHTool(1, svc, allowAccess, noopCommandRules{})
 
 	result, err := tool.Execute(context.Background(), map[string]any{
 		"connectionId": float64(5),
@@ -151,7 +151,7 @@ func TestSSHTool_Execute_UnparseablePrivateKey(t *testing.T) {
 }
 
 func TestSSHTool_Execute_ArgsMustBeStringArray(t *testing.T) {
-	tool := NewSSHTool(1, &stubSSHConnService{}, allowAccess, noopPolicy{})
+	tool := NewSSHTool(1, &stubSSHConnService{}, allowAccess, noopCommandRules{})
 
 	result, err := tool.Execute(context.Background(), map[string]any{
 		"connectionId": float64(5),
@@ -213,13 +213,24 @@ func TestParseStringArrayArg(t *testing.T) {
 	}
 }
 
-// noopPolicy allows nothing — SSHExecutor.Execute short-circuits on
-// policy denial before any network I/O, which is all these tests need:
-// SSHTool.Execute is expected to fail earlier still (missing args,
-// permission denial, unknown auth method) before ever reaching the
-// executor.
-type noopPolicy struct{}
+// noopCommandRules is a commandrule.Service double returning zero rules
+// (deny-everything under accept-mode) for every connection — none of the
+// tests above ever reach the point where SSHTool.Execute would actually
+// read it (they all fail earlier: missing args, permission denial,
+// unknown connection, unparseable key), so only ListForConnection needs a
+// real implementation; the rest panic if a test somehow calls them.
+type noopCommandRules struct{}
 
-func (noopPolicy) Evaluate(command.Command) command.Decision {
-	return command.Decision{Allowed: false, Reason: "test policy denies everything"}
+func (noopCommandRules) Create(context.Context, commandrule.CreateRuleRequest) (*commandrule.Rule, error) {
+	panic("not used by SSHTool")
+}
+func (noopCommandRules) GetByID(context.Context, uint) (*commandrule.Rule, error) {
+	panic("not used by SSHTool")
+}
+func (noopCommandRules) Update(context.Context, uint, commandrule.UpdateRuleRequest) (*commandrule.Rule, error) {
+	panic("not used by SSHTool")
+}
+func (noopCommandRules) Delete(context.Context, uint) error { panic("not used by SSHTool") }
+func (noopCommandRules) ListForConnection(context.Context, uint, shared.Pagination) ([]commandrule.Rule, int64, error) {
+	return nil, 0, nil
 }

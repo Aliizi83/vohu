@@ -319,6 +319,281 @@
                 }
             }
         },
+        "/command-rules": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists every command rule for one SSH connection. The caller must hold \"manage\" on that connection.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "command-rules"
+                ],
+                "summary": "List an SSH connection's command rules",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "SSH connection ID",
+                        "name": "sshConnectionId",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number, default 1",
+                        "name": "pageNumber",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size, default 10",
+                        "name": "pageSize",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_commandrule_Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Caller doesn't hold manage on the target connection",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Adds one allow/deny rule to an SSH connection's command policy. Rules are first-match-wins within a connection (evaluated in creation order) — a connection with no rules permits nothing. The caller must already hold \"manage\" on the target connection, same level required to delete it.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "command-rules"
+                ],
+                "summary": "Create a command rule",
+                "parameters": [
+                    {
+                        "description": "New rule",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_platform_commandrule.CreateRuleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/internal_platform_commandrule.Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Caller doesn't hold manage on the target connection",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/command-rules/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Changes a rule's program/argsPrefixes/allowed. The caller must hold \"manage\" on the connection this rule belongs to.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "command-rules"
+                ],
+                "summary": "Update a command rule",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Rule ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to update",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_platform_commandrule.UpdateRuleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/internal_platform_commandrule.Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Caller doesn't hold manage on the connection this rule belongs to",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Removes one rule from an SSH connection's command policy. The caller must hold \"manage\" on the connection this rule belongs to.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "command-rules"
+                ],
+                "summary": "Delete a command rule",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Rule ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Caller doesn't hold manage on the connection this rule belongs to",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/conversations": {
             "get": {
                 "security": [
@@ -2569,6 +2844,35 @@
                 }
             }
         },
+        "github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_commandrule_Response": {
+            "type": "object",
+            "properties": {
+                "hasNextPage": {
+                    "type": "boolean"
+                },
+                "hasPreviousPage": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_platform_commandrule.Response"
+                    }
+                },
+                "pageNumber": {
+                    "type": "integer"
+                },
+                "pageSize": {
+                    "type": "integer"
+                },
+                "totalPages": {
+                    "type": "integer"
+                },
+                "totalRows": {
+                    "type": "integer"
+                }
+            }
+        },
         "github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_rbac_ResourceAccessResponse": {
             "type": "object",
             "properties": {
@@ -2862,6 +3166,83 @@
                 "result": {},
                 "toolCallId": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_platform_commandrule.CreateRuleRequest": {
+            "type": "object",
+            "required": [
+                "program",
+                "sshConnectionId"
+            ],
+            "properties": {
+                "allowed": {
+                    "description": "Allowed defaults to true (an allow rule) when omitted — the common\ncase, since this is an allow-list policy; a caller has to opt in\nexplicitly to write a deny rule (e.g. carving an exception out of a\nbroader allow rule that matches first).",
+                    "type": "boolean"
+                },
+                "argsPrefixes": {
+                    "type": "array",
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "program": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "sshConnectionId": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_platform_commandrule.Response": {
+            "type": "object",
+            "properties": {
+                "allowed": {
+                    "type": "boolean"
+                },
+                "argsPrefixes": {
+                    "type": "array",
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "sshConnectionId": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_platform_commandrule.UpdateRuleRequest": {
+            "type": "object",
+            "properties": {
+                "allowed": {
+                    "type": "boolean"
+                },
+                "argsPrefixes": {
+                    "description": "ArgsPrefixes: omitted (nil) means \"don't change\"; an explicit empty\narray clears it (the rule then matches the program regardless of\nargs). encoding/json already distinguishes the two on its own — an\nomitted key decodes to nil, \"[]\" decodes to a non-nil empty slice.",
+                    "type": "array",
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "program": {
+                    "type": "string",
+                    "maxLength": 255
                 }
             }
         },

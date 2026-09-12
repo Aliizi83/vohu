@@ -9,12 +9,12 @@ import (
 	"github.com/Aliizi83/vohu/internal/agent"
 	"github.com/Aliizi83/vohu/internal/ai_model"
 	"github.com/Aliizi83/vohu/internal/platform/agenttool"
+	"github.com/Aliizi83/vohu/internal/platform/commandrule"
 	"github.com/Aliizi83/vohu/internal/platform/conversation"
 	"github.com/Aliizi83/vohu/internal/platform/custommodel"
 	"github.com/Aliizi83/vohu/internal/platform/providerkey"
 	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"github.com/Aliizi83/vohu/internal/platform/sshconn"
-	"github.com/Aliizi83/vohu/internal/tools/command"
 	"github.com/gin-gonic/gin"
 )
 
@@ -26,7 +26,7 @@ type Handler struct {
 	conversations conversation.Service
 	sshconns      sshconn.Service
 	canAccess     shared.AccessLevelCheck
-	commandPolicy command.Policy
+	commandRules  commandrule.Service
 	providerKeys  providerkey.Service
 	customModels  custommodel.Service
 	agentTools    agenttool.Service
@@ -36,7 +36,7 @@ func NewHandler(
 	conversations conversation.Service,
 	sshconns sshconn.Service,
 	canAccess shared.AccessLevelCheck,
-	commandPolicy command.Policy,
+	commandRules commandrule.Service,
 	providerKeys providerkey.Service,
 	customModels custommodel.Service,
 	agentTools agenttool.Service,
@@ -45,7 +45,7 @@ func NewHandler(
 		conversations: conversations,
 		sshconns:      sshconns,
 		canAccess:     canAccess,
-		commandPolicy: commandPolicy,
+		commandRules:  commandRules,
 		providerKeys:  providerKeys,
 		customModels:  customModels,
 		agentTools:    agentTools,
@@ -258,7 +258,7 @@ func (h *Handler) SendMessage(c *gin.Context) {
 	turnInput := append(history, userMessage)
 	originalLen := len(history)
 
-	registry, err := buildRegistry(c.Request.Context(), userID, h.agentTools, h.sshconns, h.canAccess, h.commandPolicy)
+	registry, err := buildRegistry(c.Request.Context(), userID, h.agentTools, h.sshconns, h.canAccess, h.commandRules)
 	if err != nil {
 		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, err)
 		return

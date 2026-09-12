@@ -78,6 +78,7 @@ The agent core knows nothing about HTTP, databases, or multiple users — that s
 | [`internal/platform/auth`](internal/platform/auth) | Login, JWT access/refresh tokens, the middleware every other module's routes sit behind. |
 | [`internal/platform/rbac`](internal/platform/rbac) | The one authorization mechanism in the platform. A `ResourceAccess` row grants a level (`read`/`write`/`manage`) on a resource type + ID to a grantee — a specific user, or every member of a role at once. A role-level grant cascades to its members; a more specific per-user row (including an explicit `prohibited` one) always wins. No separate flat-permission system running alongside it. |
 | [`internal/platform/sshconn`](internal/platform/sshconn) | SSH connections a user can grant the agent access to. Private-key auth only; a connection is test-dialed (real handshake, no command run) *before* it's saved, so a bad host or mismatched key fails loudly at creation time, not mid-conversation. Keys are AES-GCM encrypted at rest and never returned by the API. |
+| [`internal/platform/commandrule`](internal/platform/commandrule) | Each SSH connection's own command policy — an allow-list of program + argument-prefix rules, stored per connection rather than one policy shared by every connection. `chat.SSHTool` reads a connection's rules fresh on every `ssh_execute` call; a connection with no rules yet permits nothing. |
 | [`internal/platform/conversation`](internal/platform/conversation) | Chat threads and messages, with two separate read paths on purpose: `LoadHistory` (unpaginated, feeds the agent's own context) and `ListMessages` (paginated, newest page first, for the UI's scroll-up-to-load-older behavior). |
 | [`internal/platform/providerkey`](internal/platform/providerkey) | One API key per provider, per user or global — a personal key always wins over the account-wide default. |
 | [`internal/platform/custommodel`](internal/platform/custommodel) | Any number of *named* OpenAI-compatible presets (URL + key + model), per user or global — where `providerkey` gives one "openai" slot, this is what lets one account use a local Ollama server *and* a DeepSeek account side by side. |
@@ -95,7 +96,7 @@ Two independent mechanisms, not one blanket guardrail:
 
 ## API docs
 
-Every `cmd/server` endpoint (all 42 of them) is documented with Swagger/OpenAPI — generated from `@Summary`/`@Param`/`@Success`/... comments on each handler via [swaggo/swag](https://github.com/swaggo/swag). With the server running, open `/swagger/index.html` for the interactive UI (`/swagger/doc.json` for the raw spec).
+Every `cmd/server` endpoint (all 46 of them) is documented with Swagger/OpenAPI — generated from `@Summary`/`@Param`/`@Success`/... comments on each handler via [swaggo/swag](https://github.com/swaggo/swag). With the server running, open `/swagger/index.html` for the interactive UI (`/swagger/doc.json` for the raw spec).
 
 A handler's annotations changing means regenerating `docs/` (committed, since `cmd/server` imports it — the build doesn't call `swag` itself):
 

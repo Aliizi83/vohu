@@ -5,10 +5,10 @@ import (
 
 	"github.com/Aliizi83/vohu/internal/ai_model"
 	"github.com/Aliizi83/vohu/internal/platform/agenttool"
+	"github.com/Aliizi83/vohu/internal/platform/commandrule"
 	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"github.com/Aliizi83/vohu/internal/platform/sshconn"
 	"github.com/Aliizi83/vohu/internal/tools"
-	"github.com/Aliizi83/vohu/internal/tools/command"
 )
 
 // buildRegistry constructs one turn's tool registry from the DB: every
@@ -32,7 +32,7 @@ func buildRegistry(
 	agentTools agenttool.Service,
 	sshconns sshconn.Service,
 	canAccess shared.AccessLevelCheck,
-	commandPolicy command.Policy,
+	commandRules commandrule.Service,
 ) (*tools.Registry, error) {
 	rows, _, err := agentTools.ListForCaller(ctx, userID, shared.DynamicFilter{}, shared.Pagination{PageNumber: 1, PageSize: 500})
 	if err != nil {
@@ -41,7 +41,7 @@ func buildRegistry(
 
 	registry := tools.NewRegistry()
 	for _, row := range rows {
-		if tool, ok := builtinTool(row.Name, userID, sshconns, canAccess, commandPolicy); ok {
+		if tool, ok := builtinTool(row.Name, userID, sshconns, canAccess, commandRules); ok {
 			registry.Register(tool)
 		}
 	}
@@ -60,13 +60,13 @@ func builtinTool(
 	userID uint,
 	sshconns sshconn.Service,
 	canAccess shared.AccessLevelCheck,
-	commandPolicy command.Policy,
+	commandRules commandrule.Service,
 ) (tools.Tool, bool) {
 	switch name {
 	case "list_ssh_connections":
 		return NewListSSHConnectionsTool(userID, sshconns, canAccess), true
 	case "ssh_execute":
-		return NewSSHTool(userID, sshconns, canAccess, commandPolicy), true
+		return NewSSHTool(userID, sshconns, canAccess, commandRules), true
 
 	case "read_file":
 		return NewStubRemoteTool(

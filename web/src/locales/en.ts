@@ -125,6 +125,32 @@ export const en = {
     createFailed: "Failed to create connection",
   },
 
+  commandRules: {
+    manageRules: "Rules",
+    dialogTitle: 'Command rules for "{{name}}"',
+    dialogDescription:
+      "The allow-list this connection's ssh_execute calls are checked against, evaluated top to bottom — the first matching rule wins. A connection with no rules yet permits nothing.",
+    columnProgram: "Program",
+    columnArgs: "Args prefix",
+    columnStatus: "Status",
+    anyArgs: "any args",
+    empty: "No rules yet — every command will be denied until you add one.",
+    loadFailed: "Failed to load command rules",
+    allow: "Allow",
+    deny: "Deny",
+    toggleFailed: "Failed to update the rule",
+    confirmDelete: 'Remove the rule for "{{program}}"?',
+    deleted: "Rule removed",
+    deleteFailed: "Failed to remove the rule",
+    addProgramPlaceholder: "Program, e.g. git",
+    addArgsPlaceholder: "Args prefix, e.g. status (optional — leave empty to match any args)",
+    add: "Add",
+    adding: "Adding...",
+    added: "Rule added",
+    addFailed: "Failed to add the rule",
+    close: "Close",
+  },
+
   agentTools: {
     title: "Agent Tools",
     subtitle:

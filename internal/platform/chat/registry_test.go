@@ -37,7 +37,7 @@ func (s *stubAgentToolService) ListForCaller(context.Context, uint, shared.Dynam
 func TestBuildRegistry_RegistersSSHExecute(t *testing.T) {
 	agentTools := &stubAgentToolService{rows: []agenttool.Tool{{Name: "ssh_execute"}}}
 
-	registry, err := buildRegistry(context.Background(), 1, agentTools, &stubSSHConnService{}, allowAccess, noopPolicy{})
+	registry, err := buildRegistry(context.Background(), 1, agentTools, &stubSSHConnService{}, allowAccess, noopCommandRules{})
 	if err != nil {
 		t.Fatalf("buildRegistry failed: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestBuildRegistry_RegistersStubToolsForUnimplementedNames(t *testing.T) {
 		{Name: "list_directory"}, {Name: "search_files"}, {Name: "find_files"},
 	}}
 
-	registry, err := buildRegistry(context.Background(), 1, agentTools, &stubSSHConnService{}, allowAccess, noopPolicy{})
+	registry, err := buildRegistry(context.Background(), 1, agentTools, &stubSSHConnService{}, allowAccess, noopCommandRules{})
 	if err != nil {
 		t.Fatalf("buildRegistry failed: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestBuildRegistry_UnknownNameIsSkippedNotFatal(t *testing.T) {
 		{Name: "ssh_execute"},
 	}}
 
-	registry, err := buildRegistry(context.Background(), 1, agentTools, &stubSSHConnService{}, allowAccess, noopPolicy{})
+	registry, err := buildRegistry(context.Background(), 1, agentTools, &stubSSHConnService{}, allowAccess, noopCommandRules{})
 	if err != nil {
 		t.Fatalf("buildRegistry failed: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestBuildRegistry_NoAccessibleToolsMeansEmptyRegistry(t *testing.T) {
 	// allow.
 	agentTools := &stubAgentToolService{rows: nil}
 
-	registry, err := buildRegistry(context.Background(), 1, agentTools, &stubSSHConnService{}, allowAccess, noopPolicy{})
+	registry, err := buildRegistry(context.Background(), 1, agentTools, &stubSSHConnService{}, allowAccess, noopCommandRules{})
 	if err != nil {
 		t.Fatalf("buildRegistry failed: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestBuildRegistry_NoAccessibleToolsMeansEmptyRegistry(t *testing.T) {
 func TestBuildRegistry_PropagatesListForCallerError(t *testing.T) {
 	agentTools := &stubAgentToolService{err: errTestListFailed}
 
-	_, err := buildRegistry(context.Background(), 1, agentTools, &stubSSHConnService{}, allowAccess, noopPolicy{})
+	_, err := buildRegistry(context.Background(), 1, agentTools, &stubSSHConnService{}, allowAccess, noopCommandRules{})
 	if err == nil {
 		t.Fatal("expected buildRegistry to propagate a ListForCaller error")
 	}

@@ -120,6 +120,25 @@ definitions:
       totalRows:
         type: integer
     type: object
+  github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_commandrule_Response:
+    properties:
+      hasNextPage:
+        type: boolean
+      hasPreviousPage:
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/internal_platform_commandrule.Response'
+        type: array
+      pageNumber:
+        type: integer
+      pageSize:
+        type: integer
+      totalPages:
+        type: integer
+      totalRows:
+        type: integer
+    type: object
   github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_rbac_ResourceAccessResponse:
     properties:
       hasNextPage:
@@ -315,6 +334,66 @@ definitions:
         type: string
       result: {}
       toolCallId:
+        type: string
+    type: object
+  internal_platform_commandrule.CreateRuleRequest:
+    properties:
+      allowed:
+        description: |-
+          Allowed defaults to true (an allow rule) when omitted — the common
+          case, since this is an allow-list policy; a caller has to opt in
+          explicitly to write a deny rule (e.g. carving an exception out of a
+          broader allow rule that matches first).
+        type: boolean
+      argsPrefixes:
+        items:
+          items:
+            type: string
+          type: array
+        type: array
+      program:
+        maxLength: 255
+        type: string
+      sshConnectionId:
+        type: integer
+    required:
+    - program
+    - sshConnectionId
+    type: object
+  internal_platform_commandrule.Response:
+    properties:
+      allowed:
+        type: boolean
+      argsPrefixes:
+        items:
+          items:
+            type: string
+          type: array
+        type: array
+      id:
+        type: integer
+      program:
+        type: string
+      sshConnectionId:
+        type: integer
+    type: object
+  internal_platform_commandrule.UpdateRuleRequest:
+    properties:
+      allowed:
+        type: boolean
+      argsPrefixes:
+        description: |-
+          ArgsPrefixes: omitted (nil) means "don't change"; an explicit empty
+          array clears it (the rule then matches the program regardless of
+          args). encoding/json already distinguishes the two on its own — an
+          omitted key decodes to nil, "[]" decodes to a non-nil empty slice.
+        items:
+          items:
+            type: string
+          type: array
+        type: array
+      program:
+        maxLength: 255
         type: string
     type: object
   internal_platform_custommodel.CreateCustomModelRequest:
@@ -803,6 +882,182 @@ paths:
       summary: Refresh a token pair
       tags:
       - auth
+  /command-rules:
+    get:
+      description: Lists every command rule for one SSH connection. The caller must
+        hold "manage" on that connection.
+      parameters:
+      - description: SSH connection ID
+        in: query
+        name: sshConnectionId
+        required: true
+        type: integer
+      - description: Page number, default 1
+        in: query
+        name: pageNumber
+        type: integer
+      - description: Page size, default 10
+        in: query
+        name: pageSize
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+            - properties:
+                result:
+                  $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_commandrule_Response'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+        "403":
+          description: Caller doesn't hold manage on the target connection
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+      security:
+      - BearerAuth: []
+      summary: List an SSH connection's command rules
+      tags:
+      - command-rules
+    post:
+      consumes:
+      - application/json
+      description: Adds one allow/deny rule to an SSH connection's command policy.
+        Rules are first-match-wins within a connection (evaluated in creation order)
+        — a connection with no rules permits nothing. The caller must already hold
+        "manage" on the target connection, same level required to delete it.
+      parameters:
+      - description: New rule
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_platform_commandrule.CreateRuleRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+            - properties:
+                result:
+                  $ref: '#/definitions/internal_platform_commandrule.Response'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+        "403":
+          description: Caller doesn't hold manage on the target connection
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a command rule
+      tags:
+      - command-rules
+  /command-rules/{id}:
+    delete:
+      description: Removes one rule from an SSH connection's command policy. The caller
+        must hold "manage" on the connection this rule belongs to.
+      parameters:
+      - description: Rule ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+        "403":
+          description: Caller doesn't hold manage on the connection this rule belongs
+            to
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a command rule
+      tags:
+      - command-rules
+    put:
+      consumes:
+      - application/json
+      description: Changes a rule's program/argsPrefixes/allowed. The caller must
+        hold "manage" on the connection this rule belongs to.
+      parameters:
+      - description: Rule ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Fields to update
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_platform_commandrule.UpdateRuleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+            - properties:
+                result:
+                  $ref: '#/definitions/internal_platform_commandrule.Response'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+        "403":
+          description: Caller doesn't hold manage on the connection this rule belongs
+            to
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a command rule
+      tags:
+      - command-rules
   /conversations:
     get:
       description: Lists the caller's own conversations. There's no separate access-policy

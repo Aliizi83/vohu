@@ -126,6 +126,32 @@ export const fa: Dictionary = {
     createFailed: "ایجاد اتصال ناموفق بود",
   },
 
+  commandRules: {
+    manageRules: "قوانین",
+    dialogTitle: 'قوانین دستور برای «{{name}}»',
+    dialogDescription:
+      "لیست مجازی که فراخوانی‌های ssh_execute این اتصال باهاش سنجیده می‌شن، از بالا به پایین بررسی می‌شه — اولین قانونی که match بشه برنده‌ست. اتصالی که هنوز قانونی نداره، هیچ دستوری رو مجاز نمی‌کنه.",
+    columnProgram: "برنامه",
+    columnArgs: "پیشوند آرگومان‌ها",
+    columnStatus: "وضعیت",
+    anyArgs: "هر آرگومانی",
+    empty: "هنوز قانونی وجود نداره — تا وقتی یکی اضافه نکنی، هر دستوری رد می‌شه.",
+    loadFailed: "خطا در بارگذاری قوانین دستور",
+    allow: "مجاز",
+    deny: "غیرمجاز",
+    toggleFailed: "به‌روزرسانی قانون ناموفق بود",
+    confirmDelete: 'قانون مربوط به «{{program}}» حذف شود؟',
+    deleted: "قانون حذف شد",
+    deleteFailed: "حذف قانون ناموفق بود",
+    addProgramPlaceholder: "برنامه، مثلاً git",
+    addArgsPlaceholder: "پیشوند آرگومان‌ها، مثلاً status (اختیاری — برای مچ با هر آرگومانی خالی بگذارید)",
+    add: "افزودن",
+    adding: "در حال افزودن...",
+    added: "قانون اضافه شد",
+    addFailed: "افزودن قانون ناموفق بود",
+    close: "بستن",
+  },
+
   agentTools: {
     title: "ابزارهای ایجنت",
     subtitle:

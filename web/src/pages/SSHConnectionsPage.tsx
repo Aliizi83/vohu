@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react"
 import { toast } from "sonner"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useConfirm } from "@/components/ConfirmDialog"
 import { SearchInput } from "@/components/SearchInput"
@@ -26,7 +27,7 @@ import {
 import { useAccess } from "@/lib/access"
 import { useLanguage } from "@/lib/i18n"
 import { useDebouncedValue } from "@/lib/useDebouncedValue"
-import { api, ApiError, type SSHConnectionDto } from "@/lib/api"
+import { api, ApiError, type CommandRuleDto, type SSHConnectionDto } from "@/lib/api"
 
 export default function SSHConnectionsPage() {
   const { t } = useLanguage()
@@ -121,11 +122,14 @@ export default function SSHConnectionsPage() {
                   {conn.host}:{conn.port}
                 </TableCell>
                 <TableCell>{conn.username}</TableCell>
-                <TableCell className="text-end">
+                <TableCell className="text-end space-x-2 rtl:space-x-reverse">
                   {hasLevel("ssh_connection", "manage") && (
-                    <Button variant="destructive" size="sm" onClick={() => handleDelete(conn)}>
-                      {t("common.delete")}
-                    </Button>
+                    <>
+                      <CommandRulesDialog connection={conn} />
+                      <Button variant="destructive" size="sm" onClick={() => handleDelete(conn)}>
+                        {t("common.delete")}
+                      </Button>
+                    </>
                   )}
                 </TableCell>
               </TableRow>
@@ -237,5 +241,194 @@ function CreateConnectionDialog({ onCreated }: { onCreated: () => void }) {
         </form>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// CommandRulesDialog manages one connection's own command allow-list —
+// see internal/platform/commandrule.Rule. Each rule here is created with
+// at most one args prefix (a single word sequence, or none to match any
+// args); commandrule.Rule technically supports several prefixes per row,
+// but expressing "git status OR git log" as two separate same-program
+// rules evaluates identically (command.Policy checks rules in order,
+// first match wins) and needs no extra UI for the common case.
+function CommandRulesDialog({ connection }: { connection: SSHConnectionDto }) {
+  const { t } = useLanguage()
+  const { confirm, confirmDialog } = useConfirm()
+  const [open, setOpen] = useState(false)
+  const [rules, setRules] = useState<CommandRuleDto[] | null>(null)
+
+  const load = useCallback(async () => {
+    try {
+      const page = await api.commandRules.list(connection.id)
+      setRules(page.items)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("commandRules.loadFailed"))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connection.id])
+
+  useEffect(() => {
+    if (open) load()
+  }, [open, load])
+
+  async function handleToggle(rule: CommandRuleDto) {
+    try {
+      await api.commandRules.update(rule.id, { allowed: !rule.allowed })
+      load()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("commandRules.toggleFailed"))
+    }
+  }
+
+  async function handleDelete(rule: CommandRuleDto) {
+    const ok = await confirm({ description: t("commandRules.confirmDelete", { program: rule.program }) })
+    if (!ok) return
+    try {
+      await api.commandRules.remove(rule.id)
+      toast.success(t("commandRules.deleted"))
+      load()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("commandRules.deleteFailed"))
+    }
+  }
+
+  return (
+    <>
+      {confirmDialog}
+      <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger render={<Button variant="outline" size="sm">{t("commandRules.manageRules")}</Button>} />
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>{t("commandRules.dialogTitle", { name: connection.name })}</DialogTitle>
+          <DialogDescription>{t("commandRules.dialogDescription")}</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("commandRules.columnProgram")}</TableHead>
+                  <TableHead>{t("commandRules.columnArgs")}</TableHead>
+                  <TableHead>{t("commandRules.columnStatus")}</TableHead>
+                  <TableHead className="text-end">{t("common.actions")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rules === null &&
+                  Array.from({ length: 2 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell colSpan={4}>
+                        <Skeleton className="h-6 w-full" />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+
+                {rules?.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center text-muted-foreground">
+                      {t("commandRules.empty")}
+                    </TableCell>
+                  </TableRow>
+                )}
+
+                {rules?.map((rule) => (
+                  <TableRow key={rule.id}>
+                    <TableCell className="font-mono text-sm font-medium">{rule.program}</TableCell>
+                    <TableCell className="font-mono text-sm text-muted-foreground">
+                      {rule.argsPrefixes.length === 0
+                        ? t("commandRules.anyArgs")
+                        : rule.argsPrefixes.map((p) => p.join(" ")).join(" | ")}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={rule.allowed ? "default" : "destructive"}
+                        className="cursor-pointer"
+                        onClick={() => handleToggle(rule)}
+                      >
+                        {rule.allowed ? t("commandRules.allow") : t("commandRules.deny")}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-end">
+                      <Button variant="ghost" size="sm" onClick={() => handleDelete(rule)}>
+                        {t("common.delete")}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          <AddRuleForm connectionId={connection.id} onAdded={load} />
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            {t("commandRules.close")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+function AddRuleForm({ connectionId, onAdded }: { connectionId: number; onAdded: () => void }) {
+  const { t } = useLanguage()
+  const [program, setProgram] = useState("")
+  const [argsPrefix, setArgsPrefix] = useState("")
+  const [loading, setLoading] = useState(false)
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      const prefix = argsPrefix.trim().split(/\s+/).filter(Boolean)
+      await api.commandRules.create({
+        sshConnectionId: connectionId,
+        program: program.trim(),
+        argsPrefixes: prefix.length > 0 ? [prefix] : undefined,
+      })
+      toast.success(t("commandRules.added"))
+      setProgram("")
+      setArgsPrefix("")
+      onAdded()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("commandRules.addFailed"))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex items-end gap-2">
+      <div className="flex-1 space-y-2">
+        <Label htmlFor="rule-program" className="sr-only">
+          {t("commandRules.columnProgram")}
+        </Label>
+        <Input
+          id="rule-program"
+          value={program}
+          onChange={(e) => setProgram(e.target.value)}
+          placeholder={t("commandRules.addProgramPlaceholder")}
+          required
+        />
+      </div>
+      <div className="flex-1 space-y-2">
+        <Label htmlFor="rule-args" className="sr-only">
+          {t("commandRules.columnArgs")}
+        </Label>
+        <Input
+          id="rule-args"
+          value={argsPrefix}
+          onChange={(e) => setArgsPrefix(e.target.value)}
+          placeholder={t("commandRules.addArgsPlaceholder")}
+        />
+      </div>
+      <Button type="submit" disabled={loading || !program.trim()}>
+        {loading ? t("commandRules.adding") : t("commandRules.add")}
+      </Button>
+    </form>
   )
 }
