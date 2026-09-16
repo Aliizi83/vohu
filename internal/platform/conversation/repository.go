@@ -10,7 +10,14 @@ import (
 type Repository interface {
 	CreateConversation(ctx context.Context, c *Conversation) error
 	FindConversationByID(ctx context.Context, id uint) (*Conversation, error)
-	ListConversationsByUser(ctx context.Context, userID uint, page shared.Pagination) ([]Conversation, int64, error)
+	ListConversationsByUser(ctx context.Context, userID uint, archived bool, page shared.Pagination) ([]Conversation, int64, error)
+	UpdateConversation(ctx context.Context, c *Conversation) error
+	// DeleteConversation removes a conversation's messages first, then the
+	// conversation itself — there's no DB foreign key between them to
+	// cascade on (Message.ConversationID is a plain column, not a gorm
+	// foreign key, same decoupling-by-convention every module already
+	// follows for cross-entity references).
+	DeleteConversation(ctx context.Context, id uint) error
 
 	AppendMessages(ctx context.Context, rows []Message) error
 	ListMessages(ctx context.Context, conversationID uint) ([]Message, error)
@@ -54,12 +61,14 @@ func (r *gormRepository) FindConversationByID(ctx context.Context, id uint) (*Co
 func (r *gormRepository) ListConversationsByUser(
 	ctx context.Context,
 	userID uint,
+	archived bool,
 	page shared.Pagination,
 ) ([]Conversation, int64, error) {
 	var items []Conversation
 	var total int64
 
-	query := r.db.WithContext(ctx).Model(&Conversation{}).Where("user_id = ?", userID)
+	query := r.db.WithContext(ctx).Model(&Conversation{}).
+		Where("user_id = ? AND archived = ?", userID, archived)
 
 	countQuery := query.Session(&gorm.Session{})
 	if err := countQuery.Count(&total).Error; err != nil {
@@ -76,6 +85,17 @@ func (r *gormRepository) ListConversationsByUser(
 	}
 
 	return items, total, nil
+}
+
+func (r *gormRepository) UpdateConversation(ctx context.Context, c *Conversation) error {
+	return r.conversations.Update(ctx, c)
+}
+
+func (r *gormRepository) DeleteConversation(ctx context.Context, id uint) error {
+	if err := r.db.WithContext(ctx).Where("conversation_id = ?", id).Delete(&Message{}).Error; err != nil {
+		return err
+	}
+	return r.conversations.Delete(ctx, id)
 }
 
 func (r *gormRepository) AppendMessages(ctx context.Context, rows []Message) error {

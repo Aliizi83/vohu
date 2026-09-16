@@ -55,7 +55,7 @@ func NewHandler(
 // CreateConversation starts a new conversation.
 //
 //	@Summary		Create a conversation
-//	@Description	Starts a new conversation — provider and model are fixed for its whole lifetime once created. customModelId, if set, names one of the caller's (or a global) custom model presets to use instead of the account's single per-provider key.
+//	@Description	Starts a new conversation with the given provider/model — switchable later via PUT /conversations/{id}. customModelId, if set, names one of the caller's (or a global) custom model presets to use instead of the account's single per-provider key.
 //	@Tags			chat
 //	@Accept			json
 //	@Produce		json
@@ -88,18 +88,20 @@ func (h *Handler) CreateConversation(c *gin.Context) {
 }
 
 type listConversationsQuery struct {
-	PageNumber int `form:"pageNumber"`
-	PageSize   int `form:"pageSize"`
+	PageNumber int  `form:"pageNumber"`
+	PageSize   int  `form:"pageSize"`
+	Archived   bool `form:"archived"`
 }
 
 // ListConversations lists the caller's own conversations.
 //
 //	@Summary		List my conversations
-//	@Description	Lists the caller's own conversations. There's no separate access-policy gate here beyond being authenticated — conversations are scoped to their owner by construction.
+//	@Description	Lists the caller's own conversations — archived=false (the default) for the normal list, archived=true for the archive view. There's no separate access-policy gate here beyond being authenticated — conversations are scoped to their owner by construction.
 //	@Tags			chat
 //	@Produce		json
-//	@Param			pageNumber	query		int	false	"Page number, default 1"
-//	@Param			pageSize	query		int	false	"Page size, default 10"
+//	@Param			pageNumber	query		int		false	"Page number, default 1"
+//	@Param			pageSize	query		int		false	"Page size, default 10"
+//	@Param			archived	query		bool	false	"List archived conversations instead of active ones, default false"
 //	@Success		200			{object}	shared.BaseResponse{result=shared.PagedList[conversation.Response]}
 //	@Failure		401			{object}	shared.BaseResponse
 //	@Security		BearerAuth
@@ -118,7 +120,7 @@ func (h *Handler) ListConversations(c *gin.Context) {
 	}
 	page := shared.Pagination{PageNumber: q.PageNumber, PageSize: q.PageSize}
 
-	items, total, err := h.conversations.List(c.Request.Context(), userID, page)
+	items, total, err := h.conversations.List(c.Request.Context(), userID, q.Archived, page)
 	if err != nil {
 		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, err)
 		return
@@ -130,6 +132,93 @@ func (h *Handler) ListConversations(c *gin.Context) {
 	}
 
 	shared.RespondSuccess(c, http.StatusOK, shared.NewPagedList(responses, total, page))
+}
+
+// UpdateConversation renames and/or archives/unarchives a conversation —
+// hand-written rather than shared.UpdateHandler because the access check
+// (conversation.Service.Update) needs the caller's userID, which that
+// generic's update func signature has no room for.
+//
+//	@Summary		Rename, archive/unarchive, or switch a conversation's model
+//	@Description	Updates a conversation's title, archived flag, and/or which model it talks to going forward (provider+model+customModelId travel together as one unit — see conversation.UpdateConversationRequest). Omitting a field leaves it unchanged. Existing messages stay in history regardless of which model produced them. The caller must own the conversation, or hold "write" access to it (directly, or via its owner as a "user" resource).
+//	@Tags			chat
+//	@Accept			json
+//	@Produce		json
+//	@Param			id		path		int									true	"Conversation ID"
+//	@Param			request	body		conversation.UpdateConversationRequest	true	"Fields to update"
+//	@Success		200		{object}	shared.BaseResponse{result=conversation.Response}
+//	@Failure		400		{object}	shared.BaseResponse
+//	@Failure		401		{object}	shared.BaseResponse
+//	@Failure		404		{object}	shared.BaseResponse
+//	@Security		BearerAuth
+//	@Router			/conversations/{id} [put]
+func (h *Handler) UpdateConversation(c *gin.Context) {
+	userID, ok := shared.GetUserID(c)
+	if !ok {
+		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
+		return
+	}
+
+	id, err := shared.ParseIDParam(c)
+	if err != nil {
+		shared.RespondError(c, http.StatusBadRequest, shared.ResultValidationError, errors.New("invalid id"))
+		return
+	}
+
+	var req conversation.UpdateConversationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		shared.RespondValidationError(c, err)
+		return
+	}
+
+	conv, err := h.conversations.Update(c.Request.Context(), userID, id, req)
+	if err != nil {
+		if errors.Is(err, shared.ErrNotFound) {
+			shared.RespondError(c, http.StatusNotFound, shared.ResultNotFoundError, err)
+			return
+		}
+		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, err)
+		return
+	}
+
+	shared.RespondSuccess(c, http.StatusOK, conversation.ToResponse(*conv))
+}
+
+// DeleteConversation permanently removes a conversation and its messages.
+//
+//	@Summary		Delete a conversation
+//	@Description	Permanently deletes a conversation and every one of its messages. The caller must own the conversation, or hold "manage" access to it (directly, or via its owner as a "user" resource).
+//	@Tags			chat
+//	@Produce		json
+//	@Param			id	path		int	true	"Conversation ID"
+//	@Success		200	{object}	shared.BaseResponse
+//	@Failure		401	{object}	shared.BaseResponse
+//	@Failure		404	{object}	shared.BaseResponse
+//	@Security		BearerAuth
+//	@Router			/conversations/{id} [delete]
+func (h *Handler) DeleteConversation(c *gin.Context) {
+	userID, ok := shared.GetUserID(c)
+	if !ok {
+		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
+		return
+	}
+
+	id, err := shared.ParseIDParam(c)
+	if err != nil {
+		shared.RespondError(c, http.StatusBadRequest, shared.ResultValidationError, errors.New("invalid id"))
+		return
+	}
+
+	if err := h.conversations.Delete(c.Request.Context(), userID, id); err != nil {
+		if errors.Is(err, shared.ErrNotFound) {
+			shared.RespondError(c, http.StatusNotFound, shared.ResultNotFoundError, err)
+			return
+		}
+		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, err)
+		return
+	}
+
+	shared.RespondSuccess(c, http.StatusOK, nil)
 }
 
 type listMessagesQuery struct {

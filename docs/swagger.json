@@ -601,7 +601,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Lists the caller's own conversations. There's no separate access-policy gate here beyond being authenticated — conversations are scoped to their owner by construction.",
+                "description": "Lists the caller's own conversations — archived=false (the default) for the normal list, archived=true for the archive view. There's no separate access-policy gate here beyond being authenticated — conversations are scoped to their owner by construction.",
                 "produces": [
                     "application/json"
                 ],
@@ -620,6 +620,12 @@
                         "type": "integer",
                         "description": "Page size, default 10",
                         "name": "pageSize",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "List archived conversations instead of active ones, default false",
+                        "name": "archived",
                         "in": "query"
                     }
                 ],
@@ -656,7 +662,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Starts a new conversation — provider and model are fixed for its whole lifetime once created. customModelId, if set, names one of the caller's (or a global) custom model presets to use instead of the account's single per-provider key.",
+                "description": "Starts a new conversation with the given provider/model — switchable later via PUT /conversations/{id}. customModelId, if set, names one of the caller's (or a global) custom model presets to use instead of the account's single per-provider key.",
                 "consumes": [
                     "application/json"
                 ],
@@ -705,6 +711,126 @@
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/conversations/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates a conversation's title, archived flag, and/or which model it talks to going forward (provider+model+customModelId travel together as one unit — see conversation.UpdateConversationRequest). Omitting a field leaves it unchanged. Existing messages stay in history regardless of which model produced them. The caller must own the conversation, or hold \"write\" access to it (directly, or via its owner as a \"user\" resource).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Rename, archive/unarchive, or switch a conversation's model",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Conversation ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to update",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_conversation.UpdateConversationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_conversation.Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Permanently deletes a conversation and every one of its messages. The caller must own the conversation, or hold \"manage\" access to it (directly, or via its owner as a \"user\" resource).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Delete a conversation",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Conversation ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
                         }
@@ -2719,6 +2845,9 @@
         "github_com_Aliizi83_vohu_internal_platform_conversation.Response": {
             "type": "object",
             "properties": {
+                "archived": {
+                    "type": "boolean"
+                },
                 "customModelId": {
                     "type": "integer"
                 },
@@ -2733,6 +2862,27 @@
                 },
                 "title": {
                     "type": "string"
+                }
+            }
+        },
+        "github_com_Aliizi83_vohu_internal_platform_conversation.UpdateConversationRequest": {
+            "type": "object",
+            "properties": {
+                "archived": {
+                    "type": "boolean"
+                },
+                "customModelId": {
+                    "type": "integer"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string",
+                    "maxLength": 255
                 }
             }
         },

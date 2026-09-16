@@ -336,7 +336,7 @@ func TestList_OnlyReturnsCallersConversations(t *testing.T) {
 		t.Fatalf("Create failed: %v", err)
 	}
 
-	items, total, err := service.List(ctx, 1, shared.Pagination{PageNumber: 1, PageSize: 10})
+	items, total, err := service.List(ctx, 1, false, shared.Pagination{PageNumber: 1, PageSize: 10})
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -345,5 +345,190 @@ func TestList_OnlyReturnsCallersConversations(t *testing.T) {
 	}
 	if items[0].Title != "a" {
 		t.Fatalf("expected user 1's conversation %q, got %q", "a", items[0].Title)
+	}
+}
+
+func TestUpdate_OwnerCanRename(t *testing.T) {
+	service := newTestService(t)
+	ctx := context.Background()
+
+	conv, err := service.Create(ctx, 1, conversation.CreateConversationRequest{Title: "old", Provider: "gemini", Model: "m"})
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	updated, err := service.Update(ctx, 1, conv.ID, conversation.UpdateConversationRequest{Title: "new"})
+	if err != nil {
+		t.Fatalf("Update failed: %v", err)
+	}
+	if updated.Title != "new" {
+		t.Fatalf("expected title %q, got %q", "new", updated.Title)
+	}
+}
+
+func TestUpdate_OwnerCanArchiveAndUnarchive(t *testing.T) {
+	service := newTestService(t)
+	ctx := context.Background()
+
+	conv, err := service.Create(ctx, 1, conversation.CreateConversationRequest{Title: "a", Provider: "gemini", Model: "m"})
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	archived := true
+	updated, err := service.Update(ctx, 1, conv.ID, conversation.UpdateConversationRequest{Archived: &archived})
+	if err != nil {
+		t.Fatalf("Update (archive) failed: %v", err)
+	}
+	if !updated.Archived {
+		t.Fatal("expected Archived to be true")
+	}
+
+	notArchived := false
+	updated, err = service.Update(ctx, 1, conv.ID, conversation.UpdateConversationRequest{Archived: &notArchived})
+	if err != nil {
+		t.Fatalf("Update (unarchive) failed: %v", err)
+	}
+	if updated.Archived {
+		t.Fatal("expected Archived to be false")
+	}
+}
+
+func TestUpdate_NonOwnerWithoutGrantIsDenied(t *testing.T) {
+	service := newTestService(t)
+	ctx := context.Background()
+
+	conv, err := service.Create(ctx, 1, conversation.CreateConversationRequest{Title: "a", Provider: "gemini", Model: "m"})
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	if _, err := service.Update(ctx, 2, conv.ID, conversation.UpdateConversationRequest{Title: "hijacked"}); err != shared.ErrNotFound {
+		t.Fatalf("expected ErrNotFound for a non-owner with no grant, got %v", err)
+	}
+}
+
+func TestDelete_OwnerCanDeleteAndItsMessagesGoToo(t *testing.T) {
+	service := newTestService(t)
+	ctx := context.Background()
+
+	conv, err := service.Create(ctx, 1, conversation.CreateConversationRequest{Title: "a", Provider: "gemini", Model: "m"})
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	if err := service.AppendHistory(ctx, conv.ID, []ai_model.Message{{Role: ai_model.RoleUser, Content: "hi"}}); err != nil {
+		t.Fatalf("AppendHistory failed: %v", err)
+	}
+
+	if err := service.Delete(ctx, 1, conv.ID); err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+
+	if _, err := service.Get(ctx, 1, conv.ID); err != shared.ErrNotFound {
+		t.Fatalf("expected ErrNotFound after delete, got %v", err)
+	}
+}
+
+func TestDelete_NonOwnerWithoutGrantIsDenied(t *testing.T) {
+	service := newTestService(t)
+	ctx := context.Background()
+
+	conv, err := service.Create(ctx, 1, conversation.CreateConversationRequest{Title: "a", Provider: "gemini", Model: "m"})
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	if err := service.Delete(ctx, 2, conv.ID); err != shared.ErrNotFound {
+		t.Fatalf("expected ErrNotFound for a non-owner with no grant, got %v", err)
+	}
+
+	if _, err := service.Get(ctx, 1, conv.ID); err != nil {
+		t.Fatalf("expected the conversation to still exist for its owner, got %v", err)
+	}
+}
+
+func TestList_ArchivedFilterExcludesTheOtherState(t *testing.T) {
+	service := newTestService(t)
+	ctx := context.Background()
+
+	active, err := service.Create(ctx, 1, conversation.CreateConversationRequest{Title: "active", Provider: "gemini", Model: "m"})
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	archivedConv, err := service.Create(ctx, 1, conversation.CreateConversationRequest{Title: "archived", Provider: "gemini", Model: "m"})
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	archived := true
+	if _, err := service.Update(ctx, 1, archivedConv.ID, conversation.UpdateConversationRequest{Archived: &archived}); err != nil {
+		t.Fatalf("Update failed: %v", err)
+	}
+
+	items, total, err := service.List(ctx, 1, false, shared.Pagination{PageNumber: 1, PageSize: 10})
+	if err != nil {
+		t.Fatalf("List(archived=false) failed: %v", err)
+	}
+	if total != 1 || len(items) != 1 || items[0].ID != active.ID {
+		t.Fatalf("expected only the active conversation, got total=%d items=%+v", total, items)
+	}
+
+	items, total, err = service.List(ctx, 1, true, shared.Pagination{PageNumber: 1, PageSize: 10})
+	if err != nil {
+		t.Fatalf("List(archived=true) failed: %v", err)
+	}
+	if total != 1 || len(items) != 1 || items[0].ID != archivedConv.ID {
+		t.Fatalf("expected only the archived conversation, got total=%d items=%+v", total, items)
+	}
+}
+
+func TestUpdate_CanSwitchToADifferentBuiltinModel(t *testing.T) {
+	service := newTestService(t)
+	ctx := context.Background()
+
+	conv, err := service.Create(ctx, 1, conversation.CreateConversationRequest{
+		Title: "a", Provider: "gemini", Model: "gemini-2.0-flash",
+	})
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	updated, err := service.Update(ctx, 1, conv.ID, conversation.UpdateConversationRequest{
+		Provider: "anthropic", Model: "claude-sonnet-5",
+	})
+	if err != nil {
+		t.Fatalf("Update failed: %v", err)
+	}
+	if updated.Provider != "anthropic" || updated.Model != "claude-sonnet-5" {
+		t.Fatalf("expected provider/model to switch, got %q/%q", updated.Provider, updated.Model)
+	}
+}
+
+// TestUpdate_SwitchingAwayFromCustomModelClearsIt is the case a
+// independently-patched CustomModelID couldn't express: going from a
+// custom preset back to a built-in model has to actually clear the old
+// preset id, not just leave it dangling alongside the new provider/model.
+func TestUpdate_SwitchingAwayFromCustomModelClearsIt(t *testing.T) {
+	service := newTestService(t)
+	ctx := context.Background()
+
+	presetID := uint(42)
+	conv, err := service.Create(ctx, 1, conversation.CreateConversationRequest{
+		Title: "a", Provider: "openai", Model: "gpt-4o", CustomModelID: &presetID,
+	})
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	if conv.CustomModelID == nil || *conv.CustomModelID != presetID {
+		t.Fatalf("expected CustomModelID to be set on create, got %v", conv.CustomModelID)
+	}
+
+	updated, err := service.Update(ctx, 1, conv.ID, conversation.UpdateConversationRequest{
+		Provider: "gemini", Model: "gemini-2.0-flash",
+	})
+	if err != nil {
+		t.Fatalf("Update failed: %v", err)
+	}
+	if updated.CustomModelID != nil {
+		t.Fatalf("expected CustomModelID to be cleared, got %v", updated.CustomModelID)
 	}
 }

@@ -27,3 +27,19 @@ func UpP_1(database *gorm.DB, logger logging.Logger) error {
 
 	return nil
 }
+
+// UpP_2 backfills conversations.archived for rows that predate that
+// column — AutoMigrate adds a new column to an existing table as NULL
+// regardless of the entity's own "not null; default:false" tag (those only
+// govern new rows), and NULL matches neither `archived = false` nor
+// `archived = true`, which would otherwise make every pre-existing
+// conversation invisible in both the active and archived views. Idempotent
+// — a no-op once no NULL rows remain.
+func UpP_2(database *gorm.DB, logger logging.Logger) error {
+	if err := database.Exec("UPDATE conversations SET archived = false WHERE archived IS NULL").Error; err != nil {
+		return err
+	}
+	logger.Info(logging.Postgres, logging.Migration, "backfilled conversations.archived", nil)
+
+	return nil
+}

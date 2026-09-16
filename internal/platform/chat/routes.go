@@ -13,6 +13,8 @@ func RegisterRoutes(v1 *gin.RouterGroup, handler *Handler, authMiddleware gin.Ha
 	{
 		conversations.POST("", handler.CreateConversation)
 		conversations.GET("", handler.ListConversations)
+		conversations.PUT("/:id", handler.UpdateConversation)
+		conversations.DELETE("/:id", handler.DeleteConversation)
 		conversations.GET("/:id/messages", handler.GetMessages)
 		conversations.POST("/:id/messages", handler.SendMessage)
 	}

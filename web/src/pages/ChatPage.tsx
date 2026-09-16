@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react"
+import { ArchiveIcon, ArchiveRestoreIcon, PencilIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 import { Markdown } from "@/components/Markdown"
+import { useConfirm } from "@/components/ConfirmDialog"
 import { Button } from "@/components/ui/button"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
 import {
   Dialog,
   DialogContent,
@@ -21,6 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useLanguage } from "@/lib/i18n"
 import {
   api,
@@ -60,7 +70,11 @@ const MODEL_OPTIONS = [
 
 export default function ChatPage() {
   const { t } = useLanguage()
+  const { confirm, confirmDialog } = useConfirm()
   const [conversations, setConversations] = useState<ConversationDto[] | null>(null)
+  const [showArchived, setShowArchived] = useState(false)
+  const [renamingId, setRenamingId] = useState<number | null>(null)
+  const [renameValue, setRenameValue] = useState("")
   const [connections, setConnections] = useState<SSHConnectionDto[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [messages, setMessages] = useState<MessageDto[] | null>(null)
@@ -110,24 +124,32 @@ export default function ChatPage() {
   // yanking the reader back to a different spot.
   const preserveScrollRef = useRef<{ height: number; top: number } | null>(null)
 
-  const loadConversations = useCallback(async () => {
-    try {
-      const page = await api.conversations.list(1, 50)
-      setConversations(page.items)
-      if (page.items.length > 0 && selectedId === null) {
-        setSelectedId(page.items[0].id)
+  // loadConversations re-selects the current selection if it's still in
+  // the fetched page, otherwise falls back to the first item — the only
+  // case that matters in practice is toggling showArchived, since active
+  // and archived conversations are disjoint sets and a selection from one
+  // is never present in the other.
+  const loadConversations = useCallback(
+    async (archived: boolean) => {
+      try {
+        const page = await api.conversations.list(1, 50, archived)
+        setConversations(page.items)
+        setSelectedId((prev) => (prev !== null && page.items.some((c) => c.id === prev) ? prev : (page.items[0]?.id ?? null)))
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : t("chat.loadConversationsFailed"))
       }
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("chat.loadConversationsFailed"))
-    }
-    // selectedId and t intentionally excluded — this only picks a default
-    // once, and t's identity changing on language switch shouldn't
-    // re-trigger a network call.
+    },
+    // t intentionally excluded — its identity changing on language switch
+    // shouldn't re-trigger a network call.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    [],
+  )
 
   useEffect(() => {
-    loadConversations()
+    loadConversations(showArchived)
+  }, [loadConversations, showArchived])
+
+  useEffect(() => {
     api.sshConnections
       .list(1, 100)
       .then((page) => setConnections(page.items))
@@ -135,7 +157,48 @@ export default function ChatPage() {
         // Non-fatal — the connections list is just a helper hint in the
         // sidebar; chat still works without it.
       })
-  }, [loadConversations])
+  }, [])
+
+  async function commitRename(id: number) {
+    const title = renameValue.trim()
+    setRenamingId(null)
+    if (!title) return
+    try {
+      const updated = await api.conversations.update(id, { title })
+      setConversations((prev) => prev?.map((c) => (c.id === id ? updated : c)) ?? prev)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("chat.renameFailed"))
+    }
+  }
+
+  async function handleArchiveToggle(conv: ConversationDto) {
+    try {
+      await api.conversations.update(conv.id, { archived: !conv.archived })
+      toast.success(conv.archived ? t("chat.unarchived", { title: conv.title }) : t("chat.archived", { title: conv.title }))
+      loadConversations(showArchived)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("chat.archiveFailed"))
+    }
+  }
+
+  async function handleDeleteConversation(conv: ConversationDto) {
+    const ok = await confirm({ description: t("chat.confirmDelete", { title: conv.title }) })
+    if (!ok) return
+    try {
+      await api.conversations.remove(conv.id)
+      toast.success(t("chat.conversationDeleted"))
+      loadConversations(showArchived)
+    } catch (err) {
+      // DELETE is idempotent — a 404 here just means it's already gone
+      // (e.g. a double-submitted click), which is exactly the end state
+      // the user asked for, not a failure worth alarming them over.
+      if (err instanceof ApiError && err.status === 404) {
+        loadConversations(showArchived)
+        return
+      }
+      toast.error(err instanceof ApiError ? err.message : t("chat.deleteConversationFailed"))
+    }
+  }
 
   useEffect(() => {
     if (selectedId === null) {
@@ -278,48 +341,105 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-[calc(100vh-3rem)] gap-4">
+      {confirmDialog}
       <aside className="flex w-64 shrink-0 flex-col gap-2 overflow-y-auto rounded-md border p-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-muted-foreground">{t("chat.conversations")}</h2>
-          <NewConversationDialog
-            onCreated={(conv) => {
-              setConversations((prev) => [conv, ...(prev ?? [])])
-              setSelectedId(conv.id)
-            }}
-          />
+          {!showArchived && (
+            <NewConversationDialog
+              onCreated={(conv) => {
+                setConversations((prev) => [conv, ...(prev ?? [])])
+                setSelectedId(conv.id)
+              }}
+            />
+          )}
         </div>
+
+        <Tabs value={showArchived ? "archived" : "active"} onValueChange={(v) => setShowArchived(v === "archived")}>
+          <TabsList className="w-full">
+            <TabsTrigger value="active" className="flex-1">
+              {t("chat.tabActive")}
+            </TabsTrigger>
+            <TabsTrigger value="archived" className="flex-1">
+              {t("chat.tabArchived")}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
 
         {conversations === null &&
           Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}
 
         {conversations?.length === 0 && (
-          <p className="px-1 py-4 text-sm text-muted-foreground">{t("chat.noConversations")}</p>
+          <p className="px-1 py-4 text-sm text-muted-foreground">
+            {showArchived ? t("chat.noArchivedConversations") : t("chat.noConversations")}
+          </p>
         )}
 
         {conversations?.map((conv) => (
-          <button
-            key={conv.id}
-            onClick={() => setSelectedId(conv.id)}
-            className={cn(
-              "flex flex-col items-start rounded-md px-3 py-2 text-start text-sm transition-colors",
-              conv.id === selectedId
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-            )}
-          >
-            <span className="flex w-full items-center gap-1.5">
-              <span className="truncate font-medium">{conv.title}</span>
-              {streamStates[conv.id]?.isStreaming && (
-                <span
-                  className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary"
-                  title={t("chat.stillWorking")}
+          <ContextMenu key={conv.id}>
+            <ContextMenuTrigger className="contents">
+              {renamingId === conv.id ? (
+                <input
+                  autoFocus
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onBlur={() => commitRename(conv.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      commitRename(conv.id)
+                    } else if (e.key === "Escape") {
+                      setRenamingId(null)
+                    }
+                  }}
+                  className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                 />
+              ) : (
+                <button
+                  onClick={() => setSelectedId(conv.id)}
+                  className={cn(
+                    "flex w-full flex-col items-start rounded-md px-3 py-2 text-start text-sm transition-colors",
+                    conv.id === selectedId
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                  )}
+                >
+                  <span className="flex w-full items-center gap-1.5">
+                    <span className="truncate font-medium">{conv.title}</span>
+                    {streamStates[conv.id]?.isStreaming && (
+                      <span
+                        className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary"
+                        title={t("chat.stillWorking")}
+                      />
+                    )}
+                  </span>
+                  <span className="text-xs opacity-70">
+                    {conv.provider} · {conv.model}
+                  </span>
+                </button>
               )}
-            </span>
-            <span className="text-xs opacity-70">
-              {conv.provider} · {conv.model}
-            </span>
-          </button>
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+              <ContextMenuItem
+                onClick={() => {
+                  setRenamingId(conv.id)
+                  setRenameValue(conv.title)
+                }}
+              >
+                <PencilIcon />
+                {t("chat.rename")}
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => handleArchiveToggle(conv)}>
+                {conv.archived ? <ArchiveRestoreIcon /> : <ArchiveIcon />}
+                {conv.archived ? t("chat.unarchive") : t("chat.archive")}
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem variant="destructive" onClick={() => handleDeleteConversation(conv)}>
+                <Trash2Icon />
+                {t("common.delete")}
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
         ))}
 
         {connections.length > 0 && (
@@ -345,9 +465,12 @@ export default function ChatPage() {
           <>
             <div className="border-b px-4 py-3">
               <h2 className="font-semibold">{selectedConversation.title}</h2>
-              <p className="text-xs text-muted-foreground">
-                {selectedConversation.provider} · {selectedConversation.model}
-              </p>
+              <ChangeModelDialog
+                conversation={selectedConversation}
+                onChanged={(updated) =>
+                  setConversations((prev) => prev?.map((c) => (c.id === updated.id ? updated : c)) ?? prev)
+                }
+              />
             </div>
 
             <div ref={scrollRef} onScroll={handleScroll} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
@@ -504,6 +627,87 @@ function customKey(id: number) {
   return `custom:${id}`
 }
 
+// useModelSelection derives everything both NewConversationDialog and
+// ChangeModelDialog need from a selectedKey — shared so the two pickers
+// (creating a conversation vs. switching an existing one's model) can't
+// drift out of sync on how a key resolves to an actual provider/model.
+function useModelSelection(selectedKey: string, customModel: string, presets: CustomModelDto[]) {
+  const selectedPreset = selectedKey.startsWith("custom:")
+    ? presets.find((p) => customKey(p.id) === selectedKey)
+    : undefined
+  const builtinIndex = selectedKey.startsWith("builtin:") ? Number(selectedKey.slice("builtin:".length)) : -1
+  const builtinOption = builtinIndex >= 0 ? MODEL_OPTIONS[builtinIndex] : undefined
+  const isFreeformCustom = builtinOption?.provider === "openai" && builtinOption.model === ""
+
+  const resolved = selectedPreset
+    ? { provider: "openai", model: selectedPreset.modelName, customModelId: selectedPreset.id }
+    : isFreeformCustom
+      ? customModel.trim()
+        ? { provider: "openai", model: customModel.trim(), customModelId: undefined }
+        : null
+      : builtinOption
+        ? { provider: builtinOption.provider, model: builtinOption.model, customModelId: undefined }
+        : null
+
+  return { selectedPreset, builtinOption, isFreeformCustom, resolved }
+}
+
+function ModelSelectFields({
+  selectedKey,
+  onSelectedKeyChange,
+  customModel,
+  onCustomModelChange,
+  presets,
+  isFreeformCustom,
+  selectedLabel,
+}: {
+  selectedKey: string
+  onSelectedKeyChange: (key: string) => void
+  customModel: string
+  onCustomModelChange: (value: string) => void
+  presets: CustomModelDto[]
+  isFreeformCustom: boolean
+  selectedLabel: string
+}) {
+  const { t } = useLanguage()
+  return (
+    <>
+      <div className="space-y-2">
+        <Label>{t("chat.modelLabel")}</Label>
+        <Select value={selectedKey} onValueChange={(value) => onSelectedKeyChange(value ?? builtinKey(0))}>
+          <SelectTrigger className="w-full">
+            <SelectValue>{() => selectedLabel}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {MODEL_OPTIONS.map((opt, i) => (
+              <SelectItem key={builtinKey(i)} value={builtinKey(i)}>
+                {opt.label}
+              </SelectItem>
+            ))}
+            {presets.map((preset) => (
+              <SelectItem key={customKey(preset.id)} value={customKey(preset.id)}>
+                {preset.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      {isFreeformCustom && (
+        <div className="space-y-2">
+          <Label htmlFor="model-custom-name">{t("chat.modelNameLabel")}</Label>
+          <Input
+            id="model-custom-name"
+            value={customModel}
+            onChange={(e) => onCustomModelChange(e.target.value)}
+            placeholder={t("chat.modelNamePlaceholder")}
+            required
+          />
+        </div>
+      )}
+    </>
+  )
+}
+
 function NewConversationDialog({ onCreated }: { onCreated: (conv: ConversationDto) => void }) {
   const { t } = useLanguage()
   const [open, setOpen] = useState(false)
@@ -523,29 +727,22 @@ function NewConversationDialog({ onCreated }: { onCreated: (conv: ConversationDt
       })
   }, [open])
 
-  const selectedPreset = selectedKey.startsWith("custom:")
-    ? presets.find((p) => customKey(p.id) === selectedKey)
-    : undefined
-  const builtinIndex = selectedKey.startsWith("builtin:") ? Number(selectedKey.slice("builtin:".length)) : -1
-  const builtinOption = builtinIndex >= 0 ? MODEL_OPTIONS[builtinIndex] : undefined
-  const isFreeformCustom = builtinOption?.provider === "openai" && builtinOption.model === ""
-
+  const { selectedPreset, builtinOption, isFreeformCustom, resolved } = useModelSelection(
+    selectedKey,
+    customModel,
+    presets,
+  )
   const selectedLabel = selectedPreset?.name ?? builtinOption?.label ?? t("chat.modelLabel")
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-
-    const provider = selectedPreset ? "openai" : builtinOption?.provider
-    const model = selectedPreset ? selectedPreset.modelName : isFreeformCustom ? customModel.trim() : builtinOption?.model
-    if (!provider || !model) return
+    if (!resolved) return
 
     setLoading(true)
     try {
       const conv = await api.conversations.create({
         title: title.trim() || t("chat.titlePlaceholder"),
-        provider,
-        model,
-        customModelId: selectedPreset?.id,
+        ...resolved,
       })
       toast.success(t("chat.conversationCreated"))
       setOpen(false)
@@ -578,42 +775,138 @@ function NewConversationDialog({ onCreated }: { onCreated: (conv: ConversationDt
                 placeholder={t("chat.titlePlaceholder")}
               />
             </div>
-            <div className="space-y-2">
-              <Label>{t("chat.modelLabel")}</Label>
-              <Select value={selectedKey} onValueChange={(value) => setSelectedKey(value ?? builtinKey(0))}>
-                <SelectTrigger className="w-full">
-                  <SelectValue>{() => selectedLabel}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {MODEL_OPTIONS.map((opt, i) => (
-                    <SelectItem key={builtinKey(i)} value={builtinKey(i)}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                  {presets.map((preset) => (
-                    <SelectItem key={customKey(preset.id)} value={customKey(preset.id)}>
-                      {preset.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {isFreeformCustom && (
-              <div className="space-y-2">
-                <Label htmlFor="conv-custom-model">{t("chat.modelNameLabel")}</Label>
-                <Input
-                  id="conv-custom-model"
-                  value={customModel}
-                  onChange={(e) => setCustomModel(e.target.value)}
-                  placeholder={t("chat.modelNamePlaceholder")}
-                  required
-                />
-              </div>
-            )}
+            <ModelSelectFields
+              selectedKey={selectedKey}
+              onSelectedKeyChange={setSelectedKey}
+              customModel={customModel}
+              onCustomModelChange={setCustomModel}
+              presets={presets}
+              isFreeformCustom={isFreeformCustom}
+              selectedLabel={selectedLabel}
+            />
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={loading || (isFreeformCustom && !customModel.trim())}>
+            <Button type="submit" disabled={loading || !resolved}>
               {loading ? t("common.creating") : t("common.create")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ChangeModelDialog switches which model an *existing* conversation talks
+// to going forward — history stays exactly as-is regardless of which
+// model produced which message; only the next turn uses the new one.
+function ChangeModelDialog({
+  conversation,
+  onChanged,
+}: {
+  conversation: ConversationDto
+  onChanged: (conv: ConversationDto) => void
+}) {
+  const { t } = useLanguage()
+  const [open, setOpen] = useState(false)
+  const [selectedKey, setSelectedKey] = useState(builtinKey(0))
+  const [customModel, setCustomModel] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [presets, setPresets] = useState<CustomModelDto[]>([])
+
+  useEffect(() => {
+    if (!open) return
+    api.customModels
+      .listAvailable()
+      .then(setPresets)
+      .catch(() => {
+        // Non-fatal — the hardcoded MODEL_OPTIONS still work without it.
+      })
+  }, [open])
+
+  // Seed the picker from the conversation's current model every time the
+  // dialog opens — matching one of MODEL_OPTIONS by provider+model, one of
+  // the presets by customModelId, or falling back to the freeform custom
+  // slot for an openai model that matches neither.
+  useEffect(() => {
+    if (!open) return
+    if (conversation.customModelId) {
+      setSelectedKey(customKey(conversation.customModelId))
+      return
+    }
+    const builtinIndex = MODEL_OPTIONS.findIndex(
+      (o) => o.provider === conversation.provider && o.model === conversation.model,
+    )
+    if (builtinIndex >= 0) {
+      setSelectedKey(builtinKey(builtinIndex))
+    } else {
+      setSelectedKey(builtinKey(MODEL_OPTIONS.length - 1))
+      setCustomModel(conversation.model)
+    }
+    // conversation intentionally excluded beyond the fields read above —
+    // this only needs to reseed when the dialog (re)opens or the
+    // conversation it's showing changes, not on every unrelated re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, conversation.id, conversation.provider, conversation.model, conversation.customModelId])
+
+  const { selectedPreset, builtinOption, isFreeformCustom, resolved } = useModelSelection(
+    selectedKey,
+    customModel,
+    presets,
+  )
+  const selectedLabel = selectedPreset?.name ?? builtinOption?.label ?? t("chat.modelLabel")
+
+  const isUnchanged =
+    resolved !== null &&
+    resolved.provider === conversation.provider &&
+    resolved.model === conversation.model &&
+    (resolved.customModelId ?? null) === (conversation.customModelId ?? null)
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    if (!resolved) return
+
+    setLoading(true)
+    try {
+      const updated = await api.conversations.update(conversation.id, resolved)
+      toast.success(t("chat.modelChanged"))
+      setOpen(false)
+      onChanged(updated)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("chat.modelChangeFailed"))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger
+        render={
+          <button className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
+            {conversation.provider} · {conversation.model}
+          </button>
+        }
+      />
+      <DialogContent>
+        <form onSubmit={handleSubmit}>
+          <DialogHeader>
+            <DialogTitle>{t("chat.changeModelDialogTitle")}</DialogTitle>
+            <DialogDescription>{t("chat.changeModelDialogDescription")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <ModelSelectFields
+              selectedKey={selectedKey}
+              onSelectedKeyChange={setSelectedKey}
+              customModel={customModel}
+              onCustomModelChange={setCustomModel}
+              presets={presets}
+              isFreeformCustom={isFreeformCustom}
+              selectedLabel={selectedLabel}
+            />
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={loading || !resolved || isUnchanged}>
+              {loading ? t("chat.switchingModel") : t("chat.switchModel")}
             </Button>
           </DialogFooter>
         </form>

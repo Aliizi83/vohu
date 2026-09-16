@@ -100,6 +100,7 @@ export interface ConversationDto {
   provider: string
   model: string
   customModelId?: number
+  archived: boolean
 }
 
 export interface ToolCallDto {
@@ -287,10 +288,20 @@ export const api = {
   },
 
   conversations: {
-    list: (page?: number, pageSize?: number) =>
-      request<PagedList<ConversationDto>>("GET", "/conversations", { query: listQuery(page, pageSize) }),
+    list: (page?: number, pageSize?: number, archived?: boolean) =>
+      request<PagedList<ConversationDto>>("GET", "/conversations", {
+        query: { ...listQuery(page, pageSize), archived: archived ? "true" : undefined },
+      }),
     create: (data: { title: string; provider: string; model: string; customModelId?: number }) =>
       request<ConversationDto>("POST", "/conversations", { body: data }),
+    // provider/model/customModelId travel together — set provider+model to
+    // switch which model this conversation talks to going forward (omit
+    // customModelId to clear it, e.g. switching back to a built-in model).
+    update: (
+      id: number,
+      data: { title?: string; archived?: boolean; provider?: string; model?: string; customModelId?: number },
+    ) => request<ConversationDto>("PUT", `/conversations/${id}`, { body: data }),
+    remove: (id: number) => request<null>("DELETE", `/conversations/${id}`),
     messages: (id: number, page?: number, pageSize?: number) =>
       request<PagedList<MessageDto>>("GET", `/conversations/${id}/messages`, { query: listQuery(page, pageSize) }),
   },
