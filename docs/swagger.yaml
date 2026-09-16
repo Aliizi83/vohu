@@ -155,6 +155,44 @@ definitions:
       totalRows:
         type: integer
     type: object
+  github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_customtool_Response:
+    properties:
+      hasNextPage:
+        type: boolean
+      hasPreviousPage:
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/internal_platform_customtool.Response'
+        type: array
+      pageNumber:
+        type: integer
+      pageSize:
+        type: integer
+      totalPages:
+        type: integer
+      totalRows:
+        type: integer
+    type: object
+  github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_customtool_VersionResponse:
+    properties:
+      hasNextPage:
+        type: boolean
+      hasPreviousPage:
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/internal_platform_customtool.VersionResponse'
+        type: array
+      pageNumber:
+        type: integer
+      pageSize:
+        type: integer
+      totalPages:
+        type: integer
+      totalRows:
+        type: integer
+    type: object
   github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_rbac_ResourceAccessResponse:
     properties:
       hasNextPage:
@@ -442,6 +480,86 @@ definitions:
       name:
         type: string
     type: object
+  internal_platform_customtool.CreateToolRequest:
+    properties:
+      description:
+        type: string
+      name:
+        maxLength: 100
+        type: string
+      paramsSchema:
+        type: string
+      visibility:
+        allOf:
+        - $ref: '#/definitions/internal_platform_customtool.Visibility'
+        enum:
+        - public
+        - private
+    required:
+    - description
+    - name
+    - paramsSchema
+    type: object
+  internal_platform_customtool.CreateVersionRequest:
+    properties:
+      sourceCode:
+        type: string
+      version:
+        maxLength: 50
+        type: string
+    required:
+    - sourceCode
+    - version
+    type: object
+  internal_platform_customtool.Response:
+    properties:
+      createdByUserId:
+        type: integer
+      description:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      paramsSchema:
+        type: string
+      visibility:
+        $ref: '#/definitions/internal_platform_customtool.Visibility'
+    type: object
+  internal_platform_customtool.UpdateToolRequest:
+    properties:
+      description:
+        type: string
+      paramsSchema:
+        type: string
+      visibility:
+        allOf:
+        - $ref: '#/definitions/internal_platform_customtool.Visibility'
+        enum:
+        - public
+        - private
+    type: object
+  internal_platform_customtool.VersionResponse:
+    properties:
+      createdByUserId:
+        type: integer
+      id:
+        type: integer
+      sourceCode:
+        type: string
+      toolId:
+        type: integer
+      version:
+        type: string
+    type: object
+  internal_platform_customtool.Visibility:
+    enum:
+    - public
+    - private
+    type: string
+    x-enum-varnames:
+    - VisibilityPublic
+    - VisibilityPrivate
   internal_platform_providerkey.Provider:
     enum:
     - gemini
@@ -1547,6 +1665,283 @@ paths:
       summary: Delete my custom model preset
       tags:
       - custom-models
+  /custom-tools:
+    get:
+      description: Lists every public tool plus any private tool the caller holds
+        at least "read" access to.
+      parameters:
+      - description: Page number, default 1
+        in: query
+        name: pageNumber
+        type: integer
+      - description: Page size, default 10
+        in: query
+        name: pageSize
+        type: integer
+      - description: JSON-encoded shared.DynamicFilter
+        in: query
+        name: filter
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+            - properties:
+                result:
+                  $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_customtool_Response'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+      security:
+      - BearerAuth: []
+      summary: List custom tools
+      tags:
+      - custom-tools
+    post:
+      consumes:
+      - application/json
+      description: Registers a new user/agent-authored tool definition. The creator
+        is auto-granted "manage" on the new tool. Requires wildcard "write" access
+        on resource type "custom_tool".
+      parameters:
+      - description: New tool
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_platform_customtool.CreateToolRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+            - properties:
+                result:
+                  $ref: '#/definitions/internal_platform_customtool.Response'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a custom tool
+      tags:
+      - custom-tools
+  /custom-tools/{id}:
+    delete:
+      description: Deletes a tool and all of its versions. Requires "manage" access
+        to this specific tool.
+      parameters:
+      - description: Tool ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a custom tool
+      tags:
+      - custom-tools
+    get:
+      description: Returns one tool's metadata by ID (not its source — see GET /custom-tools/{id}/versions).
+        Requires at least "read" access to this specific tool.
+      parameters:
+      - description: Tool ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+            - properties:
+                result:
+                  $ref: '#/definitions/internal_platform_customtool.Response'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a custom tool
+      tags:
+      - custom-tools
+    put:
+      consumes:
+      - application/json
+      description: Changes a tool's description, params schema, or visibility. Name
+        can't be changed here — see UpdateToolRequest's doc comment. Requires "write"
+        access to this specific tool.
+      parameters:
+      - description: Tool ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Fields to update
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_platform_customtool.UpdateToolRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+            - properties:
+                result:
+                  $ref: '#/definitions/internal_platform_customtool.Response'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a custom tool
+      tags:
+      - custom-tools
+  /custom-tools/{id}/versions:
+    get:
+      description: Lists every version of a tool, most recently created first. Requires
+        "read" access to the tool.
+      parameters:
+      - description: Tool ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Page number, default 1
+        in: query
+        name: pageNumber
+        type: integer
+      - description: Page size, default 10
+        in: query
+        name: pageSize
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+            - properties:
+                result:
+                  $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_customtool_VersionResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+      security:
+      - BearerAuth: []
+      summary: List a custom tool's versions
+      tags:
+      - custom-tools
+    post:
+      consumes:
+      - application/json
+      description: Adds a new immutable version (source code) to an existing tool.
+        Versions are never edited once created — a change is always a new version.
+        Requires "manage" access to the tool.
+      parameters:
+      - description: Tool ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: New version
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_platform_customtool.CreateVersionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+            - properties:
+                result:
+                  $ref: '#/definitions/internal_platform_customtool.VersionResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+      security:
+      - BearerAuth: []
+      summary: Add a new version to a custom tool
+      tags:
+      - custom-tools
   /me/access:
     get:
       description: Returns the caller's own complete access profile — every resource-access

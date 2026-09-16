@@ -82,6 +82,8 @@ The agent core knows nothing about HTTP, databases, or multiple users — that s
 | [`internal/platform/conversation`](internal/platform/conversation) | Chat threads and messages, with two separate read paths on purpose: `LoadHistory` (unpaginated, feeds the agent's own context) and `ListMessages` (paginated, newest page first, for the UI's scroll-up-to-load-older behavior). |
 | [`internal/platform/providerkey`](internal/platform/providerkey) | One API key per provider, per user or global — a personal key always wins over the account-wide default. |
 | [`internal/platform/custommodel`](internal/platform/custommodel) | Any number of *named* OpenAI-compatible presets (URL + key + model), per user or global — where `providerkey` gives one "openai" slot, this is what lets one account use a local Ollama server *and* a DeepSeek account side by side. |
+| [`internal/platform/agenttool`](internal/platform/agenttool) | The fixed, built-in catalog of tools the agent can call (`ssh_execute`, `read_file`, ...) — each row matched by name to a concrete Go implementation in `internal/platform/chat`, public or gated by `rbac.ResourceAccess`. |
+| [`internal/platform/customtool`](internal/platform/customtool) | The user/agent-authored tool catalog — a `Tool` (name/description/params schema) plus its immutable `ToolVersion` rows (one per build of its source). Storage only so far: compiling a version for a target host and running it over SSH is a later phase, not wired up yet. |
 | [`internal/platform/chat`](internal/platform/chat) | Resolves a conversation's provider/model (or custom preset) into a concrete `ai_model.LLM`, runs the agent loop with the caller's SSH connections registered as tools, streams the reply back over SSE. |
 | [`internal/platform/shared`](internal/platform/shared) | Generic CRUD/pagination/dynamic-filter helpers every module builds on, so list endpoints, response envelopes, and access-level route guards aren't reimplemented per module. |
 | [`internal/platform/httpserver`](internal/platform/httpserver) / [`migrations`](internal/platform/migrations) / [`seeders`](internal/platform/seeders) | Gin router setup; schema migration + default-data seeding on startup. |
@@ -96,7 +98,7 @@ Two independent mechanisms, not one blanket guardrail:
 
 ## API docs
 
-Every `cmd/server` endpoint (all 48 of them) is documented with Swagger/OpenAPI — generated from `@Summary`/`@Param`/`@Success`/... comments on each handler via [swaggo/swag](https://github.com/swaggo/swag). With the server running, open `/swagger/index.html` for the interactive UI (`/swagger/doc.json` for the raw spec).
+Every `cmd/server` endpoint (all 55 of them) is documented with Swagger/OpenAPI — generated from `@Summary`/`@Param`/`@Success`/... comments on each handler via [swaggo/swag](https://github.com/swaggo/swag). With the server running, open `/swagger/index.html` for the interactive UI (`/swagger/doc.json` for the raw spec).
 
 A handler's annotations changing means regenerating `docs/` (committed, since `cmd/server` imports it — the build doesn't call `swag` itself):
 

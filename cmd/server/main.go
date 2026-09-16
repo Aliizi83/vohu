@@ -10,6 +10,7 @@ import (
 	"github.com/Aliizi83/vohu/internal/platform/commandrule"
 	"github.com/Aliizi83/vohu/internal/platform/conversation"
 	"github.com/Aliizi83/vohu/internal/platform/custommodel"
+	"github.com/Aliizi83/vohu/internal/platform/customtool"
 	"github.com/Aliizi83/vohu/internal/platform/httpserver"
 	"github.com/Aliizi83/vohu/internal/platform/migrations"
 	"github.com/Aliizi83/vohu/internal/platform/providerkey"
@@ -126,6 +127,15 @@ func main() {
 	agentToolService := agenttool.NewService(agentToolRepo, hasAccessLevel)
 	agentToolHandler := agenttool.NewHandler(agentToolService)
 
+	// customToolService is phase 1 of the user/agent-authored tool
+	// catalog — storage only for now (a Tool plus its immutable
+	// ToolVersion rows). Build/deploy/execute (compiling a version for a
+	// target host and running it over SSH) is a later phase, not wired up
+	// yet.
+	customToolRepo := customtool.NewRepository(db.GetDB())
+	customToolService := customtool.NewService(customToolRepo, grantCreatorAccess, hasAccessLevel)
+	customToolHandler := customtool.NewHandler(customToolService)
+
 	chatHandler := chat.NewHandler(
 		conversationService, sshconnService, hasAccessLevel, commandRuleService, providerKeyService, customModelService, agentToolService,
 	)
@@ -145,6 +155,7 @@ func main() {
 	providerkey.RegisterRoutes(v1, providerKeyHandler, authMiddleware, hasAccessLevel)
 	custommodel.RegisterRoutes(v1, customModelHandler, authMiddleware, hasAccessLevel)
 	agenttool.RegisterRoutes(v1, agentToolHandler, authMiddleware, hasAccessLevel)
+	customtool.RegisterRoutes(v1, customToolHandler, authMiddleware, hasAccessLevel)
 	commandrule.RegisterRoutes(v1, commandRuleHandler, authMiddleware)
 	chat.RegisterRoutes(v1, chatHandler, authMiddleware)
 	auth.RegisterRoutes(v1, authHandler)

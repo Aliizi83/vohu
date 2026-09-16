@@ -14,7 +14,7 @@ import (
 // keys, so rbac never has to import sshconn/user/chat just to know their
 // names. Used to seed the admin role's wildcard grants and to compute
 // MyAccessResponse.Levels for /me/access.
-var KnownResourceTypes = []string{"user", "role", "ssh_connection", "provider_key", "conversation", "resource_access", "custom_model", "agent_tool"}
+var KnownResourceTypes = []string{"user", "role", "ssh_connection", "provider_key", "conversation", "resource_access", "custom_model", "agent_tool", "custom_tool"}
 
 type Handler struct {
 	service Service

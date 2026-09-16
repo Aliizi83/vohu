@@ -1322,6 +1322,450 @@
                 }
             }
         },
+        "/custom-tools": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists every public tool plus any private tool the caller holds at least \"read\" access to.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "custom-tools"
+                ],
+                "summary": "List custom tools",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page number, default 1",
+                        "name": "pageNumber",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size, default 10",
+                        "name": "pageSize",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "JSON-encoded shared.DynamicFilter",
+                        "name": "filter",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_customtool_Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Registers a new user/agent-authored tool definition. The creator is auto-granted \"manage\" on the new tool. Requires wildcard \"write\" access on resource type \"custom_tool\".",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "custom-tools"
+                ],
+                "summary": "Create a custom tool",
+                "parameters": [
+                    {
+                        "description": "New tool",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_platform_customtool.CreateToolRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/internal_platform_customtool.Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/custom-tools/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns one tool's metadata by ID (not its source — see GET /custom-tools/{id}/versions). Requires at least \"read\" access to this specific tool.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "custom-tools"
+                ],
+                "summary": "Get a custom tool",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tool ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/internal_platform_customtool.Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Changes a tool's description, params schema, or visibility. Name can't be changed here — see UpdateToolRequest's doc comment. Requires \"write\" access to this specific tool.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "custom-tools"
+                ],
+                "summary": "Update a custom tool",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tool ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to update",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_platform_customtool.UpdateToolRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/internal_platform_customtool.Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Deletes a tool and all of its versions. Requires \"manage\" access to this specific tool.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "custom-tools"
+                ],
+                "summary": "Delete a custom tool",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tool ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/custom-tools/{id}/versions": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists every version of a tool, most recently created first. Requires \"read\" access to the tool.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "custom-tools"
+                ],
+                "summary": "List a custom tool's versions",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tool ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number, default 1",
+                        "name": "pageNumber",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size, default 10",
+                        "name": "pageSize",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_customtool_VersionResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Adds a new immutable version (source code) to an existing tool. Versions are never edited once created — a change is always a new version. Requires \"manage\" access to the tool.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "custom-tools"
+                ],
+                "summary": "Add a new version to a custom tool",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tool ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New version",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_platform_customtool.CreateVersionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/internal_platform_customtool.VersionResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/me/access": {
             "get": {
                 "security": [
@@ -3023,6 +3467,64 @@
                 }
             }
         },
+        "github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_customtool_Response": {
+            "type": "object",
+            "properties": {
+                "hasNextPage": {
+                    "type": "boolean"
+                },
+                "hasPreviousPage": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_platform_customtool.Response"
+                    }
+                },
+                "pageNumber": {
+                    "type": "integer"
+                },
+                "pageSize": {
+                    "type": "integer"
+                },
+                "totalPages": {
+                    "type": "integer"
+                },
+                "totalRows": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_customtool_VersionResponse": {
+            "type": "object",
+            "properties": {
+                "hasNextPage": {
+                    "type": "boolean"
+                },
+                "hasPreviousPage": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_platform_customtool.VersionResponse"
+                    }
+                },
+                "pageNumber": {
+                    "type": "integer"
+                },
+                "pageSize": {
+                    "type": "integer"
+                },
+                "totalPages": {
+                    "type": "integer"
+                },
+                "totalRows": {
+                    "type": "integer"
+                }
+            }
+        },
         "github_com_Aliizi83_vohu_internal_platform_shared.PagedList-internal_platform_rbac_ResourceAccessResponse": {
             "type": "object",
             "properties": {
@@ -3438,6 +3940,129 @@
                     "type": "string"
                 }
             }
+        },
+        "internal_platform_customtool.CreateToolRequest": {
+            "type": "object",
+            "required": [
+                "description",
+                "name",
+                "paramsSchema"
+            ],
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 100
+                },
+                "paramsSchema": {
+                    "type": "string"
+                },
+                "visibility": {
+                    "enum": [
+                        "public",
+                        "private"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/internal_platform_customtool.Visibility"
+                        }
+                    ]
+                }
+            }
+        },
+        "internal_platform_customtool.CreateVersionRequest": {
+            "type": "object",
+            "required": [
+                "sourceCode",
+                "version"
+            ],
+            "properties": {
+                "sourceCode": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string",
+                    "maxLength": 50
+                }
+            }
+        },
+        "internal_platform_customtool.Response": {
+            "type": "object",
+            "properties": {
+                "createdByUserId": {
+                    "type": "integer"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "paramsSchema": {
+                    "type": "string"
+                },
+                "visibility": {
+                    "$ref": "#/definitions/internal_platform_customtool.Visibility"
+                }
+            }
+        },
+        "internal_platform_customtool.UpdateToolRequest": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "paramsSchema": {
+                    "type": "string"
+                },
+                "visibility": {
+                    "enum": [
+                        "public",
+                        "private"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/internal_platform_customtool.Visibility"
+                        }
+                    ]
+                }
+            }
+        },
+        "internal_platform_customtool.VersionResponse": {
+            "type": "object",
+            "properties": {
+                "createdByUserId": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "sourceCode": {
+                    "type": "string"
+                },
+                "toolId": {
+                    "type": "integer"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_platform_customtool.Visibility": {
+            "type": "string",
+            "enum": [
+                "public",
+                "private"
+            ],
+            "x-enum-varnames": [
+                "VisibilityPublic",
+                "VisibilityPrivate"
+            ]
         },
         "internal_platform_providerkey.Provider": {
             "type": "string",
