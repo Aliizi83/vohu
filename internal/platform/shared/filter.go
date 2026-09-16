@@ -22,6 +22,10 @@ const (
 	OpGreaterThan        FilterOperator = "greaterThan"
 	OpGreaterThanOrEqual FilterOperator = "greaterThanOrEqual"
 	OpInRange            FilterOperator = "inRange"
+	// OpIn is a multi-select filter: From is a comma-separated list of
+	// values, matched with SQL IN rather than repeating single-value
+	// equality filters (which would AND together and never match).
+	OpIn FilterOperator = "in"
 )
 
 type FieldFilter struct {
@@ -166,9 +170,20 @@ func buildCondition(column string, f FieldFilter) (string, []any) {
 	case OpEndsWith:
 		return column + " ILIKE ?", []any{"%" + f.From}
 	case OpEquals:
-		return column + " ILIKE ?", []any{f.From}
+		// Plain "=", not ILIKE — this has to work against non-text columns
+		// too (e.g. a bool like user.User.Enabled), where ILIKE's implicit
+		// text cast fails outright. Every enum value the frontend sends
+		// through this path is already an exact lowercase constant, so
+		// losing ILIKE's case-insensitivity costs nothing in practice.
+		return column + " = ?", []any{f.From}
 	case OpNotEquals:
-		return column + " NOT ILIKE ?", []any{f.From}
+		return column + " <> ?", []any{f.From}
+	case OpIn:
+		values := splitNonEmpty(f.From)
+		if len(values) == 0 {
+			return "", nil
+		}
+		return column + " IN ?", []any{values}
 	case OpLessThan:
 		return column + " < ?", []any{f.From}
 	case OpLessThanOrEqual:
@@ -182,4 +197,18 @@ func buildCondition(column string, f FieldFilter) (string, []any) {
 	default:
 		return "", nil
 	}
+}
+
+// splitNonEmpty splits a comma-separated value list, trimming whitespace
+// and dropping empty entries (a trailing comma or accidental double comma
+// shouldn't turn into a spurious "" match).
+func splitNonEmpty(raw string) []string {
+	parts := strings.Split(raw, ",")
+	values := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			values = append(values, p)
+		}
+	}
+	return values
 }

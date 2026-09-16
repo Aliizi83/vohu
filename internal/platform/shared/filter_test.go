@@ -1,14 +1,15 @@
 package shared_test
 
 // Uses lessThan/greaterThan/inRange (portable SQL) rather than the
-// ILIKE-based operators (contains/equals/...), which are Postgres syntax —
-// SQLite doesn't have ILIKE. The safety property under test (values are
-// always bind parameters, never interpolated into the query) is the same
-// mechanism for every operator; buildCondition in filter.go always returns
-// "? "-parameterized args regardless of which operator branch runs. The
-// exact `' OR '1'='1` injection payload against the ILIKE path was
-// verified live against real Postgres this session (see the commit that
-// added filter.go) rather than duplicated here as an automated test.
+// ILIKE-based operators (contains/startsWith/...), which are Postgres
+// syntax — SQLite doesn't have ILIKE. The safety property under test
+// (values are always bind parameters, never interpolated into the query)
+// is the same mechanism for every operator; buildCondition in filter.go
+// always returns "? "-parameterized args regardless of which operator
+// branch runs. The exact `' OR '1'='1` injection payload against the
+// ILIKE path was verified live against real Postgres this session (see the
+// commit that added filter.go) rather than duplicated here as an
+// automated test.
 
 import (
 	"testing"
@@ -141,6 +142,50 @@ func TestApplyDynamicFilter_ValueIsNeverExecutedAsSQL(t *testing.T) {
 	}
 	if count != 2 {
 		t.Fatalf("expected the table to be untouched (2 rows), got %d", count)
+	}
+}
+
+func TestApplyDynamicFilter_EqualsIsCaseSensitiveExactMatch(t *testing.T) {
+	db := setupFilterTestDB(t)
+
+	query, err := shared.ApplyDynamicFilter[filterTestAuthor](db, shared.DynamicFilter{
+		Filters: map[string]shared.FieldFilter{
+			"Name": {Type: shared.OpEquals, From: "ada"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var results []filterTestAuthor
+	if err := query.Find(&results).Error; err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
+
+	if len(results) != 0 {
+		t.Fatalf("expected \"ada\" not to match \"Ada\" (equals is a plain \"=\", not ILIKE), got %+v", results)
+	}
+}
+
+func TestApplyDynamicFilter_InMatchesAnyListedValue(t *testing.T) {
+	db := setupFilterTestDB(t)
+
+	query, err := shared.ApplyDynamicFilter[filterTestAuthor](db, shared.DynamicFilter{
+		Filters: map[string]shared.FieldFilter{
+			"Name": {Type: shared.OpIn, From: "Ada, Nonexistent"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var results []filterTestAuthor
+	if err := query.Find(&results).Error; err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
+
+	if len(results) != 1 || results[0].Name != "Ada" {
+		t.Fatalf("expected only Ada, got %+v", results)
 	}
 }
 

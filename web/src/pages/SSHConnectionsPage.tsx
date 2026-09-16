@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react"
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useConfirm } from "@/components/ConfirmDialog"
-import { SearchInput } from "@/components/SearchInput"
+import { TableFilterBar, useTableFilters, type FilterFieldDef } from "@/components/TableFilters"
 import {
   Dialog,
   DialogContent,
@@ -26,7 +26,6 @@ import {
 } from "@/components/ui/table"
 import { useAccess } from "@/lib/access"
 import { useLanguage } from "@/lib/i18n"
-import { useDebouncedValue } from "@/lib/useDebouncedValue"
 import { api, ApiError, type CommandRuleDto, type SSHConnectionDto } from "@/lib/api"
 
 export default function SSHConnectionsPage() {
@@ -34,22 +33,27 @@ export default function SSHConnectionsPage() {
   const { hasLevel } = useAccess()
   const { confirm, confirmDialog } = useConfirm()
   const [connections, setConnections] = useState<SSHConnectionDto[] | null>(null)
-  const [search, setSearch] = useState("")
-  const debouncedSearch = useDebouncedValue(search)
+
+  const filterDefs = useMemo<FilterFieldDef[]>(
+    () => [
+      { key: "Name", label: t("sshConnections.searchPlaceholder"), kind: "search" },
+      { key: "Host", label: t("sshConnections.filterHostPlaceholder"), kind: "search" },
+      { key: "Username", label: t("sshConnections.filterUsernamePlaceholder"), kind: "search" },
+    ],
+    [t],
+  )
+  const { state: filterState, setValue: setFilterValue, filter, hasActiveFilters, reset: resetFilters } =
+    useTableFilters(filterDefs)
 
   const load = useCallback(async () => {
     try {
-      const page = await api.sshConnections.list(
-        1,
-        100,
-        debouncedSearch ? { filters: { Name: { type: "contains", from: debouncedSearch } } } : undefined,
-      )
+      const page = await api.sshConnections.list(1, 100, filter)
       setConnections(page.items)
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("sshConnections.loadFailed"))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch])
+  }, [filter])
 
   useEffect(() => {
     load()
@@ -78,11 +82,14 @@ export default function SSHConnectionsPage() {
         {hasLevel("ssh_connection", "write") && <CreateConnectionDialog onCreated={load} />}
       </div>
 
-      <SearchInput
-        value={search}
-        onChange={setSearch}
-        placeholder={t("sshConnections.searchPlaceholder")}
-        className="max-w-sm"
+      <TableFilterBar
+        defs={filterDefs}
+        state={filterState}
+        onChange={setFilterValue}
+        onReset={resetFilters}
+        hasActiveFilters={hasActiveFilters}
+        clearLabel={t("common.clearFilters")}
+        allLabel={t("common.allFilter")}
       />
 
       <div className="rounded-md border">
@@ -109,7 +116,7 @@ export default function SSHConnectionsPage() {
             {connections?.length === 0 && (
               <TableRow>
                 <TableCell colSpan={5} className="text-center text-muted-foreground">
-                  {debouncedSearch ? t("common.noSearchResults") : t("sshConnections.empty")}
+                  {hasActiveFilters ? t("common.noSearchResults") : t("sshConnections.empty")}
                 </TableCell>
               </TableRow>
             )}

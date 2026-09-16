@@ -15,6 +15,8 @@ export const fa: Dictionary = {
     loading: "در حال بارگذاری...",
     noSearchResults: "نتیجه‌ای یافت نشد.",
     confirmTitle: "آیا مطمئن هستید؟",
+    clearFilters: "حذف فیلترها",
+    allFilter: "همه",
   },
 
   nav: {
@@ -50,6 +52,7 @@ export const fa: Dictionary = {
     subtitle: "حساب کاربری بسازید و نقش‌های آن‌ها را مدیریت کنید.",
     newUser: "کاربر جدید",
     searchPlaceholder: "جستجو بر اساس نام کاربری...",
+    filterEmailPlaceholder: "جستجو بر اساس ایمیل...",
     columnUsername: "نام کاربری",
     columnEmail: "ایمیل",
     columnStatus: "وضعیت",
@@ -103,6 +106,8 @@ export const fa: Dictionary = {
       "سرورهایی که ایجنت می‌تواند از طریق SSH به آن‌ها متصل شود. فقط شما (و هر کسی که صراحتاً دسترسی گرفته) می‌تواند از اتصالی که می‌سازید استفاده کند — برای اینکه چه کسی مجاز به مدیریت اتصالات است به صفحه دسترسی به منابع مراجعه کنید.",
     newConnection: "اتصال جدید",
     searchPlaceholder: "جستجو بر اساس نام...",
+    filterHostPlaceholder: "جستجو بر اساس هاست...",
+    filterUsernamePlaceholder: "جستجو بر اساس نام کاربری...",
     columnId: "شناسه",
     columnName: "نام",
     columnHost: "هاست",
@@ -278,7 +283,6 @@ export const fa: Dictionary = {
     subtitle:
       "به یک کاربر یا یک نقش کامل، به یک منبع در یک سطح دسترسی بدهید — یا صراحتاً ممنوع کنید. دسترسی اعطاشده به یک نقش به تمام اعضای آن نقش سرایت می‌کند، مگر کسانی که با یک ردیف «ممنوع» جدا شده باشند.",
     newGrant: "دسترسی جدید",
-    searchPlaceholder: "جستجو بر اساس نوع منبع...",
     columnGrantee: "گیرنده",
     columnResourceType: "نوع منبع",
     columnResourceId: "شناسه منبع",

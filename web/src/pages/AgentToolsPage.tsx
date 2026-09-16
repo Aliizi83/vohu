@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { SearchInput } from "@/components/SearchInput"
+import { TableFilterBar, useTableFilters, type FilterFieldDef } from "@/components/TableFilters"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
@@ -14,29 +14,49 @@ import {
 } from "@/components/ui/table"
 import { useAccess } from "@/lib/access"
 import { useLanguage } from "@/lib/i18n"
-import { useDebouncedValue } from "@/lib/useDebouncedValue"
 import { api, ApiError, type AgentToolDto } from "@/lib/api"
 
 export default function AgentToolsPage() {
   const { t } = useLanguage()
   const { hasLevel } = useAccess()
   const [agentTools, setAgentTools] = useState<AgentToolDto[] | null>(null)
-  const [search, setSearch] = useState("")
-  const debouncedSearch = useDebouncedValue(search)
+
+  const filterDefs = useMemo<FilterFieldDef[]>(
+    () => [
+      { key: "Name", label: t("agentTools.searchPlaceholder"), kind: "search" },
+      {
+        key: "Implemented",
+        label: t("agentTools.columnStatus"),
+        kind: "select",
+        options: [
+          { value: "true", label: t("agentTools.implemented") },
+          { value: "false", label: t("agentTools.notImplemented") },
+        ],
+      },
+      {
+        key: "Visibility",
+        label: t("agentTools.columnVisibility"),
+        kind: "select",
+        options: [
+          { value: "public", label: t("agentTools.visibilityPublic") },
+          { value: "private", label: t("agentTools.visibilityPrivate") },
+        ],
+      },
+    ],
+    [t],
+  )
+  const { state: filterState, setValue: setFilterValue, filter, hasActiveFilters, reset: resetFilters } =
+    useTableFilters(filterDefs)
 
   const load = useCallback(async () => {
     try {
-      const page = await api.agentTools.list(
-        1,
-        100,
-        debouncedSearch ? { filters: { Name: { type: "contains", from: debouncedSearch } } } : undefined,
-      )
+      const page = await api.agentTools.list(1, 100, filter)
       setAgentTools(page.items)
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("agentTools.loadFailed"))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch])
+  }, [filter])
 
   useEffect(() => {
     load()
@@ -60,11 +80,14 @@ export default function AgentToolsPage() {
         <p className="text-sm text-muted-foreground">{t("agentTools.subtitle")}</p>
       </div>
 
-      <SearchInput
-        value={search}
-        onChange={setSearch}
-        placeholder={t("agentTools.searchPlaceholder")}
-        className="max-w-sm"
+      <TableFilterBar
+        defs={filterDefs}
+        state={filterState}
+        onChange={setFilterValue}
+        onReset={resetFilters}
+        hasActiveFilters={hasActiveFilters}
+        clearLabel={t("common.clearFilters")}
+        allLabel={t("common.allFilter")}
       />
 
       <div className="rounded-md border">
@@ -91,7 +114,7 @@ export default function AgentToolsPage() {
             {agentTools?.length === 0 && (
               <TableRow>
                 <TableCell colSpan={5} className="text-center text-muted-foreground">
-                  {debouncedSearch ? t("common.noSearchResults") : t("agentTools.empty")}
+                  {hasActiveFilters ? t("common.noSearchResults") : t("agentTools.empty")}
                 </TableCell>
               </TableRow>
             )}

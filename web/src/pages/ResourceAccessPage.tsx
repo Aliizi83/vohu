@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react"
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useConfirm } from "@/components/ConfirmDialog"
-import { SearchInput } from "@/components/SearchInput"
+import { TableFilterBar, useTableFilters, type FilterFieldDef } from "@/components/TableFilters"
 import {
   Dialog,
   DialogContent,
@@ -32,7 +32,6 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useLanguage } from "@/lib/i18n"
-import { useDebouncedValue } from "@/lib/useDebouncedValue"
 import {
   api,
   ApiError,
@@ -78,23 +77,53 @@ export default function ResourceAccessPage() {
   const [users, setUsers] = useState<UserDto[]>([])
   const [roles, setRoles] = useState<RoleDto[]>([])
   const [connections, setConnections] = useState<SSHConnectionDto[]>([])
-  const [search, setSearch] = useState("")
-  const debouncedSearch = useDebouncedValue(search)
 
   const usersByID = new Map(users.map((u) => [u.id, u]))
   const rolesByID = new Map(roles.map((r) => [r.id, r]))
   const connectionsByID = new Map(connections.map((c) => [c.id, c]))
 
+  const filterDefs = useMemo<FilterFieldDef[]>(
+    () => [
+      {
+        key: "GranteeType",
+        label: t("resourceAccess.columnGrantee"),
+        kind: "select",
+        options: [
+          { value: "user", label: t("resourceAccess.granteeUser") },
+          { value: "role", label: t("resourceAccess.granteeRole") },
+        ],
+      },
+      {
+        key: "ResourceType",
+        label: t("resourceAccess.columnResourceType"),
+        kind: "multiSelect",
+        options: RESOURCE_TYPES.map((rt) => ({ value: rt, label: rt })),
+      },
+      {
+        key: "Level",
+        label: t("resourceAccess.columnLevel"),
+        kind: "multiSelect",
+        options: (Object.keys(LEVEL_KEYS) as AccessLevel[]).map((lvl) => ({ value: lvl, label: t(LEVEL_KEYS[lvl]) })),
+      },
+      {
+        key: "Effect",
+        label: t("resourceAccess.columnEffect"),
+        kind: "select",
+        options: (Object.keys(EFFECT_KEYS) as ResourceEffect[]).map((eff) => ({
+          value: eff,
+          label: t(EFFECT_KEYS[eff]),
+        })),
+      },
+    ],
+    [t],
+  )
+  const { state: filterState, setValue: setFilterValue, filter, hasActiveFilters, reset: resetFilters } =
+    useTableFilters(filterDefs)
+
   const load = useCallback(async () => {
     try {
       const [grantPage, userPage, rolePage, connectionPage] = await Promise.all([
-        api.resourceAccess.list(
-          1,
-          100,
-          debouncedSearch
-            ? { filters: { ResourceType: { type: "contains", from: debouncedSearch } } }
-            : undefined,
-        ),
+        api.resourceAccess.list(1, 100, filter),
         api.users.list(1, 100),
         api.roles.list(1, 100),
         api.sshConnections.list(1, 100),
@@ -107,7 +136,7 @@ export default function ResourceAccessPage() {
       toast.error(err instanceof ApiError ? err.message : t("resourceAccess.loadFailed"))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch])
+  }, [filter])
 
   useEffect(() => {
     load()
@@ -150,11 +179,14 @@ export default function ResourceAccessPage() {
         <GrantDialog users={users} roles={roles} connections={connections} onGranted={load} />
       </div>
 
-      <SearchInput
-        value={search}
-        onChange={setSearch}
-        placeholder={t("resourceAccess.searchPlaceholder")}
-        className="max-w-sm"
+      <TableFilterBar
+        defs={filterDefs}
+        state={filterState}
+        onChange={setFilterValue}
+        onReset={resetFilters}
+        hasActiveFilters={hasActiveFilters}
+        clearLabel={t("common.clearFilters")}
+        allLabel={t("common.allFilter")}
       />
 
       <div className="rounded-md border">
@@ -182,7 +214,7 @@ export default function ResourceAccessPage() {
             {grants?.length === 0 && (
               <TableRow>
                 <TableCell colSpan={6} className="text-center text-muted-foreground">
-                  {debouncedSearch ? t("common.noSearchResults") : t("resourceAccess.empty")}
+                  {hasActiveFilters ? t("common.noSearchResults") : t("resourceAccess.empty")}
                 </TableCell>
               </TableRow>
             )}

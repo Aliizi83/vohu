@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react"
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { useConfirm } from "@/components/ConfirmDialog"
-import { SearchInput } from "@/components/SearchInput"
+import { TableFilterBar, useTableFilters, type FilterFieldDef } from "@/components/TableFilters"
 import {
   Dialog,
   DialogContent,
@@ -23,29 +23,29 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useLanguage } from "@/lib/i18n"
-import { useDebouncedValue } from "@/lib/useDebouncedValue"
 import { api, ApiError, type RoleDto } from "@/lib/api"
 
 export default function RolesPage() {
   const { t } = useLanguage()
   const { confirm, confirmDialog } = useConfirm()
   const [roles, setRoles] = useState<RoleDto[] | null>(null)
-  const [search, setSearch] = useState("")
-  const debouncedSearch = useDebouncedValue(search)
+
+  const filterDefs = useMemo<FilterFieldDef[]>(
+    () => [{ key: "Name", label: t("roles.searchPlaceholder"), kind: "search" }],
+    [t],
+  )
+  const { state: filterState, setValue: setFilterValue, filter, hasActiveFilters, reset: resetFilters } =
+    useTableFilters(filterDefs)
 
   const load = useCallback(async () => {
     try {
-      const rolePage = await api.roles.list(
-        1,
-        50,
-        debouncedSearch ? { filters: { Name: { type: "contains", from: debouncedSearch } } } : undefined,
-      )
+      const rolePage = await api.roles.list(1, 50, filter)
       setRoles(rolePage.items)
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("roles.loadFailed"))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch])
+  }, [filter])
 
   useEffect(() => {
     load()
@@ -74,7 +74,15 @@ export default function RolesPage() {
         <CreateRoleDialog onCreated={load} />
       </div>
 
-      <SearchInput value={search} onChange={setSearch} placeholder={t("roles.searchPlaceholder")} className="max-w-sm" />
+      <TableFilterBar
+        defs={filterDefs}
+        state={filterState}
+        onChange={setFilterValue}
+        onReset={resetFilters}
+        hasActiveFilters={hasActiveFilters}
+        clearLabel={t("common.clearFilters")}
+        allLabel={t("common.allFilter")}
+      />
 
       <div className="rounded-md border">
         <Table>
@@ -97,7 +105,7 @@ export default function RolesPage() {
             {roles?.length === 0 && (
               <TableRow>
                 <TableCell colSpan={2} className="text-center text-muted-foreground">
-                  {debouncedSearch ? t("common.noSearchResults") : t("roles.empty")}
+                  {hasActiveFilters ? t("common.noSearchResults") : t("roles.empty")}
                 </TableCell>
               </TableRow>
             )}

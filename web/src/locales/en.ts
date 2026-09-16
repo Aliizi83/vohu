@@ -14,6 +14,8 @@ export const en = {
     loading: "Loading...",
     noSearchResults: "No results found.",
     confirmTitle: "Are you sure?",
+    clearFilters: "Clear filters",
+    allFilter: "All",
   },
 
   nav: {
@@ -49,6 +51,7 @@ export const en = {
     subtitle: "Create accounts and manage their roles.",
     newUser: "New user",
     searchPlaceholder: "Search by username...",
+    filterEmailPlaceholder: "Search by email...",
     columnUsername: "Username",
     columnEmail: "Email",
     columnStatus: "Status",
@@ -102,6 +105,8 @@ export const en = {
       "Servers the agent can reach over SSH. Only you (and anyone else explicitly granted access) can use a connection you create — see Resource Access for who may manage connections at all.",
     newConnection: "New connection",
     searchPlaceholder: "Search by name...",
+    filterHostPlaceholder: "Search by host...",
+    filterUsernamePlaceholder: "Search by username...",
     columnId: "ID",
     columnName: "Name",
     columnHost: "Host",
@@ -278,7 +283,6 @@ export const en = {
     subtitle:
       "Grant a user or an entire role access to a resource, at a level, either accepted or explicitly prohibited. Access granted to a role cascades to everyone who holds it, except anyone carved out with a prohibited row.",
     newGrant: "New grant",
-    searchPlaceholder: "Search by resource type...",
     columnGrantee: "Grantee",
     columnResourceType: "Resource Type",
     columnResourceId: "Resource ID",

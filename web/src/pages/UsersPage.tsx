@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react"
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useConfirm } from "@/components/ConfirmDialog"
-import { SearchInput } from "@/components/SearchInput"
+import { TableFilterBar, useTableFilters, type FilterFieldDef } from "@/components/TableFilters"
 import {
   Dialog,
   DialogContent,
@@ -32,7 +32,6 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useLanguage } from "@/lib/i18n"
-import { useDebouncedValue } from "@/lib/useDebouncedValue"
 import { api, ApiError, type RoleDto, type UserDto } from "@/lib/api"
 
 export default function UsersPage() {
@@ -40,17 +39,30 @@ export default function UsersPage() {
   const { confirm, confirmDialog } = useConfirm()
   const [users, setUsers] = useState<UserDto[] | null>(null)
   const [roles, setRoles] = useState<RoleDto[]>([])
-  const [search, setSearch] = useState("")
-  const debouncedSearch = useDebouncedValue(search)
+
+  const filterDefs = useMemo<FilterFieldDef[]>(
+    () => [
+      { key: "Username", label: t("users.searchPlaceholder"), kind: "search" },
+      { key: "Email", label: t("users.filterEmailPlaceholder"), kind: "search" },
+      {
+        key: "Enabled",
+        label: t("users.columnStatus"),
+        kind: "select",
+        options: [
+          { value: "true", label: t("users.enabled") },
+          { value: "false", label: t("users.disabled") },
+        ],
+      },
+    ],
+    [t],
+  )
+  const { state: filterState, setValue: setFilterValue, filter, hasActiveFilters, reset: resetFilters } =
+    useTableFilters(filterDefs)
 
   const load = useCallback(async () => {
     try {
       const [userPage, rolePage] = await Promise.all([
-        api.users.list(
-          1,
-          50,
-          debouncedSearch ? { filters: { Username: { type: "contains", from: debouncedSearch } } } : undefined,
-        ),
+        api.users.list(1, 50, filter),
         api.roles.list(1, 50),
       ])
       setUsers(userPage.items)
@@ -61,7 +73,7 @@ export default function UsersPage() {
     // t intentionally excluded — its identity changing on language switch
     // shouldn't re-trigger a network call.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch])
+  }, [filter])
 
   useEffect(() => {
     load()
@@ -100,7 +112,15 @@ export default function UsersPage() {
         <CreateUserDialog onCreated={load} />
       </div>
 
-      <SearchInput value={search} onChange={setSearch} placeholder={t("users.searchPlaceholder")} className="max-w-sm" />
+      <TableFilterBar
+        defs={filterDefs}
+        state={filterState}
+        onChange={setFilterValue}
+        onReset={resetFilters}
+        hasActiveFilters={hasActiveFilters}
+        clearLabel={t("common.clearFilters")}
+        allLabel={t("common.allFilter")}
+      />
 
       <div className="rounded-md border">
         <Table>
@@ -125,7 +145,7 @@ export default function UsersPage() {
             {users?.length === 0 && (
               <TableRow>
                 <TableCell colSpan={4} className="text-center text-muted-foreground">
-                  {debouncedSearch ? t("common.noSearchResults") : t("users.empty")}
+                  {hasActiveFilters ? t("common.noSearchResults") : t("users.empty")}
                 </TableCell>
               </TableRow>
             )}
