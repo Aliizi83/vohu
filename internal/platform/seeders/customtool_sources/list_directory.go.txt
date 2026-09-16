@@ -1,0 +1,126 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+)
+
+type input struct {
+	Path      string `json:"path"`
+	Recursive bool   `json:"recursive"`
+	MaxDepth  int    `json:"max_depth"`
+}
+
+type entry struct {
+	Path  string `json:"path"`
+	IsDir bool   `json:"isDir"`
+}
+
+var ignoredDirs = map[string]bool{
+	"node_modules": true, ".git": true, "venv": true, ".venv": true,
+	"__pycache__": true, "dist": true, "build": true,
+}
+
+const maxEntries = 2000
+
+func resolve(rel string) (string, error) {
+	if rel == "" {
+		rel = "."
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	full := filepath.Join(wd, rel)
+	r, err := filepath.Rel(wd, full)
+	if err != nil || strings.HasPrefix(r, "..") {
+		return "", fmt.Errorf("path escapes the working directory: %s", rel)
+	}
+	return full, nil
+}
+
+func emit(success bool, data any) {
+	json.NewEncoder(os.Stdout).Encode(map[string]any{"success": success, "data": data})
+}
+
+func fail(msg string) { emit(false, msg) }
+
+func main() {
+	var in input
+	if err := json.NewDecoder(os.Stdin).Decode(&in); err != nil {
+		fail("invalid input: " + err.Error())
+		return
+	}
+
+	root, err := os.Getwd()
+	if err != nil {
+		fail(err.Error())
+		return
+	}
+	resolved, err := resolve(in.Path)
+	if err != nil {
+		fail(err.Error())
+		return
+	}
+
+	info, err := os.Stat(resolved)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fail(fmt.Sprintf("directory not found: %s", in.Path))
+			return
+		}
+		fail(err.Error())
+		return
+	}
+	if !info.IsDir() {
+		fail(fmt.Sprintf("%s is not a directory", in.Path))
+		return
+	}
+
+	var entries []entry
+	truncated := false
+
+	var walk func(dir string, depth int) error
+	walk = func(dir string, depth int) error {
+		items, err := os.ReadDir(dir)
+		if err != nil {
+			return err
+		}
+		sort.Slice(items, func(i, j int) bool { return items[i].Name() < items[j].Name() })
+
+		for _, item := range items {
+			if len(entries) >= maxEntries {
+				truncated = true
+				return nil
+			}
+			full := filepath.Join(dir, item.Name())
+			rel, err := filepath.Rel(root, full)
+			if err != nil {
+				rel = full
+			}
+			entries = append(entries, entry{Path: filepath.ToSlash(rel), IsDir: item.IsDir()})
+
+			if item.IsDir() && in.Recursive && !ignoredDirs[item.Name()] {
+				if in.MaxDepth == 0 || depth < in.MaxDepth {
+					if err := walk(full, depth+1); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		return nil
+	}
+
+	if err := walk(resolved, 1); err != nil {
+		fail(fmt.Sprintf("failed to list %s: %v", in.Path, err))
+		return
+	}
+
+	emit(true, map[string]any{
+		"path": in.Path, "entries": entries, "count": len(entries), "truncated": truncated,
+	})
+}

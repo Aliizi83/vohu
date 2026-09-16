@@ -1,0 +1,92 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+type input struct {
+	Path   string `json:"path"`
+	OldStr string `json:"old_str"`
+	NewStr string `json:"new_str"`
+}
+
+func resolve(rel string) (string, error) {
+	if rel == "" {
+		rel = "."
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	full := filepath.Join(wd, rel)
+	r, err := filepath.Rel(wd, full)
+	if err != nil || strings.HasPrefix(r, "..") {
+		return "", fmt.Errorf("path escapes the working directory: %s", rel)
+	}
+	return full, nil
+}
+
+func emit(success bool, data any) {
+	json.NewEncoder(os.Stdout).Encode(map[string]any{"success": success, "data": data})
+}
+
+func fail(msg string) { emit(false, msg) }
+
+func main() {
+	var in input
+	if err := json.NewDecoder(os.Stdin).Decode(&in); err != nil {
+		fail("invalid input: " + err.Error())
+		return
+	}
+	if in.Path == "" {
+		fail(`"path" is required`)
+		return
+	}
+	if in.OldStr == "" {
+		fail(`"old_str" is required`)
+		return
+	}
+	if in.OldStr == in.NewStr {
+		fail(`"old_str" and "new_str" are identical`)
+		return
+	}
+
+	resolved, err := resolve(in.Path)
+	if err != nil {
+		fail(err.Error())
+		return
+	}
+
+	data, err := os.ReadFile(resolved)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fail(fmt.Sprintf("file not found: %s", in.Path))
+			return
+		}
+		fail(fmt.Sprintf("failed to read %s: %v", in.Path, err))
+		return
+	}
+	content := string(data)
+
+	switch strings.Count(content, in.OldStr) {
+	case 0:
+		fail(fmt.Sprintf("old_str not found in %s — it must match exactly, including whitespace", in.Path))
+		return
+	case 1:
+	default:
+		fail(fmt.Sprintf("old_str matches more than once in %s — add more context so it matches exactly once", in.Path))
+		return
+	}
+
+	updated := strings.Replace(content, in.OldStr, in.NewStr, 1)
+	if err := os.WriteFile(resolved, []byte(updated), 0o644); err != nil {
+		fail(fmt.Sprintf("failed to write %s: %v", in.Path, err))
+		return
+	}
+
+	emit(true, map[string]any{"path": in.Path})
+}

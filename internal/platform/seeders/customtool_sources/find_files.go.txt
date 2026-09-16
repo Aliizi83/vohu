@@ -1,0 +1,159 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+)
+
+type input struct {
+	Pattern string `json:"pattern"`
+	Path    string `json:"path"`
+}
+
+var ignoredDirs = map[string]bool{
+	"node_modules": true, ".git": true, "venv": true, ".venv": true,
+	"__pycache__": true, "dist": true, "build": true,
+}
+
+const maxResults = 1000
+
+func resolve(rel string) (string, error) {
+	if rel == "" {
+		rel = "."
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	full := filepath.Join(wd, rel)
+	r, err := filepath.Rel(wd, full)
+	if err != nil || strings.HasPrefix(r, "..") {
+		return "", fmt.Errorf("path escapes the working directory: %s", rel)
+	}
+	return full, nil
+}
+
+// matchGlob supports "**" spanning any number of path segments, unlike
+// filepath.Match alone.
+func matchGlob(pattern, path string) (bool, error) {
+	return matchGlobParts(strings.Split(pattern, "/"), strings.Split(path, "/"))
+}
+
+func matchGlobParts(pattern, path []string) (bool, error) {
+	if len(pattern) == 0 {
+		return len(path) == 0, nil
+	}
+	if pattern[0] == "**" {
+		if ok, err := matchGlobParts(pattern[1:], path); err != nil || ok {
+			return ok, err
+		}
+		if len(path) == 0 {
+			return false, nil
+		}
+		return matchGlobParts(pattern, path[1:])
+	}
+	if len(path) == 0 {
+		return false, nil
+	}
+	matched, err := filepath.Match(pattern[0], path[0])
+	if err != nil || !matched {
+		return false, err
+	}
+	return matchGlobParts(pattern[1:], path[1:])
+}
+
+func emit(success bool, data any) {
+	json.NewEncoder(os.Stdout).Encode(map[string]any{"success": success, "data": data})
+}
+
+func fail(msg string) { emit(false, msg) }
+
+func main() {
+	var in input
+	if err := json.NewDecoder(os.Stdin).Decode(&in); err != nil {
+		fail("invalid input: " + err.Error())
+		return
+	}
+	if in.Pattern == "" {
+		fail(`"pattern" is required`)
+		return
+	}
+
+	root, err := os.Getwd()
+	if err != nil {
+		fail(err.Error())
+		return
+	}
+	resolved, err := resolve(in.Path)
+	if err != nil {
+		fail(err.Error())
+		return
+	}
+	info, err := os.Stat(resolved)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fail(fmt.Sprintf("directory not found: %s", in.Path))
+			return
+		}
+		fail(err.Error())
+		return
+	}
+	if !info.IsDir() {
+		fail(fmt.Sprintf("%s is not a directory", in.Path))
+		return
+	}
+
+	var matches []string
+	truncated := false
+
+	err = filepath.Walk(resolved, func(full string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if full == resolved {
+			return nil
+		}
+		if fi.IsDir() {
+			if ignoredDirs[fi.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if len(matches) >= maxResults {
+			truncated = true
+			return filepath.SkipAll
+		}
+
+		relToSearchRoot, err := filepath.Rel(resolved, full)
+		if err != nil {
+			return err
+		}
+		matched, err := matchGlob(in.Pattern, filepath.ToSlash(relToSearchRoot))
+		if err != nil {
+			return fmt.Errorf("invalid pattern %q: %w", in.Pattern, err)
+		}
+		if !matched {
+			return nil
+		}
+
+		rel, err := filepath.Rel(root, full)
+		if err != nil {
+			rel = full
+		}
+		matches = append(matches, filepath.ToSlash(rel))
+		return nil
+	})
+	if err != nil {
+		fail(fmt.Sprintf("failed to search %s: %v", in.Path, err))
+		return
+	}
+
+	sort.Strings(matches)
+	emit(true, map[string]any{
+		"pattern": in.Pattern, "matches": matches, "count": len(matches), "truncated": truncated,
+	})
+}

@@ -1,0 +1,113 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+type input struct {
+	Path   string `json:"path"`
+	Offset int    `json:"offset"`
+	Limit  int    `json:"limit"`
+}
+
+func resolve(rel string) (string, error) {
+	if rel == "" {
+		rel = "."
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	full := filepath.Join(wd, rel)
+	r, err := filepath.Rel(wd, full)
+	if err != nil || strings.HasPrefix(r, "..") {
+		return "", fmt.Errorf("path escapes the working directory: %s", rel)
+	}
+	return full, nil
+}
+
+func isBinary(data []byte) bool {
+	if len(data) > 8000 {
+		data = data[:8000]
+	}
+	return bytes.IndexByte(data, 0) != -1
+}
+
+func emit(success bool, data any) {
+	json.NewEncoder(os.Stdout).Encode(map[string]any{"success": success, "data": data})
+}
+
+func fail(msg string) {
+	emit(false, msg)
+}
+
+func main() {
+	var in input
+	if err := json.NewDecoder(os.Stdin).Decode(&in); err != nil {
+		fail("invalid input: " + err.Error())
+		return
+	}
+	if in.Path == "" {
+		fail(`"path" is required`)
+		return
+	}
+
+	resolved, err := resolve(in.Path)
+	if err != nil {
+		fail(err.Error())
+		return
+	}
+
+	data, err := os.ReadFile(resolved)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fail(fmt.Sprintf("file not found: %s", in.Path))
+			return
+		}
+		fail(fmt.Sprintf("failed to read %s: %v", in.Path, err))
+		return
+	}
+
+	if isBinary(data) {
+		emit(true, map[string]any{
+			"path": in.Path, "binary": true,
+			"message": fmt.Sprintf("binary file (%d bytes) — contents not shown", len(data)),
+		})
+		return
+	}
+
+	lines := strings.Split(string(data), "\n")
+	total := len(lines)
+
+	start := 0
+	if in.Offset > 0 {
+		start = in.Offset - 1
+	}
+	if start > total {
+		start = total
+	}
+	end := total
+	if in.Limit > 0 && start+in.Limit < end {
+		end = start + in.Limit
+	}
+
+	var b strings.Builder
+	for i := start; i < end; i++ {
+		fmt.Fprintf(&b, "%6d\t%s\n", i+1, lines[i])
+	}
+	content := b.String()
+	const maxChars = 30_000
+	if len(content) > maxChars {
+		content = content[:maxChars] + "\n... (truncated)"
+	}
+
+	emit(true, map[string]any{
+		"path": in.Path, "content": content,
+		"totalLines": total, "startLine": start + 1, "endLine": end,
+	})
+}
