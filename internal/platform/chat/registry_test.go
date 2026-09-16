@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Aliizi83/vohu/internal/platform/agenttool"
+	"github.com/Aliizi83/vohu/internal/platform/customtool"
 	"github.com/Aliizi83/vohu/internal/platform/shared"
 )
 
@@ -34,10 +35,48 @@ func (s *stubAgentToolService) ListForCaller(context.Context, uint, shared.Dynam
 	return s.rows, int64(len(s.rows)), nil
 }
 
+// stubCustomToolService is a minimal customtool.Service double — only
+// ListToolsForCaller is ever reached by buildRegistry.
+type stubCustomToolService struct {
+	rows []customtool.Tool
+	err  error
+}
+
+func (s *stubCustomToolService) CreateTool(context.Context, uint, customtool.CreateToolRequest) (*customtool.Tool, error) {
+	panic("not used by buildRegistry")
+}
+func (s *stubCustomToolService) GetToolByID(context.Context, uint) (*customtool.Tool, error) {
+	panic("not used by buildRegistry")
+}
+func (s *stubCustomToolService) UpdateTool(context.Context, uint, customtool.UpdateToolRequest) (*customtool.Tool, error) {
+	panic("not used by buildRegistry")
+}
+func (s *stubCustomToolService) DeleteTool(context.Context, uint) error {
+	panic("not used by buildRegistry")
+}
+func (s *stubCustomToolService) ListTools(context.Context, shared.DynamicFilter, shared.Pagination) ([]customtool.Tool, int64, error) {
+	panic("not used by buildRegistry")
+}
+func (s *stubCustomToolService) ListToolsForCaller(context.Context, uint, shared.DynamicFilter, shared.Pagination) ([]customtool.Tool, int64, error) {
+	if s.err != nil {
+		return nil, 0, s.err
+	}
+	return s.rows, int64(len(s.rows)), nil
+}
+func (s *stubCustomToolService) CreateVersion(context.Context, uint, uint, customtool.CreateVersionRequest) (*customtool.ToolVersion, error) {
+	panic("not used by buildRegistry")
+}
+func (s *stubCustomToolService) ListVersionsForTool(context.Context, uint, shared.Pagination) ([]customtool.ToolVersion, int64, error) {
+	panic("not used by buildRegistry")
+}
+func (s *stubCustomToolService) LatestVersionForTool(context.Context, uint) (*customtool.ToolVersion, error) {
+	panic("not used by buildRegistry")
+}
+
 func TestBuildRegistry_RegistersSSHExecute(t *testing.T) {
 	agentTools := &stubAgentToolService{rows: []agenttool.Tool{{Name: "ssh_execute"}}}
 
-	registry, err := buildRegistry(context.Background(), 1, agentTools, &stubSSHConnService{}, allowAccess, noopCommandRules{})
+	registry, err := buildRegistry(context.Background(), 1, agentTools, &stubCustomToolService{}, &stubSSHConnService{}, allowAccess, noopCommandRules{}, nil)
 	if err != nil {
 		t.Fatalf("buildRegistry failed: %v", err)
 	}
@@ -55,7 +94,7 @@ func TestBuildRegistry_UnknownNameIsSkippedNotFatal(t *testing.T) {
 		{Name: "ssh_execute"},
 	}}
 
-	registry, err := buildRegistry(context.Background(), 1, agentTools, &stubSSHConnService{}, allowAccess, noopCommandRules{})
+	registry, err := buildRegistry(context.Background(), 1, agentTools, &stubCustomToolService{}, &stubSSHConnService{}, allowAccess, noopCommandRules{}, nil)
 	if err != nil {
 		t.Fatalf("buildRegistry failed: %v", err)
 	}
@@ -72,7 +111,7 @@ func TestBuildRegistry_NoAccessibleToolsMeansEmptyRegistry(t *testing.T) {
 	// allow.
 	agentTools := &stubAgentToolService{rows: nil}
 
-	registry, err := buildRegistry(context.Background(), 1, agentTools, &stubSSHConnService{}, allowAccess, noopCommandRules{})
+	registry, err := buildRegistry(context.Background(), 1, agentTools, &stubCustomToolService{}, &stubSSHConnService{}, allowAccess, noopCommandRules{}, nil)
 	if err != nil {
 		t.Fatalf("buildRegistry failed: %v", err)
 	}
@@ -84,8 +123,46 @@ func TestBuildRegistry_NoAccessibleToolsMeansEmptyRegistry(t *testing.T) {
 func TestBuildRegistry_PropagatesListForCallerError(t *testing.T) {
 	agentTools := &stubAgentToolService{err: errTestListFailed}
 
-	_, err := buildRegistry(context.Background(), 1, agentTools, &stubSSHConnService{}, allowAccess, noopCommandRules{})
+	_, err := buildRegistry(context.Background(), 1, agentTools, &stubCustomToolService{}, &stubSSHConnService{}, allowAccess, noopCommandRules{}, nil)
 	if err == nil {
 		t.Fatal("expected buildRegistry to propagate a ListForCaller error")
+	}
+}
+
+func TestBuildRegistry_RegistersCustomTools(t *testing.T) {
+	agentTools := &stubAgentToolService{}
+	customTools := &stubCustomToolService{rows: []customtool.Tool{
+		{Name: "read_file", Description: "reads a file", ParamsSchema: `{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}`},
+	}}
+
+	registry, err := buildRegistry(context.Background(), 1, agentTools, customTools, &stubSSHConnService{}, allowAccess, noopCommandRules{}, nil)
+	if err != nil {
+		t.Fatalf("buildRegistry failed: %v", err)
+	}
+
+	tool, ok := registry.Get("read_file")
+	if !ok {
+		t.Fatal("expected read_file to be registered from customtool")
+	}
+	if _, isCustom := tool.(*CustomTool); !isCustom {
+		t.Fatalf("expected read_file to be a *CustomTool, got %T", tool)
+	}
+
+	params := tool.Parameters()
+	if _, ok := params.Properties["path"]; !ok {
+		t.Fatalf("expected \"path\" from the tool's own schema, got %+v", params.Properties)
+	}
+	if _, ok := params.Properties["connectionId"]; !ok {
+		t.Fatal("expected connectionId to be added to every custom tool's parameters")
+	}
+}
+
+func TestBuildRegistry_PropagatesCustomToolsListError(t *testing.T) {
+	agentTools := &stubAgentToolService{}
+	customTools := &stubCustomToolService{err: errTestListFailed}
+
+	_, err := buildRegistry(context.Background(), 1, agentTools, customTools, &stubSSHConnService{}, allowAccess, noopCommandRules{}, nil)
+	if err == nil {
+		t.Fatal("expected buildRegistry to propagate a customtool ListToolsForCaller error")
 	}
 }

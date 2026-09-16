@@ -17,6 +17,8 @@ import (
 	"github.com/Aliizi83/vohu/internal/platform/rbac"
 	"github.com/Aliizi83/vohu/internal/platform/sshconn"
 	"github.com/Aliizi83/vohu/internal/platform/user"
+	"github.com/Aliizi83/vohu/internal/toolbuild"
+	"github.com/Aliizi83/vohu/internal/tooldeploy"
 	"github.com/Aliizi83/vohu/internal/tools/command"
 	"github.com/Aliizi83/vohu/pkg/cache"
 	"github.com/Aliizi83/vohu/pkg/crypto"
@@ -134,8 +136,11 @@ func main() {
 	customToolService := customtool.NewService(customToolRepo, grantCreatorAccess, hasAccessLevel)
 	customToolHandler := customtool.NewHandler(customToolService)
 
+	toolDeployer := tooldeploy.NewDeployer(toolbuild.NewGoBuilder())
+
 	chatHandler := chat.NewHandler(
 		conversationService, sshconnService, hasAccessLevel, commandRuleService, providerKeyService, customModelService, agentToolService,
+		customToolService, toolDeployer,
 	)
 
 	engine, v1 := httpserver.NewEngine(logger)

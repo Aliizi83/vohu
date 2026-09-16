@@ -12,9 +12,11 @@ import (
 	"github.com/Aliizi83/vohu/internal/platform/commandrule"
 	"github.com/Aliizi83/vohu/internal/platform/conversation"
 	"github.com/Aliizi83/vohu/internal/platform/custommodel"
+	"github.com/Aliizi83/vohu/internal/platform/customtool"
 	"github.com/Aliizi83/vohu/internal/platform/providerkey"
 	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"github.com/Aliizi83/vohu/internal/platform/sshconn"
+	"github.com/Aliizi83/vohu/internal/tooldeploy"
 	"github.com/gin-gonic/gin"
 )
 
@@ -30,6 +32,8 @@ type Handler struct {
 	providerKeys  providerkey.Service
 	customModels  custommodel.Service
 	agentTools    agenttool.Service
+	customTools   customtool.Service
+	deployer      *tooldeploy.Deployer
 }
 
 func NewHandler(
@@ -40,6 +44,8 @@ func NewHandler(
 	providerKeys providerkey.Service,
 	customModels custommodel.Service,
 	agentTools agenttool.Service,
+	customTools customtool.Service,
+	deployer *tooldeploy.Deployer,
 ) *Handler {
 	return &Handler{
 		conversations: conversations,
@@ -49,6 +55,8 @@ func NewHandler(
 		providerKeys:  providerKeys,
 		customModels:  customModels,
 		agentTools:    agentTools,
+		customTools:   customTools,
+		deployer:      deployer,
 	}
 }
 
@@ -347,7 +355,7 @@ func (h *Handler) SendMessage(c *gin.Context) {
 	turnInput := append(history, userMessage)
 	originalLen := len(history)
 
-	registry, err := buildRegistry(c.Request.Context(), userID, h.agentTools, h.sshconns, h.canAccess, h.commandRules)
+	registry, err := buildRegistry(c.Request.Context(), userID, h.agentTools, h.customTools, h.sshconns, h.canAccess, h.commandRules, h.deployer)
 	if err != nil {
 		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, err)
 		return

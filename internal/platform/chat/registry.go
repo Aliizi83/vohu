@@ -5,8 +5,10 @@ import (
 
 	"github.com/Aliizi83/vohu/internal/platform/agenttool"
 	"github.com/Aliizi83/vohu/internal/platform/commandrule"
+	"github.com/Aliizi83/vohu/internal/platform/customtool"
 	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"github.com/Aliizi83/vohu/internal/platform/sshconn"
+	"github.com/Aliizi83/vohu/internal/tooldeploy"
 	"github.com/Aliizi83/vohu/internal/tools"
 )
 
@@ -28,9 +30,11 @@ func buildRegistry(
 	ctx context.Context,
 	userID uint,
 	agentTools agenttool.Service,
+	customTools customtool.Service,
 	sshconns sshconn.Service,
 	canAccess shared.AccessLevelCheck,
 	commandRules commandrule.Service,
+	deployer *tooldeploy.Deployer,
 ) (*tools.Registry, error) {
 	rows, _, err := agentTools.ListForCaller(ctx, userID, shared.DynamicFilter{}, shared.Pagination{PageNumber: 1, PageSize: 500})
 	if err != nil {
@@ -42,6 +46,14 @@ func buildRegistry(
 		if tool, ok := builtinTool(row.Name, userID, sshconns, canAccess, commandRules); ok {
 			registry.Register(tool)
 		}
+	}
+
+	customRows, _, err := customTools.ListToolsForCaller(ctx, userID, shared.DynamicFilter{}, shared.Pagination{PageNumber: 1, PageSize: 500})
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range customRows {
+		registry.Register(NewCustomTool(row, userID, sshconns, canAccess, customTools, deployer))
 	}
 
 	return registry, nil
