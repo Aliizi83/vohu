@@ -16,6 +16,7 @@ type Config struct {
 	Logger   LoggerConfig
 	JWT      JWTConfig
 	Secrets  SecretsConfig
+	JobQueue JobQueueConfig
 }
 
 type ServerConfig struct {
@@ -74,6 +75,14 @@ type SecretsConfig struct {
 	// pkg/crypto.NewBox. The dev default in config-development.yml is not
 	// safe for any real deployment.
 	EncryptionKey string
+}
+
+// JobQueueConfig configures internal/jobqueue — that package never reads
+// config itself (same rule every package in this codebase follows), so
+// whatever calls jobqueue.Store.Enqueue is expected to set Job.RetryIfFailed
+// from DefaultRetries unless it has a reason to override it per job.
+type JobQueueConfig struct {
+	DefaultRetries int
 }
 
 func GetConfig() *Config {

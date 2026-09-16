@@ -40,3 +40,5 @@ secrets:
   # base64-encoded 32-byte AES-256 key. Dev-only — generate a real one for
   # any real deployment, e.g.: openssl rand -base64 32
   encryptionKey: "1P407PvOcPLeLTn+GEIwhyqWg4fV97WCZBFwlPgm1Ns="
+jobQueue:
+  defaultRetries: 3
