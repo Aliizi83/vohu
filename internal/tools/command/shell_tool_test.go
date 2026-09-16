@@ -3,9 +3,21 @@ package command
 import (
 	"context"
 	"errors"
+	"os/exec"
 	"testing"
 	"time"
 )
+
+// realShellExecutor runs a real subprocess, no policy check — used only to
+// reproduce a genuine *exec.ExitError shape, which fakeExecutor can't fake.
+type realShellExecutor struct{}
+
+func (realShellExecutor) Execute(ctx context.Context, cmd Command) (string, error) {
+	c := exec.CommandContext(ctx, cmd.Program, cmd.Args...)
+	c.Dir = cmd.Dir
+	output, err := c.CombinedOutput()
+	return string(output), err
+}
 
 func TestShellTool_Execute_MissingCommand(t *testing.T) {
 	tool := NewShellTool(&fakeExecutor{})
@@ -126,17 +138,12 @@ func TestShellTool_Execute_OutputIsTruncated(t *testing.T) {
 
 // TestShellTool_Execute_NonZeroExitIsNotAToolFailure is a regression test
 // for a real bug: a command that runs to completion and just returns a
-// non-zero exit code (grep finding no match, a failed assertion, ...) was
-// being reported as Success:false — identical to a policy denial or a
-// genuine crash — losing the distinction between "the tool couldn't run
-// this" and "the tool ran this and here's what happened." Uses a real
-// LocalExecutor + real /bin/sh, not a fake, since the bug lived in how
-// ShellTool classifies the concrete *exec.ExitError CombinedOutput
-// returns for a non-zero exit — a fake executor can't reproduce that
-// shape without just hand-waving the same assumption the bug was in.
+// non-zero exit code was being reported as Success:false, indistinguishable
+// from a policy denial or a genuine crash. Uses a real subprocess, not a
+// fake, since the bug lived in how ShellTool classifies the concrete
+// *exec.ExitError CombinedOutput returns.
 func TestShellTool_Execute_NonZeroExitIsNotAToolFailure(t *testing.T) {
-	executor := NewLocalExecutor(NewCommandPolicy(PolicyModeProhibited, nil))
-	tool := NewShellTool(executor)
+	tool := NewShellTool(realShellExecutor{})
 
 	result, err := tool.Execute(context.Background(), map[string]any{
 		"command": "echo some-output; exit 3",
@@ -158,8 +165,7 @@ func TestShellTool_Execute_NonZeroExitIsNotAToolFailure(t *testing.T) {
 }
 
 func TestShellTool_Execute_SuccessfulCommandReportsExitCodeZero(t *testing.T) {
-	executor := NewLocalExecutor(NewCommandPolicy(PolicyModeProhibited, nil))
-	tool := NewShellTool(executor)
+	tool := NewShellTool(realShellExecutor{})
 
 	result, err := tool.Execute(context.Background(), map[string]any{"command": "true"})
 	if err != nil {
