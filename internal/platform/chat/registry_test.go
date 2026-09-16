@@ -46,36 +46,12 @@ func TestBuildRegistry_RegistersSSHExecute(t *testing.T) {
 	}
 }
 
-func TestBuildRegistry_RegistersStubToolsForUnimplementedNames(t *testing.T) {
-	agentTools := &stubAgentToolService{rows: []agenttool.Tool{
-		{Name: "read_file"}, {Name: "write_file"}, {Name: "edit_file"},
-		{Name: "list_directory"}, {Name: "search_files"}, {Name: "find_files"},
-	}}
-
-	registry, err := buildRegistry(context.Background(), 1, agentTools, &stubSSHConnService{}, allowAccess, noopCommandRules{})
-	if err != nil {
-		t.Fatalf("buildRegistry failed: %v", err)
-	}
-	if len(registry.All()) != 6 {
-		t.Fatalf("expected all 6 stub tools registered, got %d", len(registry.All()))
-	}
-	for _, name := range []string{"read_file", "write_file", "edit_file", "list_directory", "search_files", "find_files"} {
-		tool, ok := registry.Get(name)
-		if !ok {
-			t.Fatalf("expected %q to be registered", name)
-		}
-		if _, isStub := tool.(*StubRemoteTool); !isStub {
-			t.Fatalf("expected %q to be a *StubRemoteTool, got %T", name, tool)
-		}
-	}
-}
-
 func TestBuildRegistry_UnknownNameIsSkippedNotFatal(t *testing.T) {
 	// A DB row whose name matches no Go implementation (stale after a
 	// rename, e.g.) shouldn't take down the whole turn — it's just
 	// silently absent from the registry.
 	agentTools := &stubAgentToolService{rows: []agenttool.Tool{
-		{Name: "does_not_exist_anymore"},
+		{Name: "read_file"},
 		{Name: "ssh_execute"},
 	}}
 

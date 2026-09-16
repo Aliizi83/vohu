@@ -43,3 +43,19 @@ func UpP_2(database *gorm.DB, logger logging.Logger) error {
 
 	return nil
 }
+
+// UpP_3 removes the agent_tools rows for read_file/write_file/edit_file/
+// list_directory/search_files/find_files — these used to be
+// StubRemoteTool placeholders (seed_agent_tools.go), superseded by real
+// customtool implementations of the same names (seed_custom_tools.go).
+// seedAgentTools stopped inserting them, but an existing DB from before
+// this change still has the old rows. Idempotent — a no-op once gone.
+func UpP_3(database *gorm.DB, logger logging.Logger) error {
+	stale := []string{"read_file", "write_file", "edit_file", "list_directory", "search_files", "find_files"}
+	if err := database.Exec("DELETE FROM agent_tools WHERE name IN ?", stale).Error; err != nil {
+		return err
+	}
+	logger.Info(logging.Postgres, logging.Migration, "removed stale agent_tools stub rows", nil)
+
+	return nil
+}

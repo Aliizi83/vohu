@@ -8,32 +8,16 @@ import (
 )
 
 // agentTools is every SSH-connection-bound tool chat.Handler currently
-// knows how to construct — see chat/registry.go's builtinTool. Adding a
-// new one there also means adding it here, or it'll never appear in
-// anyone's agenttool.Service.ListForCaller and so never get registered
-// into a conversation no matter what access they're granted.
-//
-// All Public by default (unchanged behavior for ssh_execute/
-// list_ssh_connections — every authenticated user already got those
-// unconditionally before this catalog existed; the unimplemented ones
-// are harmless to expose too since their Execute never does anything
-// beyond the same connection-access check ssh_execute already makes).
-// implemented mirrors chat/registry.go exactly: only the two tools with
-// a real Go implementation past the access check are true.
+// knows how to construct — see chat/registry.go's builtinTool. The
+// read_file/write_file/edit_file/list_directory/search_files/find_files
+// stubs that used to live here are gone — see seed_custom_tools.go, which
+// now owns real implementations of those names.
 var agentTools = []struct {
 	name        string
 	description string
-	implemented bool
 }{
-	{"list_ssh_connections", "List the SSH connections the current user is permitted to use, with their IDs — call this before ssh_execute to find a valid connectionId.", true},
-	{"ssh_execute", "Execute a command on a remote host over SSH, using an SSH connection already stored in the system.", true},
-
-	{"read_file", "Read a file's contents.", false},
-	{"write_file", "Create or overwrite a file.", false},
-	{"edit_file", "Replace one exact block of text in an existing file.", false},
-	{"list_directory", "List files and directories at a path.", false},
-	{"search_files", "Search file contents by regex.", false},
-	{"find_files", "Find files by name/glob pattern.", false},
+	{"list_ssh_connections", "List the SSH connections the current user is permitted to use, with their IDs — call this before ssh_execute to find a valid connectionId."},
+	{"ssh_execute", "Execute a command on a remote host over SSH, using an SSH connection already stored in the system."},
 }
 
 // seedAgentTools gives every SSH-connection-bound tool implementation a
@@ -51,7 +35,7 @@ func seedAgentTools(database *gorm.DB) error {
 				Name:        at.name,
 				Description: at.description,
 				Visibility:  agenttool.VisibilityPublic,
-				Implemented: at.implemented,
+				Implemented: true,
 			}
 			if err := database.Create(&tool).Error; err != nil {
 				return err
