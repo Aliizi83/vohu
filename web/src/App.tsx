@@ -9,6 +9,7 @@ import { LanguageProvider } from "@/lib/i18n"
 import AgentToolsPage from "@/pages/AgentToolsPage"
 import ApiKeysPage from "@/pages/ApiKeysPage"
 import ChatPage from "@/pages/ChatPage"
+import CustomToolsPage from "@/pages/CustomToolsPage"
 import Layout from "@/pages/Layout"
 import LoginPage from "@/pages/LoginPage"
 import ResourceAccessPage from "@/pages/ResourceAccessPage"
@@ -64,6 +65,7 @@ export default function App() {
                   <Route path="chat" element={<ChatPage />} />
                   <Route path="ssh-connections" element={<SSHConnectionsPage />} />
                   <Route path="agent-tools" element={<AgentToolsPage />} />
+                  <Route path="custom-tools" element={<CustomToolsPage />} />
                   <Route path="provider-keys" element={<ApiKeysPage />} />
                   <Route
                     path="users"

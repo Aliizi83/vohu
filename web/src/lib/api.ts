@@ -168,18 +168,40 @@ export interface CommandRuleDto {
 
 export type AgentToolVisibility = "public" | "private"
 
-// AgentToolDto is one entry in the SSH-connection-bound tool catalog
-// (see internal/platform/agenttool.Tool) — every tool the agent can call
-// in chat takes a connectionId at execution time, no exceptions;
-// implemented is false for one whose Go Execute is still a stub (checks
-// connection access, then reports "not implemented yet") pending the
-// lightweight remote execution agent this catalog is structured around.
+// AgentToolDto is one entry in the fixed, built-in tool catalog (see
+// internal/platform/agenttool.Tool) — ssh_execute and
+// list_ssh_connections, the only two tools that aren't user/agent-defined
+// (see CustomToolDto for those). Every tool here is SSH-connection-bound:
+// it takes a connectionId at execution time, no exceptions.
 export interface AgentToolDto {
   id: number
   name: string
   description: string
   visibility: AgentToolVisibility
   implemented: boolean
+}
+
+export type CustomToolVisibility = "public" | "private"
+
+// CustomToolDto is one user/agent-authored tool definition (see
+// internal/platform/customtool.Tool) — its actual behavior lives on its
+// versions (see CustomToolVersionDto), built and deployed on demand to
+// whichever SSH connection a call names.
+export interface CustomToolDto {
+  id: number
+  name: string
+  description: string
+  paramsSchema: string
+  visibility: CustomToolVisibility
+  createdByUserId: number
+}
+
+export interface CustomToolVersionDto {
+  id: number
+  toolId: number
+  version: string
+  sourceCode: string
+  createdByUserId: number
 }
 
 export type AccessLevel = "read" | "write" | "manage"
@@ -379,6 +401,24 @@ export const api = {
       }),
     setVisibility: (id: number, visibility: AgentToolVisibility) =>
       request<AgentToolDto>("PUT", `/agent-tools/${id}`, { body: { visibility } }),
+  },
+
+  customTools: {
+    list: (page?: number, pageSize?: number, filter?: DynamicFilter) =>
+      request<PagedList<CustomToolDto>>("GET", "/custom-tools", {
+        query: listQuery(page, pageSize, filter),
+      }),
+    create: (data: { name: string; description: string; paramsSchema: string; visibility?: CustomToolVisibility }) =>
+      request<CustomToolDto>("POST", "/custom-tools", { body: data }),
+    update: (id: number, data: { description?: string; paramsSchema?: string; visibility?: CustomToolVisibility }) =>
+      request<CustomToolDto>("PUT", `/custom-tools/${id}`, { body: data }),
+    remove: (id: number) => request<null>("DELETE", `/custom-tools/${id}`),
+    listVersions: (toolId: number, page?: number, pageSize?: number) =>
+      request<PagedList<CustomToolVersionDto>>("GET", `/custom-tools/${toolId}/versions`, {
+        query: listQuery(page, pageSize),
+      }),
+    createVersion: (toolId: number, data: { version: string; sourceCode: string }) =>
+      request<CustomToolVersionDto>("POST", `/custom-tools/${toolId}/versions`, { body: data }),
   },
 
   resourceAccess: {

@@ -55,6 +55,7 @@ const RESOURCE_TYPES = [
   "conversation",
   "resource_access",
   "agent_tool",
+  "custom_tool",
 ] as const
 
 const RESOURCE_TYPE_SSH_CONNECTION = "ssh_connection"
