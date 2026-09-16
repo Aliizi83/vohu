@@ -25,22 +25,17 @@ func mapError(err error) (int, shared.ResultCode) {
 	}
 }
 
-// Create is hand-written rather than shared.CreateHandler because it needs
-// the authenticated user's ID (to record who owns the new tool and
-// auto-grant them access) — CreateHandler's create func has no room for
-// that. Same reasoning as sshconn.Handler.Create.
-//
-//	@Summary		Create a custom tool
-//	@Description	Registers a new user/agent-authored tool definition. The creator is auto-granted "manage" on the new tool. Requires wildcard "write" access on resource type "custom_tool".
-//	@Tags			custom-tools
-//	@Accept			json
-//	@Produce		json
-//	@Param			request	body		CreateToolRequest	true	"New tool"
-//	@Success		201		{object}	shared.BaseResponse{result=Response}
-//	@Failure		400		{object}	shared.BaseResponse
-//	@Failure		401		{object}	shared.BaseResponse
-//	@Security		BearerAuth
-//	@Router			/custom-tools [post]
+// @Summary		Create a custom tool
+// @Description	Registers a new user/agent-authored tool definition. The creator is auto-granted "manage" on the new tool. Requires wildcard "write" access on resource type "custom_tool".
+// @Tags			custom-tools
+// @Accept			json
+// @Produce		json
+// @Param			request	body		CreateToolRequest	true	"New tool"
+// @Success		201		{object}	shared.BaseResponse{result=Response}
+// @Failure		400		{object}	shared.BaseResponse
+// @Failure		401		{object}	shared.BaseResponse
+// @Security		BearerAuth
+// @Router			/custom-tools [post]
 func (h *Handler) Create(c *gin.Context) {
 	userID, ok := shared.GetUserID(c)
 	if !ok {
@@ -64,20 +59,16 @@ func (h *Handler) Create(c *gin.Context) {
 	shared.RespondSuccess(c, http.StatusCreated, toResponse(*tool))
 }
 
-// Get is the plain generic handler — whether the caller may reach this
-// specific tool at all is already decided by
-// shared.RequireAccessLevelOnParam before this ever runs.
-//
-//	@Summary		Get a custom tool
-//	@Description	Returns one tool's metadata by ID (not its source — see GET /custom-tools/{id}/versions). Requires at least "read" access to this specific tool.
-//	@Tags			custom-tools
-//	@Produce		json
-//	@Param			id	path		int	true	"Tool ID"
-//	@Success		200	{object}	shared.BaseResponse{result=Response}
-//	@Failure		401	{object}	shared.BaseResponse
-//	@Failure		404	{object}	shared.BaseResponse
-//	@Security		BearerAuth
-//	@Router			/custom-tools/{id} [get]
+// @Summary		Get a custom tool
+// @Description	Returns one tool's metadata by ID (not its source — see GET /custom-tools/{id}/versions). Requires at least "read" access to this specific tool.
+// @Tags			custom-tools
+// @Produce		json
+// @Param			id	path		int	true	"Tool ID"
+// @Success		200	{object}	shared.BaseResponse{result=Response}
+// @Failure		401	{object}	shared.BaseResponse
+// @Failure		404	{object}	shared.BaseResponse
+// @Security		BearerAuth
+// @Router			/custom-tools/{id} [get]
 func (h *Handler) Get(c *gin.Context) {
 	shared.GetByIDHandler(c,
 		func(t *Tool) Response { return toResponse(*t) },
@@ -86,21 +77,19 @@ func (h *Handler) Get(c *gin.Context) {
 	)
 }
 
-// Update changes a tool's description/paramsSchema/visibility.
-//
-//	@Summary		Update a custom tool
-//	@Description	Changes a tool's description, params schema, or visibility. Name can't be changed here — see UpdateToolRequest's doc comment. Requires "write" access to this specific tool.
-//	@Tags			custom-tools
-//	@Accept			json
-//	@Produce		json
-//	@Param			id		path		int					true	"Tool ID"
-//	@Param			request	body		UpdateToolRequest	true	"Fields to update"
-//	@Success		200		{object}	shared.BaseResponse{result=Response}
-//	@Failure		400		{object}	shared.BaseResponse
-//	@Failure		401		{object}	shared.BaseResponse
-//	@Failure		404		{object}	shared.BaseResponse
-//	@Security		BearerAuth
-//	@Router			/custom-tools/{id} [put]
+// @Summary		Update a custom tool
+// @Description	Changes a tool's description, params schema, or visibility. Name can't be changed here — see UpdateToolRequest's doc comment. Requires "write" access to this specific tool.
+// @Tags			custom-tools
+// @Accept			json
+// @Produce		json
+// @Param			id		path		int					true	"Tool ID"
+// @Param			request	body		UpdateToolRequest	true	"Fields to update"
+// @Success		200		{object}	shared.BaseResponse{result=Response}
+// @Failure		400		{object}	shared.BaseResponse
+// @Failure		401		{object}	shared.BaseResponse
+// @Failure		404		{object}	shared.BaseResponse
+// @Security		BearerAuth
+// @Router			/custom-tools/{id} [put]
 func (h *Handler) Update(c *gin.Context) {
 	shared.UpdateHandler(c,
 		shared.Identity[UpdateToolRequest],
@@ -110,37 +99,31 @@ func (h *Handler) Update(c *gin.Context) {
 	)
 }
 
-// Delete removes a custom tool and every one of its versions.
-//
-//	@Summary		Delete a custom tool
-//	@Description	Deletes a tool and all of its versions. Requires "manage" access to this specific tool.
-//	@Tags			custom-tools
-//	@Produce		json
-//	@Param			id	path		int	true	"Tool ID"
-//	@Success		200	{object}	shared.BaseResponse
-//	@Failure		401	{object}	shared.BaseResponse
-//	@Failure		404	{object}	shared.BaseResponse
-//	@Security		BearerAuth
-//	@Router			/custom-tools/{id} [delete]
+// @Summary		Delete a custom tool
+// @Description	Deletes a tool and all of its versions. Requires "manage" access to this specific tool.
+// @Tags			custom-tools
+// @Produce		json
+// @Param			id	path		int	true	"Tool ID"
+// @Success		200	{object}	shared.BaseResponse
+// @Failure		401	{object}	shared.BaseResponse
+// @Failure		404	{object}	shared.BaseResponse
+// @Security		BearerAuth
+// @Router			/custom-tools/{id} [delete]
 func (h *Handler) Delete(c *gin.Context) {
 	shared.DeleteHandler(c, h.service.DeleteTool, mapError)
 }
 
-// List is hand-written for the same reason agenttool.Handler.List is — the
-// caller's ID decides whether they see every tool or only the ones
-// they're allowed to use (see Service.ListToolsForCaller).
-//
-//	@Summary		List custom tools
-//	@Description	Lists every public tool plus any private tool the caller holds at least "read" access to.
-//	@Tags			custom-tools
-//	@Produce		json
-//	@Param			pageNumber	query		int		false	"Page number, default 1"
-//	@Param			pageSize	query		int		false	"Page size, default 10"
-//	@Param			filter		query		string	false	"JSON-encoded shared.DynamicFilter"
-//	@Success		200			{object}	shared.BaseResponse{result=shared.PagedList[Response]}
-//	@Failure		401			{object}	shared.BaseResponse
-//	@Security		BearerAuth
-//	@Router			/custom-tools [get]
+// @Summary		List custom tools
+// @Description	Lists every public tool plus any private tool the caller holds at least "read" access to.
+// @Tags			custom-tools
+// @Produce		json
+// @Param			pageNumber	query		int		false	"Page number, default 1"
+// @Param			pageSize	query		int		false	"Page size, default 10"
+// @Param			filter		query		string	false	"JSON-encoded shared.DynamicFilter"
+// @Success		200			{object}	shared.BaseResponse{result=shared.PagedList[Response]}
+// @Failure		401			{object}	shared.BaseResponse
+// @Security		BearerAuth
+// @Router			/custom-tools [get]
 func (h *Handler) List(c *gin.Context) {
 	userID, ok := shared.GetUserID(c)
 	if !ok {
@@ -168,25 +151,19 @@ func (h *Handler) List(c *gin.Context) {
 	shared.RespondSuccess(c, http.StatusOK, shared.NewPagedList(responses, total, page))
 }
 
-// CreateVersion adds a new immutable version to a tool. Hand-written
-// because it needs the authenticated user's ID (recorded as the version's
-// author) alongside the tool ID from the URL — access to that tool is
-// already decided by shared.RequireAccessLevelOnParam before this runs
-// (see routes.go).
-//
-//	@Summary		Add a new version to a custom tool
-//	@Description	Adds a new immutable version (source code) to an existing tool. Versions are never edited once created — a change is always a new version. Requires "manage" access to the tool.
-//	@Tags			custom-tools
-//	@Accept			json
-//	@Produce		json
-//	@Param			id		path		int						true	"Tool ID"
-//	@Param			request	body		CreateVersionRequest	true	"New version"
-//	@Success		201		{object}	shared.BaseResponse{result=VersionResponse}
-//	@Failure		400		{object}	shared.BaseResponse
-//	@Failure		401		{object}	shared.BaseResponse
-//	@Failure		404		{object}	shared.BaseResponse
-//	@Security		BearerAuth
-//	@Router			/custom-tools/{id}/versions [post]
+// @Summary		Add a new version to a custom tool
+// @Description	Adds a new immutable version (source code) to an existing tool. Versions are never edited once created — a change is always a new version. Requires "manage" access to the tool.
+// @Tags			custom-tools
+// @Accept			json
+// @Produce		json
+// @Param			id		path		int						true	"Tool ID"
+// @Param			request	body		CreateVersionRequest	true	"New version"
+// @Success		201		{object}	shared.BaseResponse{result=VersionResponse}
+// @Failure		400		{object}	shared.BaseResponse
+// @Failure		401		{object}	shared.BaseResponse
+// @Failure		404		{object}	shared.BaseResponse
+// @Security		BearerAuth
+// @Router			/custom-tools/{id}/versions [post]
 func (h *Handler) CreateVersion(c *gin.Context) {
 	userID, ok := shared.GetUserID(c)
 	if !ok {
@@ -216,20 +193,18 @@ func (h *Handler) CreateVersion(c *gin.Context) {
 	shared.RespondSuccess(c, http.StatusCreated, toVersionResponse(*version))
 }
 
-// ListVersions lists a tool's versions, most recent first.
-//
-//	@Summary		List a custom tool's versions
-//	@Description	Lists every version of a tool, most recently created first. Requires "read" access to the tool.
-//	@Tags			custom-tools
-//	@Produce		json
-//	@Param			id			path		int	true	"Tool ID"
-//	@Param			pageNumber	query		int	false	"Page number, default 1"
-//	@Param			pageSize	query		int	false	"Page size, default 10"
-//	@Success		200			{object}	shared.BaseResponse{result=shared.PagedList[VersionResponse]}
-//	@Failure		401			{object}	shared.BaseResponse
-//	@Failure		404			{object}	shared.BaseResponse
-//	@Security		BearerAuth
-//	@Router			/custom-tools/{id}/versions [get]
+// @Summary		List a custom tool's versions
+// @Description	Lists every version of a tool, most recently created first. Requires "read" access to the tool.
+// @Tags			custom-tools
+// @Produce		json
+// @Param			id			path		int	true	"Tool ID"
+// @Param			pageNumber	query		int	false	"Page number, default 1"
+// @Param			pageSize	query		int	false	"Page size, default 10"
+// @Success		200			{object}	shared.BaseResponse{result=shared.PagedList[VersionResponse]}
+// @Failure		401			{object}	shared.BaseResponse
+// @Failure		404			{object}	shared.BaseResponse
+// @Security		BearerAuth
+// @Router			/custom-tools/{id}/versions [get]
 func (h *Handler) ListVersions(c *gin.Context) {
 	toolID, err := shared.ParseIDParam(c)
 	if err != nil {

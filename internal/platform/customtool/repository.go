@@ -12,19 +12,12 @@ type Repository interface {
 	CreateTool(ctx context.Context, tool *Tool) error
 	FindToolByID(ctx context.Context, id uint) (*Tool, error)
 	UpdateTool(ctx context.Context, tool *Tool) error
-	// DeleteTool removes a tool's versions first, then the tool itself —
-	// there's no DB foreign key between them to cascade on (ToolVersion.ToolID
-	// is a plain column, not a gorm foreign key, same decoupling-by-convention
-	// every module already follows for cross-entity references), same
-	// pattern as conversation.Repository.DeleteConversation.
 	DeleteTool(ctx context.Context, id uint) error
 	ListTools(ctx context.Context, filter shared.DynamicFilter, page shared.Pagination) ([]Tool, int64, error)
 
 	CreateVersion(ctx context.Context, version *ToolVersion) error
 	ListVersionsForTool(ctx context.Context, toolID uint, page shared.Pagination) ([]ToolVersion, int64, error)
-	// LatestVersionForTool is whatever ToolVersion for this tool has the
-	// highest ID — "latest" means "most recently created," not a
-	// semver-aware comparison of Version strings.
+	// LatestVersionForTool: highest ID, not a semver comparison.
 	LatestVersionForTool(ctx context.Context, toolID uint) (*ToolVersion, error)
 }
 

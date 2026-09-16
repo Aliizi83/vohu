@@ -6,38 +6,18 @@ import (
 	"github.com/Aliizi83/vohu/internal/platform/shared"
 )
 
-// GrantCreatorAccess is the shape of rbac.Service.GrantResourceAccess,
-// injected the same way every cross-module dependency is in this
-// codebase — a function value, so this module never imports rbac. Called
-// once, right after a tool is created, so its creator isn't locked out of
-// the row they just made.
 type GrantCreatorAccess func(ctx context.Context, userID uint, resourceType string, resourceID uint, level string, effect string) error
 
-// Service is what chat.Handler will depend on (once execution is wired up
-// in a later phase) — never Repository directly. There is deliberately no
-// build/deploy/execute logic here yet; this phase is only the storage
-// layer a tool's definition and its versions live in.
+// Service is what chat.Handler will depend on once execution is wired up
+// in a later phase — this is storage only.
 type Service interface {
-	// CreateTool writes a new tool and auto-grants its creator "manage" on
-	// it — otherwise nobody could add a version to (or even see, if
-	// private) a tool they just made, since resource access is
-	// default-deny.
 	CreateTool(ctx context.Context, userID uint, req CreateToolRequest) (*Tool, error)
 	GetToolByID(ctx context.Context, id uint) (*Tool, error)
 	UpdateTool(ctx context.Context, id uint, req UpdateToolRequest) (*Tool, error)
 	DeleteTool(ctx context.Context, id uint) error
-	// ListTools is the raw, unfiltered query — used internally by
-	// ListToolsForCaller's wildcard-access fast path.
 	ListTools(ctx context.Context, filter shared.DynamicFilter, page shared.Pagination) ([]Tool, int64, error)
-	// ListToolsForCaller shows every VisibilityPublic tool, plus any
-	// VisibilityPrivate tool the caller holds at least Read-level resource
-	// access to — same rule as agenttool.Service.ListForCaller. A caller
-	// holding wildcard "read" sees every row unfiltered.
 	ListToolsForCaller(ctx context.Context, userID uint, filter shared.DynamicFilter, page shared.Pagination) ([]Tool, int64, error)
 
-	// CreateVersion adds a new immutable version to an existing tool.
-	// Caller access is decided by the route (this tool's own :id), not
-	// here — see routes.go.
 	CreateVersion(ctx context.Context, userID uint, toolID uint, req CreateVersionRequest) (*ToolVersion, error)
 	ListVersionsForTool(ctx context.Context, toolID uint, page shared.Pagination) ([]ToolVersion, int64, error)
 	LatestVersionForTool(ctx context.Context, toolID uint) (*ToolVersion, error)
@@ -131,11 +111,6 @@ func (s *service) ListToolsForCaller(
 		return s.repo.ListTools(ctx, filter, page)
 	}
 
-	// shared.FilterAndPaginate doesn't fit here — it applies hasAccessLevel
-	// uniformly to every candidate, with no way to skip the check entirely
-	// for a public row, so the filtering loop (and its
-	// pagination-over-the-filtered-slice math) is duplicated by hand
-	// instead. Same reasoning as agenttool.Service.ListForCaller.
 	candidates, _, err := s.repo.ListTools(ctx, filter, shared.Pagination{PageNumber: 1, PageSize: 1000})
 	if err != nil {
 		return nil, 0, err
@@ -170,8 +145,6 @@ func (s *service) ListToolsForCaller(
 }
 
 func (s *service) CreateVersion(ctx context.Context, userID uint, toolID uint, req CreateVersionRequest) (*ToolVersion, error) {
-	// Confirms the tool exists before writing an orphaned version row —
-	// the caller's access to toolID is already decided by the route.
 	if _, err := s.repo.FindToolByID(ctx, toolID); err != nil {
 		return nil, err
 	}

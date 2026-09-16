@@ -5,13 +5,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// RegisterRoutes wires this module's HTTP routes. Create needs a wildcard
-// "write" check (there's no existing row yet to check access on — same
-// pattern as sshconn.RegisterRoutes' POST); every other route concerns one
-// specific tool identified by :id, so shared.RequireAccessLevelOnParam
-// handles it directly, including the two /versions routes (:id is still
-// the tool's own ID there, versions have no independent access story of
-// their own).
 func RegisterRoutes(
 	v1 *gin.RouterGroup,
 	handler *Handler,

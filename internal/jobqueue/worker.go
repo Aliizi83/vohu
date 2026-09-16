@@ -8,15 +8,10 @@ import (
 	"github.com/Aliizi83/vohu/pkg/logging"
 )
 
-// Handler processes one job's payload and returns its output, or an error
-// that triggers a retry if the job still has attempts left (see
-// Job.RetryIfFailed).
 type Handler func(ctx context.Context, payload json.RawMessage) (json.RawMessage, error)
 
-// Worker dequeues jobs from a fixed set of queues and dispatches them to
-// a registered Handler by Job.Type, retrying up to Job.RetryIfFailed
-// times (immediate re-enqueue, no backoff yet) before giving up and
-// recording a failed Result.
+// Worker dequeues jobs and dispatches them by Job.Type, retrying up to
+// Job.RetryIfFailed times before recording a failed Result.
 type Worker struct {
 	store    Store
 	queues   []string
@@ -28,16 +23,10 @@ func NewWorker(store Store, logger logging.Logger, queues ...string) *Worker {
 	return &Worker{store: store, queues: queues, handlers: make(map[string]Handler), logger: logger}
 }
 
-// Register wires a Handler for one job Type. Registering the same Type
-// twice overwrites the previous Handler — there's meant to be exactly one
-// handler per type.
 func (w *Worker) Register(jobType string, handler Handler) {
 	w.handlers[jobType] = handler
 }
 
-// Run dequeues and processes jobs one at a time until ctx is cancelled or
-// the Store itself errors (Dequeue's error, not a single job's handler
-// error — a handler failure never stops the loop, see process).
 func (w *Worker) Run(ctx context.Context) error {
 	for {
 		job, err := w.store.Dequeue(ctx, w.queues...)

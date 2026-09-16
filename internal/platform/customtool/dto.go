@@ -1,8 +1,7 @@
 package customtool
 
 // CreateToolRequest defines a brand-new tool. Visibility defaults to
-// private when omitted — same "safe by default" reasoning as everywhere
-// else access-gated visibility shows up in this codebase.
+// private when omitted.
 type CreateToolRequest struct {
 	Name         string     `json:"name" binding:"required,max=100"`
 	Description  string     `json:"description" binding:"required"`
@@ -10,17 +9,14 @@ type CreateToolRequest struct {
 	Visibility   Visibility `json:"visibility" binding:"omitempty,oneof=public private"`
 }
 
-// UpdateToolRequest changes a tool's metadata — never Name (the stable key
-// the agent calls it by; renaming would break every existing call site and
-// any binary manifest already deployed under the old name) and never
-// CreatedByUserID.
+// UpdateToolRequest never changes Name — the stable key the agent calls
+// it by.
 type UpdateToolRequest struct {
 	Description  string     `json:"description" binding:"omitempty"`
 	ParamsSchema string     `json:"paramsSchema" binding:"omitempty"`
 	Visibility   Visibility `json:"visibility" binding:"omitempty,oneof=public private"`
 }
 
-// CreateVersionRequest adds a new immutable version to an existing tool.
 type CreateVersionRequest struct {
 	Version    string `json:"version" binding:"required,max=50"`
 	SourceCode string `json:"sourceCode" binding:"required"`
