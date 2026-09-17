@@ -10,8 +10,10 @@ import { Button } from "@/components/ui/button"
 import { API_BASE, api, ApiError } from "@/lib/api"
 import { useLanguage } from "@/lib/i18n"
 
-const DARK_THEME = { background: "#1e1e1e", foreground: "#d4d4d4" }
-const LIGHT_THEME = { background: "#ffffff", foreground: "#1e1e1e" }
+// cursor/cursorAccent aren't inferred from background/foreground — xterm
+// defaults the cursor to white, invisible on a light background.
+const DARK_THEME = { background: "#1e1e1e", foreground: "#d4d4d4", cursor: "#d4d4d4", cursorAccent: "#1e1e1e" }
+const LIGHT_THEME = { background: "#ffffff", foreground: "#1e1e1e", cursor: "#1e1e1e", cursorAccent: "#ffffff" }
 
 type Status = "connecting" | "connected" | "disconnected" | "error"
 
@@ -101,20 +103,26 @@ export default function TerminalPage() {
   const theme = resolvedTheme === "dark" ? DARK_THEME : LIGHT_THEME
 
   return (
-    <div dir="ltr" className="flex h-screen flex-col" style={{ background: theme.background, color: theme.foreground }}>
-      <div className="flex items-center gap-3 border-b border-current/10 px-4 py-2">
-        <Button variant="ghost" size="sm" nativeButton={false} render={<Link to="/ssh-connections" />}>
-          <ArrowLeftIcon />
-          {t("terminal.back")}
-        </Button>
-        <span className="text-sm opacity-60">
-          {status === "connecting" && t("terminal.connecting")}
-          {status === "connected" && t("terminal.connected")}
-          {status === "disconnected" && t("terminal.disconnected")}
-          {status === "error" && t("terminal.connectFailed")}
-        </span>
+    <div className="flex min-h-screen items-center justify-center bg-background p-4 sm:p-6 md:p-8">
+      <div
+        dir="ltr"
+        className="flex h-[85vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg border shadow-sm"
+        style={{ background: theme.background, color: theme.foreground }}
+      >
+        <div className="flex items-center gap-3 border-b border-current/10 px-4 py-2">
+          <Button variant="ghost" size="sm" nativeButton={false} render={<Link to="/ssh-connections" />}>
+            <ArrowLeftIcon />
+            {t("terminal.back")}
+          </Button>
+          <span className="text-sm opacity-60">
+            {status === "connecting" && t("terminal.connecting")}
+            {status === "connected" && t("terminal.connected")}
+            {status === "disconnected" && t("terminal.disconnected")}
+            {status === "error" && t("terminal.connectFailed")}
+          </span>
+        </div>
+        <div ref={containerRef} className="min-h-0 flex-1 p-2" />
       </div>
-      <div ref={containerRef} className="min-h-0 flex-1 p-2" />
     </div>
   )
 }
