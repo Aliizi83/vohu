@@ -40,6 +40,8 @@ import {
   type CustomModelDto,
   type MessageDto,
   type SSHConnectionDto,
+  type ToolCallDto,
+  type ToolResultDto,
 } from "@/lib/api"
 import { cn } from "cn"
 
@@ -48,6 +50,14 @@ import { cn } from "cn"
 // for it, large enough that a normal-length conversation loads in one page.
 const MESSAGES_PAGE_SIZE = 30
 
+// A tool call that's been requested this turn, shown the instant it's
+// requested (result undefined) and updated in place once its result
+// arrives — rather than only appearing once the whole turn is done.
+interface LiveToolCall {
+  call: ToolCallDto
+  result?: ToolResultDto
+}
+
 // One conversation's in-flight-send state — see the streamStates doc
 // comment in ChatPage for why this is keyed per-conversation rather than
 // three plain useState values.
@@ -55,9 +65,10 @@ interface StreamState {
   pendingContent: string
   streamingText: string
   isStreaming: boolean
+  toolCalls: LiveToolCall[]
 }
 
-const EMPTY_STREAM_STATE: StreamState = { pendingContent: "", streamingText: "", isStreaming: false }
+const EMPTY_STREAM_STATE: StreamState = { pendingContent: "", streamingText: "", isStreaming: false, toolCalls: [] }
 
 const MODEL_OPTIONS = [
   { label: "Gemini Flash", provider: "gemini", model: "gemini-3.7-flash" },
@@ -297,7 +308,7 @@ export default function ChatPage() {
     setInput("")
     setStreamStates((prev) => ({
       ...prev,
-      [conversationId]: { pendingContent: content, streamingText: "", isStreaming: true },
+      [conversationId]: { pendingContent: content, streamingText: "", isStreaming: true, toolCalls: [] },
     }))
 
     await streamMessage(conversationId, content, {
@@ -309,6 +320,29 @@ export default function ChatPage() {
             streamingText: (prev[conversationId]?.streamingText ?? "") + chunk,
           },
         }))
+      },
+      onToolCall: (call) => {
+        setStreamStates((prev) => {
+          const current = prev[conversationId] ?? EMPTY_STREAM_STATE
+          return {
+            ...prev,
+            [conversationId]: { ...current, toolCalls: [...current.toolCalls, { call }] },
+          }
+        })
+      },
+      onToolResult: (result) => {
+        setStreamStates((prev) => {
+          const current = prev[conversationId] ?? EMPTY_STREAM_STATE
+          return {
+            ...prev,
+            [conversationId]: {
+              ...current,
+              toolCalls: current.toolCalls.map((tc) =>
+                tc.call.id === result.toolCallId ? { ...tc, result } : tc,
+              ),
+            },
+          }
+        })
       },
       onDone: (newMessages) => {
         // Only the currently-selected conversation's `messages` array is
@@ -495,6 +529,10 @@ export default function ChatPage() {
                   pending={currentStream.streamingText === ""}
                 />
               )}
+
+              {currentStream.toolCalls.map((tc) => (
+                <LiveToolCallBubble key={tc.call.id} toolCall={tc} />
+              ))}
             </div>
 
             <form onSubmit={handleSend} className="flex items-end gap-2 border-t p-3">
@@ -611,6 +649,33 @@ function MessageBubble({ message, pending }: { message: MessageDto; pending?: bo
           {t("chat.callingTool", { name: call.name, args: JSON.stringify(call.arguments) })}
         </span>
       ))}
+    </div>
+  )
+}
+
+// Shown from the moment a tool call is requested (spinner, no result yet)
+// through to its result landing in place — the persisted equivalent
+// (MessageBubble's "tool" role branch) only exists once the whole turn is
+// already done, so this is what makes a call visible while it's running.
+function LiveToolCallBubble({ toolCall }: { toolCall: LiveToolCall }) {
+  const { t } = useLanguage()
+  const { call, result } = toolCall
+
+  return (
+    <div className="max-w-[75%] space-y-1 rounded-md border bg-muted/50 px-3 py-2 text-xs">
+      <div className="flex items-center gap-1.5">
+        <span className="font-medium">{call.name}</span>
+        {!result && <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary" />}
+      </div>
+      {!result && (
+        <span className="text-muted-foreground">{t("chat.callingTool", { name: call.name, args: JSON.stringify(call.arguments) })}</span>
+      )}
+      {result?.error && <span className="text-destructive">{t("chat.toolError", { error: result.error })}</span>}
+      {result && !result.error && (
+        <pre className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">
+          {typeof result.result === "string" ? result.result : JSON.stringify(result.result, null, 2)}
+        </pre>
+      )}
     </div>
   )
 }

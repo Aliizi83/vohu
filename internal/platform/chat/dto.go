@@ -40,17 +40,21 @@ func toMessageResponse(msg ai_model.Message) MessageResponse {
 	if msg.ToolResults != nil {
 		resp.ToolResults = make([]ToolResultResponse, 0, len(*msg.ToolResults))
 		for _, result := range *msg.ToolResults {
-			entry := ToolResultResponse{
-				ToolCallID: result.ToolCallID,
-				Name:       result.Name,
-				Result:     result.Result,
-			}
-			if result.Error != nil {
-				entry.Error = result.Error.Error()
-			}
-			resp.ToolResults = append(resp.ToolResults, entry)
+			resp.ToolResults = append(resp.ToolResults, toToolResultResponse(result))
 		}
 	}
 
 	return resp
+}
+
+func toToolResultResponse(result ai_model.ToolResult) ToolResultResponse {
+	entry := ToolResultResponse{
+		ToolCallID: result.ToolCallID,
+		Name:       result.Name,
+		Result:     result.Result,
+	}
+	if result.Error != nil {
+		entry.Error = result.Error.Error()
+	}
+	return entry
 }

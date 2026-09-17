@@ -71,7 +71,7 @@ func TestRun_NoToolCalls_ReturnsFinalAssistantMessage(t *testing.T) {
 
 	messages := []ai_model.Message{{Role: ai_model.RoleUser, Content: "hi"}}
 
-	result, err := a.Run(context.Background(), messages, nil)
+	result, err := a.Run(context.Background(), messages, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestRun_ExecutesToolCallsAndAggregatesResults(t *testing.T) {
 
 	messages := []ai_model.Message{{Role: ai_model.RoleUser, Content: "do the thing"}}
 
-	result, err := a.Run(context.Background(), messages, nil)
+	result, err := a.Run(context.Background(), messages, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -131,7 +131,7 @@ func TestRun_UnknownTool_ReturnsResultWithoutError(t *testing.T) {
 	registry := tools.NewRegistry()
 	a := New(llm, registry, "fake-model")
 
-	result, err := a.Run(context.Background(), []ai_model.Message{{Role: ai_model.RoleUser, Content: "x"}}, nil)
+	result, err := a.Run(context.Background(), []ai_model.Message{{Role: ai_model.RoleUser, Content: "x"}}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -158,7 +158,7 @@ func TestRun_StopsAtMaxToolIterations(t *testing.T) {
 	registry.Register(&noopTool{})
 	a := New(llm, registry, "fake-model")
 
-	result, err := a.Run(context.Background(), []ai_model.Message{{Role: ai_model.RoleUser, Content: "loop forever"}}, nil)
+	result, err := a.Run(context.Background(), []ai_model.Message{{Role: ai_model.RoleUser, Content: "loop forever"}}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -180,7 +180,7 @@ func TestRun_PropagatesLLMError(t *testing.T) {
 
 	messages := []ai_model.Message{{Role: ai_model.RoleUser, Content: "hi"}}
 
-	result, err := a.Run(context.Background(), messages, nil)
+	result, err := a.Run(context.Background(), messages, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected an error, got nil")
 	}

@@ -440,6 +440,8 @@ export const api = {
 
 export interface StreamHandlers {
   onChunk?: (text: string) => void
+  onToolCall?: (call: ToolCallDto) => void
+  onToolResult?: (result: ToolResultDto) => void
   onDone?: (messages: MessageDto[]) => void
   onError?: (message: string) => void
 }
@@ -502,6 +504,8 @@ export async function streamMessage(
       const payload = JSON.parse(data) as unknown
 
       if (event === "chunk") handlers.onChunk?.(payload as string)
+      else if (event === "tool_call") handlers.onToolCall?.(payload as ToolCallDto)
+      else if (event === "tool_result") handlers.onToolResult?.(payload as ToolResultDto)
       else if (event === "done") handlers.onDone?.(payload as MessageDto[])
       else if (event === "error") handlers.onError?.(payload as string)
     }

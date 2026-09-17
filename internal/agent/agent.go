@@ -30,13 +30,18 @@ func New(llm ai_model.LLM, registry *tools.Registry, model string) *Agent {
 }
 
 // Run behaves like calling Chat in a loop until the model stops requesting
-// tools, but streams the assistant's text: onChunk is called with each
-// piece of text as it arrives, across every round-trip in the loop. Pass
-// a no-op function if live output isn't needed.
+// tools, but streams progress as it happens, across every round-trip in
+// the loop: onChunk with each piece of assistant text, onToolCall the
+// moment a call is about to run (before it can take seconds to finish),
+// and onToolResult once that same call's result is in. All three may be
+// nil if live output isn't needed — the returned message history has the
+// full record either way.
 func (a *Agent) Run(
 	ctx context.Context,
 	messages []ai_model.Message,
 	onChunk func(text string),
+	onToolCall func(call ai_model.ToolCall),
+	onToolResult func(result ai_model.ToolResult),
 ) ([]ai_model.Message, error) {
 
 	for iteration := 0; iteration < a.maxToolIterations; iteration++ {
@@ -63,9 +68,16 @@ func (a *Agent) Run(
 		})
 
 		for _, call := range response.ToolCalls {
+			if onToolCall != nil {
+				onToolCall(call)
+			}
+			result := a.executeTool(ctx, call)
+			if onToolResult != nil {
+				onToolResult(result)
+			}
 			messages = append(messages, ai_model.Message{
 				Role:        ai_model.RoleTool,
-				ToolResults: &[]ai_model.ToolResult{a.executeTool(ctx, call)},
+				ToolResults: &[]ai_model.ToolResult{result},
 			})
 		}
 	}

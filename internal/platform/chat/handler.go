@@ -301,7 +301,7 @@ func (h *Handler) GetMessages(c *gin.Context) {
 // agent produced are persisted only after the turn finishes.
 //
 //	@Summary		Send a message (SSE stream)
-//	@Description	Sends a message and streams the reply as a Server-Sent Events response (Content-Type: text/event-stream) — this is NOT a plain JSON endpoint despite the shared.BaseResponse envelope every other route uses; it's documented here for completeness but tools like "Try it out" won't render it usefully. Events, in order: zero or more "chunk" (data is a raw string — one piece of assistant text as it streams in), then either "done" (data is []MessageResponse — every message this turn produced: the assistant's reply and any tool call/result pairs, already persisted) or "error" (data is a plain error string; nothing was persisted).
+//	@Description	Sends a message and streams the reply as a Server-Sent Events response (Content-Type: text/event-stream) — this is NOT a plain JSON endpoint despite the shared.BaseResponse envelope every other route uses; it's documented here for completeness but tools like "Try it out" won't render it usefully. Events, in order: zero or more "chunk" (data is a raw string — one piece of assistant text as it streams in) interleaved with zero or more "tool_call" (data is an ai_model.ToolCall — fired the moment the model requests a call, before it runs) each eventually followed by its own "tool_result" (data is a ToolResultResponse, matched to its call by toolCallId) once that call finishes; then either "done" (data is []MessageResponse — every message this turn produced: the assistant's reply and any tool call/result pairs, already persisted) or "error" (data is a plain error string; nothing was persisted).
 //	@Tags			chat
 //	@Accept			json
 //	@Produce		text/event-stream
@@ -383,9 +383,11 @@ func (h *Handler) SendMessage(c *gin.Context) {
 		}
 	}
 
-	updated, err := vohuAgent.Run(c.Request.Context(), turnInput, func(chunk string) {
-		writeSSE("chunk", chunk)
-	})
+	updated, err := vohuAgent.Run(c.Request.Context(), turnInput,
+		func(chunk string) { writeSSE("chunk", chunk) },
+		func(call ai_model.ToolCall) { writeSSE("tool_call", call) },
+		func(result ai_model.ToolResult) { writeSSE("tool_result", toToolResultResponse(result)) },
+	)
 	if err != nil {
 		writeSSE("error", err.Error())
 		return
