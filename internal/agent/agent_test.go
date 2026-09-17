@@ -163,8 +163,8 @@ func TestRun_StopsAtMaxToolIterations(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if llm.calls != defaultMaxToolIterations {
-		t.Fatalf("expected exactly %d model calls, got %d", defaultMaxToolIterations, llm.calls)
+	if llm.calls != DefaultMaxToolIterations {
+		t.Fatalf("expected exactly %d model calls, got %d", DefaultMaxToolIterations, llm.calls)
 	}
 
 	last := result[len(result)-1]

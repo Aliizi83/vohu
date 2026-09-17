@@ -14,6 +14,6 @@ type Tool interface {
 }
 
 type ToolResult struct {
-	Data    any
-	Success bool
+	Data    any  `json:"data"`
+	Success bool `json:"success"`
 }

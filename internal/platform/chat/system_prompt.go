@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Aliizi83/vohu/internal/agent"
 	"github.com/Aliizi83/vohu/internal/ai_model"
 	"github.com/Aliizi83/vohu/internal/tools"
 )
@@ -12,12 +13,16 @@ import (
 // agentIntro is the fixed, model-agnostic part of every turn's system
 // prompt. The tool list itself is never hard-coded here — it's generated
 // fresh from the registry each turn (see buildSystemPrompt) so it never
-// drifts from what's actually callable for this user.
-const agentIntro = `You are the Vohu agent, an assistant that manages remote servers on behalf of a human operator. The operator has registered one or more SSH connections to real machines; you reach them only through the tools listed below — you have no other way to affect the outside world.
+// drifts from what's actually callable for this user. %d is
+// agent.DefaultMaxToolIterations — named here instead of hardcoded so the
+// number the model is told never drifts from the real cap in agent.Run.
+const agentIntroTemplate = `You are the Vohu agent, an assistant that manages remote servers on behalf of a human operator. The operator has registered one or more SSH connections to real machines; you reach them only through the tools listed below — you have no other way to affect the outside world.
 
 Every tool bound to a specific machine takes a "connectionId" argument. Call list_ssh_connections first if you don't already know a valid one from earlier in this conversation. A tool call's result always comes back as {"success": bool, "data": ...} — data is the useful payload on success, or a human-readable reason on failure; a failure is never a crash, it's information to act on (retry differently, ask the operator, or give up and explain why).
 
-Only call a tool when the current message actually calls for one. Explain what you're about to do before a consequential or destructive action, and don't invent a connectionId, tool name, or result you weren't actually given.`
+You are not limited to one tool call per message. When a request needs several steps — discover something, act on what you found, verify the result — call one tool, read its result, then immediately call the next tool based on that result, and keep chaining like that until the operator's actual goal is met, not just until you've made one call. Only stop calling tools and reply in plain text once the goal is fully done, you're blocked and need the operator's input, or you've made %d tool calls this message (the hard per-message cap) — in that last case, say plainly how far you got and what's left, rather than pretending to be finished.
+
+Explain what you're about to do before a consequential or destructive action, and don't invent a connectionId, tool name, or result you weren't actually given.`
 
 // createCustomToolGuide is appended only when create_custom_tool is
 // actually registered for this caller (see buildSystemPrompt) — its
@@ -37,7 +42,7 @@ If your source doesn't compile, create_custom_tool comes back with success=false
 
 func buildSystemPrompt(registry *tools.Registry) string {
 	var b strings.Builder
-	b.WriteString(agentIntro)
+	fmt.Fprintf(&b, agentIntroTemplate, agent.DefaultMaxToolIterations)
 
 	definitions := registry.Definitions()
 	if len(definitions) > 0 {

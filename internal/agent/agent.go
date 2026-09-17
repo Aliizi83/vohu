@@ -8,10 +8,12 @@ import (
 	"github.com/Aliizi83/vohu/internal/tools"
 )
 
-// defaultMaxToolIterations caps how many model round-trips a single Run
+// DefaultMaxToolIterations caps how many model round-trips a single Run
 // call will make before giving up on a turn. Without a cap, a model that
-// keeps requesting tools would loop indefinitely.
-const defaultMaxToolIterations = 10
+// keeps requesting tools would loop indefinitely. Exported so callers
+// building a system prompt (see chat.buildSystemPrompt) can tell the
+// model its own real ceiling instead of a hardcoded, easily-stale number.
+const DefaultMaxToolIterations = 10
 
 type Agent struct {
 	llm               ai_model.LLM
@@ -27,7 +29,7 @@ func New(llm ai_model.LLM, registry *tools.Registry, model string, systemPrompt 
 		registry:          registry,
 		model:             model,
 		systemPrompt:      systemPrompt,
-		maxToolIterations: defaultMaxToolIterations,
+		maxToolIterations: DefaultMaxToolIterations,
 	}
 }
 
