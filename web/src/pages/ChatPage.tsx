@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react"
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react"
 import { ArchiveIcon, ArchiveRestoreIcon, PencilIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 import { Markdown } from "@/components/Markdown"
@@ -609,7 +609,12 @@ function ComposerTextarea({
   )
 }
 
-function MessageBubble({ message, pending }: { message: MessageDto; pending?: boolean }) {
+// Memoized so typing in the composer (which re-renders all of ChatPage on
+// every keystroke) doesn't re-run every past message's markdown parse and
+// syntax highlighting — the cost that made typing feel sluggish once a
+// conversation had enough history. `message`/`pending` stay referentially
+// stable across a typing-only re-render, so this bails out correctly.
+const MessageBubble = memo(function MessageBubble({ message, pending }: { message: MessageDto; pending?: boolean }) {
   const { t } = useLanguage()
 
   if (message.role === "tool") {
@@ -651,7 +656,7 @@ function MessageBubble({ message, pending }: { message: MessageDto; pending?: bo
       ))}
     </div>
   )
-}
+})
 
 // Shown from the moment a tool call is requested (spinner, no result yet)
 // through to its result landing in place — the persisted equivalent
