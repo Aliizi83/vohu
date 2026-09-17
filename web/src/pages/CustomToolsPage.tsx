@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react"
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type FormEvent } from "react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -40,6 +40,11 @@ import {
   type CustomToolVersionDto,
   type CustomToolVisibility,
 } from "@/lib/api"
+
+// Lazy so Monaco (a multi-MB dependency) only loads when someone actually
+// opens the add-version form, not on every page that happens to import
+// this file.
+const CodeEditor = lazy(() => import("@/components/CodeEditor").then((m) => ({ default: m.CodeEditor })))
 
 export default function CustomToolsPage() {
   const { t } = useLanguage()
@@ -394,15 +399,9 @@ function AddVersionForm({ toolId, onAdded }: { toolId: number; onAdded: () => vo
           {loading ? t("customTools.adding") : t("customTools.addVersion")}
         </Button>
       </div>
-      <textarea
-        value={sourceCode}
-        onChange={(e) => setSourceCode(e.target.value)}
-        placeholder={t("customTools.sourceCodePlaceholder")}
-        rows={8}
-        spellCheck={false}
-        required
-        className="w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1.5 font-mono text-xs transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-      />
+      <Suspense fallback={<Skeleton className="h-[300px] w-full" />}>
+        <CodeEditor value={sourceCode} onChange={setSourceCode} language="go" />
+      </Suspense>
     </form>
   )
 }

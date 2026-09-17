@@ -213,7 +213,6 @@ export const fa: Dictionary = {
     noVersions: "هنوز نسخه‌ای وجود نداره — یکی پایین اضافه کن.",
     loadVersionsFailed: "خطا در بارگذاری نسخه‌ها",
     versionPlaceholder: "مثلاً 1.0.0",
-    sourceCodePlaceholder: "package main\n\nfunc main() {\n\t// آرگومان‌ها رو به‌صورت JSON از stdin بخون، {\"success\":true,\"data\":...} رو روی stdout بنویس\n}",
     addVersion: "افزودن نسخه",
     adding: "در حال افزودن...",
     versionAdded: "نسخه اضافه شد",

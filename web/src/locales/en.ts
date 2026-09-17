@@ -212,7 +212,6 @@ export const en = {
     noVersions: "No versions yet — add one below.",
     loadVersionsFailed: "Failed to load versions",
     versionPlaceholder: "e.g. 1.0.0",
-    sourceCodePlaceholder: "package main\n\nfunc main() {\n\t// read args as JSON from stdin, write {\"success\":true,\"data\":...} to stdout\n}",
     addVersion: "Add version",
     adding: "Adding...",
     versionAdded: "Version added",
