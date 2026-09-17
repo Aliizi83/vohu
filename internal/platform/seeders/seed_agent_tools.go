@@ -18,6 +18,7 @@ var agentTools = []struct {
 }{
 	{"list_ssh_connections", "List the SSH connections the current user is permitted to use, with their IDs — call this before ssh_execute to find a valid connectionId."},
 	{"ssh_execute", "Execute a command on a remote host over SSH, using an SSH connection already stored in the system."},
+	{"create_custom_tool", "Author and register a brand-new tool from Go source code, for a job no existing tool covers."},
 }
 
 // seedAgentTools gives every SSH-connection-bound tool implementation a

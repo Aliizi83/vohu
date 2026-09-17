@@ -17,6 +17,7 @@ import (
 	"github.com/Aliizi83/vohu/internal/platform/providerkey"
 	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"github.com/Aliizi83/vohu/internal/platform/sshconn"
+	"github.com/Aliizi83/vohu/internal/toolbuild"
 	"github.com/gin-gonic/gin"
 )
 
@@ -35,6 +36,7 @@ type Handler struct {
 	customTools    customtool.Service
 	jobs           jobqueue.Store
 	defaultRetries int
+	builder        toolbuild.Builder
 }
 
 func NewHandler(
@@ -48,6 +50,7 @@ func NewHandler(
 	customTools customtool.Service,
 	jobs jobqueue.Store,
 	defaultRetries int,
+	builder toolbuild.Builder,
 ) *Handler {
 	return &Handler{
 		conversations:  conversations,
@@ -60,6 +63,7 @@ func NewHandler(
 		customTools:    customTools,
 		jobs:           jobs,
 		defaultRetries: defaultRetries,
+		builder:        builder,
 	}
 }
 
@@ -358,13 +362,13 @@ func (h *Handler) SendMessage(c *gin.Context) {
 	turnInput := append(history, userMessage)
 	originalLen := len(history)
 
-	registry, err := buildRegistry(c.Request.Context(), userID, h.agentTools, h.customTools, h.sshconns, h.canAccess, h.commandRules, h.jobs, h.defaultRetries)
+	registry, err := buildRegistry(c.Request.Context(), userID, h.agentTools, h.customTools, h.sshconns, h.canAccess, h.commandRules, h.jobs, h.defaultRetries, h.builder)
 	if err != nil {
 		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, err)
 		return
 	}
 
-	vohuAgent := agent.New(llm, registry, conv.Model)
+	vohuAgent := agent.New(llm, registry, conv.Model, buildSystemPrompt(registry))
 
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")

@@ -17,14 +17,16 @@ type Agent struct {
 	llm               ai_model.LLM
 	registry          *tools.Registry
 	model             string
+	systemPrompt      string
 	maxToolIterations int
 }
 
-func New(llm ai_model.LLM, registry *tools.Registry, model string) *Agent {
+func New(llm ai_model.LLM, registry *tools.Registry, model string, systemPrompt string) *Agent {
 	return &Agent{
 		llm:               llm,
 		registry:          registry,
 		model:             model,
+		systemPrompt:      systemPrompt,
 		maxToolIterations: defaultMaxToolIterations,
 	}
 }
@@ -49,6 +51,7 @@ func (a *Agent) Run(
 			Messages: messages,
 			Model:    a.model,
 			Tools:    a.registry.Definitions(),
+			System:   a.systemPrompt,
 		}, onChunk)
 
 		if err != nil {

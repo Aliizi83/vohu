@@ -68,6 +68,7 @@ func (agent *AnthropicAgent) Chat(
 		MaxTokens: anthropicMaxTokens,
 		Messages:  messages,
 		Tools:     buildAnthropicTools(request.Tools),
+		System:    buildAnthropicSystem(request.System),
 	})
 	if err != nil {
 		return response, err
@@ -100,6 +101,7 @@ func (agent *AnthropicAgent) StreamChat(
 		MaxTokens: anthropicMaxTokens,
 		Messages:  messages,
 		Tools:     buildAnthropicTools(request.Tools),
+		System:    buildAnthropicSystem(request.System),
 	})
 
 	message := anthropic.Message{}
@@ -128,6 +130,13 @@ func (agent *AnthropicAgent) StreamChat(
 	}
 
 	return response, nil
+}
+
+func buildAnthropicSystem(prompt string) []anthropic.TextBlockParam {
+	if prompt == "" {
+		return nil
+	}
+	return []anthropic.TextBlockParam{{Text: prompt}}
 }
 
 func buildAnthropicTools(definitions []ai_model.ToolDefinition) []anthropic.ToolUnionParam {

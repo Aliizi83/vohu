@@ -158,7 +158,7 @@ func main() {
 
 	chatHandler := chat.NewHandler(
 		conversationService, sshconnService, hasAccessLevel, commandRuleService, providerKeyService, customModelService, agentToolService,
-		customToolService, jobStore, cfg.JobQueue.DefaultRetries,
+		customToolService, jobStore, cfg.JobQueue.DefaultRetries, goBuilder,
 	)
 
 	engine, v1 := httpserver.NewEngine(logger)

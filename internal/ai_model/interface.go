@@ -17,6 +17,10 @@ type ChatRequest struct {
 	Messages []Message
 	Model    string
 	Tools    []ToolDefinition
+	// System is a system-role prompt sent ahead of Messages — instructions
+	// and context the model should follow for the whole conversation,
+	// distinct from any of the three message roles below.
+	System string
 }
 
 type Role string

@@ -9,6 +9,7 @@ import (
 	"github.com/Aliizi83/vohu/internal/platform/customtool"
 	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"github.com/Aliizi83/vohu/internal/platform/sshconn"
+	"github.com/Aliizi83/vohu/internal/toolbuild"
 	"github.com/Aliizi83/vohu/internal/tools"
 )
 
@@ -36,6 +37,7 @@ func buildRegistry(
 	commandRules commandrule.Service,
 	jobs jobqueue.Store,
 	defaultRetries int,
+	builder toolbuild.Builder,
 ) (*tools.Registry, error) {
 	rows, _, err := agentTools.ListForCaller(ctx, userID, shared.DynamicFilter{}, shared.Pagination{PageNumber: 1, PageSize: 500})
 	if err != nil {
@@ -44,7 +46,7 @@ func buildRegistry(
 
 	registry := tools.NewRegistry()
 	for _, row := range rows {
-		if tool, ok := builtinTool(row.Name, userID, sshconns, canAccess, commandRules); ok {
+		if tool, ok := builtinTool(row.Name, userID, sshconns, canAccess, commandRules, customTools, builder, jobs, defaultRetries, registry); ok {
 			registry.Register(tool)
 		}
 	}
@@ -70,12 +72,19 @@ func builtinTool(
 	sshconns sshconn.Service,
 	canAccess shared.AccessLevelCheck,
 	commandRules commandrule.Service,
+	customTools customtool.Service,
+	builder toolbuild.Builder,
+	jobs jobqueue.Store,
+	defaultRetries int,
+	registry *tools.Registry,
 ) (tools.Tool, bool) {
 	switch name {
 	case "list_ssh_connections":
 		return NewListSSHConnectionsTool(userID, sshconns, canAccess), true
 	case "ssh_execute":
 		return NewSSHTool(userID, sshconns, canAccess, commandRules), true
+	case "create_custom_tool":
+		return NewCreateCustomToolTool(userID, canAccess, customTools, builder, sshconns, jobs, defaultRetries, registry), true
 	default:
 		return nil, false
 	}

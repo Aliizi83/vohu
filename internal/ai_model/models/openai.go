@@ -47,7 +47,7 @@ func (agent *OpenAIAgent) Chat(
 
 	client := agent.newClient()
 
-	messages, err := buildOpenAIMessages(request.Messages)
+	messages, err := buildOpenAIMessages(request)
 	if err != nil {
 		return response, err
 	}
@@ -83,7 +83,7 @@ func (agent *OpenAIAgent) StreamChat(
 
 	client := agent.newClient()
 
-	messages, err := buildOpenAIMessages(request.Messages)
+	messages, err := buildOpenAIMessages(request)
 	if err != nil {
 		return response, err
 	}
@@ -186,12 +186,16 @@ func accumulateOpenAIMessage(
 }
 
 func buildOpenAIMessages(
-	messages []ai_model.Message,
+	request ai_model.ChatRequest,
 ) ([]openai.ChatCompletionMessageParamUnion, error) {
 
 	var result []openai.ChatCompletionMessageParamUnion
 
-	for _, message := range messages {
+	if request.System != "" {
+		result = append(result, openai.SystemMessage(request.System))
+	}
+
+	for _, message := range request.Messages {
 
 		switch message.Role {
 

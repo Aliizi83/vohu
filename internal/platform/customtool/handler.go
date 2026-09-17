@@ -190,10 +190,10 @@ func (h *Handler) CheckSource(c *gin.Context) {
 		return
 	}
 
-	shared.RespondSuccess(c, http.StatusOK, CheckSourceResponse{Success: false, Diagnostics: parseGoErrors(err.Error())})
+	shared.RespondSuccess(c, http.StatusOK, CheckSourceResponse{Success: false, Diagnostics: ParseGoErrors(err.Error())})
 }
 
-func parseGoErrors(raw string) []SourceDiagnostic {
+func ParseGoErrors(raw string) []SourceDiagnostic {
 	matches := goErrorPattern.FindAllStringSubmatch(raw, -1)
 	if matches == nil {
 		return []SourceDiagnostic{{Line: 1, Column: 1, Message: raw}}

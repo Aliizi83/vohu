@@ -41,7 +41,8 @@ func (agent *GeminiAgent) Chat(
 	}
 
 	config := &genai.GenerateContentConfig{
-		Tools: buildGeminiTools(request.Tools),
+		Tools:             buildGeminiTools(request.Tools),
+		SystemInstruction: buildGeminiSystem(request.System),
 	}
 
 	contents := buildGeminiContents(request.Messages)
@@ -78,7 +79,8 @@ func (agent *GeminiAgent) StreamChat(
 	}
 
 	config := &genai.GenerateContentConfig{
-		Tools: buildGeminiTools(request.Tools),
+		Tools:             buildGeminiTools(request.Tools),
+		SystemInstruction: buildGeminiSystem(request.System),
 	}
 
 	contents := buildGeminiContents(request.Messages)
@@ -97,6 +99,13 @@ func (agent *GeminiAgent) StreamChat(
 	}
 
 	return response, nil
+}
+
+func buildGeminiSystem(prompt string) *genai.Content {
+	if prompt == "" {
+		return nil
+	}
+	return genai.NewContentFromText(prompt, "")
 }
 
 func buildGeminiTools(definitions []ai_model.ToolDefinition) []*genai.Tool {

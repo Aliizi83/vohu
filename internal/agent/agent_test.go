@@ -67,7 +67,7 @@ func TestRun_NoToolCalls_ReturnsFinalAssistantMessage(t *testing.T) {
 		{Content: "hello there"},
 	}}
 	registry := tools.NewRegistry()
-	a := New(llm, registry, "fake-model")
+	a := New(llm, registry, "fake-model", "")
 
 	messages := []ai_model.Message{{Role: ai_model.RoleUser, Content: "hi"}}
 
@@ -94,7 +94,7 @@ func TestRun_ExecutesToolCallsAndAggregatesResults(t *testing.T) {
 	registry := tools.NewRegistry()
 	tool := &noopTool{}
 	registry.Register(tool)
-	a := New(llm, registry, "fake-model")
+	a := New(llm, registry, "fake-model", "")
 
 	messages := []ai_model.Message{{Role: ai_model.RoleUser, Content: "do the thing"}}
 
@@ -129,7 +129,7 @@ func TestRun_UnknownTool_ReturnsResultWithoutError(t *testing.T) {
 		{Content: "ok"},
 	}}
 	registry := tools.NewRegistry()
-	a := New(llm, registry, "fake-model")
+	a := New(llm, registry, "fake-model", "")
 
 	result, err := a.Run(context.Background(), []ai_model.Message{{Role: ai_model.RoleUser, Content: "x"}}, nil, nil, nil)
 	if err != nil {
@@ -156,7 +156,7 @@ func TestRun_StopsAtMaxToolIterations(t *testing.T) {
 	llm := &infiniteLLM{}
 	registry := tools.NewRegistry()
 	registry.Register(&noopTool{})
-	a := New(llm, registry, "fake-model")
+	a := New(llm, registry, "fake-model", "")
 
 	result, err := a.Run(context.Background(), []ai_model.Message{{Role: ai_model.RoleUser, Content: "loop forever"}}, nil, nil, nil)
 	if err != nil {
@@ -176,7 +176,7 @@ func TestRun_StopsAtMaxToolIterations(t *testing.T) {
 func TestRun_PropagatesLLMError(t *testing.T) {
 	llm := &stubLLM{} // no responses queued -> StreamChat returns an error immediately
 	registry := tools.NewRegistry()
-	a := New(llm, registry, "fake-model")
+	a := New(llm, registry, "fake-model", "")
 
 	messages := []ai_model.Message{{Role: ai_model.RoleUser, Content: "hi"}}
 
