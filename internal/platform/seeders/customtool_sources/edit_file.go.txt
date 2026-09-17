@@ -22,7 +22,18 @@ func resolve(rel string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	full := filepath.Join(wd, rel)
+	// An absolute rel is used literally, not joined onto wd — Join
+	// doesn't special-case an absolute second argument, it just
+	// concatenates, so an absolute path already inside wd (e.g. wd itself
+	// is the SSH login directory and rel is a full path under it) would
+	// otherwise get silently doubled into wd+rel instead of resolving to
+	// the real path the caller meant.
+	var full string
+	if filepath.IsAbs(rel) {
+		full = filepath.Clean(rel)
+	} else {
+		full = filepath.Join(wd, rel)
+	}
 	r, err := filepath.Rel(wd, full)
 	if err != nil || strings.HasPrefix(r, "..") {
 		return "", fmt.Errorf("path escapes the working directory: %s", rel)

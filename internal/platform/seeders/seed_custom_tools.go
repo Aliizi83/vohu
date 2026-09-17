@@ -53,6 +53,19 @@ var customTools = []struct {
 		findFilesSource},
 }
 
+// FixedBuiltinFileToolSources returns each built-in file tool's current
+// (fixed) source by name — used by migrations.UpP_5 to push a corrected
+// ToolVersion to a database that already seeded the older, buggy source,
+// since seedCustomTools itself only ever creates a tool once and never
+// revises an existing row's source.
+func FixedBuiltinFileToolSources() map[string]string {
+	sources := make(map[string]string, len(customTools))
+	for _, ct := range customTools {
+		sources[ct.name] = ct.source
+	}
+	return sources
+}
+
 // seedCustomTools gives each built-in file tool source a customtool.Tool +
 // initial ToolVersion row, owned by the admin user. Runs after seedUsers.
 // The admin role's wildcard "manage" on resourceType "custom_tool" (see

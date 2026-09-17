@@ -51,22 +51,44 @@ func TestWorkspace_Resolve_RejectsDotDotEscape(t *testing.T) {
 	}
 }
 
-func TestWorkspace_Resolve_ReRootsAnAbsoluteLookingPathRatherThanEscaping(t *testing.T) {
+func TestWorkspace_Resolve_AbsolutePathOutsideRootIsRejected(t *testing.T) {
+	ws, err := filesystem.NewWorkspace(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewWorkspace failed: %v", err)
+	}
+
+	// An absolute path outside the workspace is rejected outright, not
+	// silently joined onto root — joining it (root + "/etc/passwd") would
+	// produce a harmless-but-confusing path nobody asked for instead of
+	// a clear error.
+	if _, err := ws.Resolve("/etc/passwd"); err == nil {
+		t.Fatal("expected an absolute path outside the workspace to be rejected")
+	}
+}
+
+func TestWorkspace_Resolve_AbsolutePathInsideRootResolvesLiterally(t *testing.T) {
 	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("hi"), 0o644); err != nil {
+		t.Fatalf("setup failed: %v", err)
+	}
 	ws, err := filesystem.NewWorkspace(root)
 	if err != nil {
 		t.Fatalf("NewWorkspace failed: %v", err)
 	}
 
-	// An absolute path is still rooted at the workspace, not treated as
-	// an override — filepath.Join never lets a later absolute-looking
-	// component reset to "/".
-	resolved, err := ws.Resolve("/etc/passwd")
+	// The natural case this guards against: root IS the caller's own
+	// home directory (e.g. an SSH login shell's cwd), and the caller
+	// supplies what it believes is a real absolute path already inside
+	// it. Before this fix, filepath.Join(root, path) doesn't special-case
+	// an absolute second argument, it just concatenates — root got
+	// silently doubled into the result instead of the literal path
+	// resolving as-is.
+	resolved, err := ws.Resolve(filepath.Join(root, "a.txt"))
 	if err != nil {
-		t.Fatalf("expected /etc/passwd to resolve *inside* the workspace, got error: %v", err)
+		t.Fatalf("expected an absolute path already inside root to resolve, got %v", err)
 	}
-	if filepath.Dir(resolved) != filepath.Join(root, "etc") {
-		t.Fatalf("expected the absolute-looking path to land inside the workspace root, got %q", resolved)
+	if resolved != filepath.Join(root, "a.txt") {
+		t.Fatalf("expected the literal path %q, got %q", filepath.Join(root, "a.txt"), resolved)
 	}
 }
 

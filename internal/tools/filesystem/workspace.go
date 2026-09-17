@@ -49,25 +49,36 @@ func (w *Workspace) Root() string {
 	return w.root
 }
 
-// Resolve turns a model-supplied path (relative or absolute — either way
-// it's treated as rooted at the workspace) into a real filesystem path
+// Resolve turns a model-supplied path into a real filesystem path
 // guaranteed to be inside the workspace, or an error if it would escape.
+// A relative path is joined onto root, as expected. An absolute-looking
+// path is NOT joined onto root — filepath.Join doesn't special-case an
+// absolute second argument, it just concatenates, so joining root onto
+// an already-root-prefixed absolute path (e.g. root="/home/developer",
+// path="/home/developer/x") would silently double it into
+// "/home/developer/home/developer/x" instead of the "/home/developer/x"
+// the caller almost certainly meant. An absolute path is instead taken
+// literally and only has to pass the same containment check below.
 //
 // Two escapes are checked, not one: the "../../etc/passwd"-style string
-// escape (caught by re-verifying the cleaned, joined path is still
-// prefixed by root — filepath.Join+Clean alone does NOT prevent this,
-// it happily produces a path outside root if given enough ".." segments)
-// and a symlink escape (an existing path inside the workspace whose
-// target — or an ancestor directory's target — actually points outside
-// it, caught by re-checking containment after EvalSymlinks on whatever
-// part of the path exists).
+// escape (caught by re-verifying the cleaned path is still prefixed by
+// root — filepath.Join+Clean alone does NOT prevent this, it happily
+// produces a path outside root if given enough ".." segments) and a
+// symlink escape (an existing path inside the workspace whose target —
+// or an ancestor directory's target — actually points outside it,
+// caught by re-checking containment after EvalSymlinks on whatever part
+// of the path exists).
 func (w *Workspace) Resolve(path string) (string, error) {
 	if strings.TrimSpace(path) == "" {
 		return "", fmt.Errorf("path is required")
 	}
 
-	joined := filepath.Join(w.root, path)
-	cleaned := filepath.Clean(joined)
+	var cleaned string
+	if filepath.IsAbs(path) {
+		cleaned = filepath.Clean(path)
+	} else {
+		cleaned = filepath.Clean(filepath.Join(w.root, path))
+	}
 
 	if !w.contains(cleaned) {
 		return "", fmt.Errorf("path %q escapes the workspace", path)

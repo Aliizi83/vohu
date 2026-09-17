@@ -1,6 +1,9 @@
 package migrations
 
 import (
+	"errors"
+
+	"github.com/Aliizi83/vohu/internal/platform/customtool"
 	"github.com/Aliizi83/vohu/internal/platform/seeders"
 	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"github.com/Aliizi83/vohu/pkg/logging"
@@ -71,6 +74,51 @@ func UpP_4(database *gorm.DB, logger logging.Logger) error {
 		return err
 	}
 	logger.Info(logging.Postgres, logging.Migration, "backfilled ssh_connections.command_policy_mode", nil)
+
+	return nil
+}
+
+// UpP_5 pushes a corrected "1.0.1" ToolVersion for each built-in file
+// tool (read_file/write_file/edit_file/list_directory/search_files/
+// find_files) whose seeded "1.0.0" source silently doubled an
+// absolute-looking path instead of resolving it literally — see
+// seeders.FixedBuiltinFileToolSources's doc comment. ToolVersion rows are
+// immutable by design (a change is always a new version, never an edit),
+// so a database that already seeded "1.0.0" needs a new version pushed
+// explicitly; seedCustomTools itself only ever creates a tool once and
+// never revises an existing row. Idempotent — skips a tool that already
+// has a "1.0.1" version.
+func UpP_5(database *gorm.DB, logger logging.Logger) error {
+	for name, source := range seeders.FixedBuiltinFileToolSources() {
+		var tool customtool.Tool
+		err := database.Where("name = ?", name).First(&tool).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+
+		var existing customtool.ToolVersion
+		err = database.Where("tool_id = ? AND version = ?", tool.ID, "1.0.1").First(&existing).Error
+		if err == nil {
+			continue
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+
+		version := customtool.ToolVersion{
+			ToolID:          tool.ID,
+			Version:         "1.0.1",
+			SourceCode:      source,
+			CreatedByUserID: tool.CreatedByUserID,
+		}
+		if err := database.Create(&version).Error; err != nil {
+			return err
+		}
+	}
+	logger.Info(logging.Postgres, logging.Migration, "pushed corrected 1.0.1 versions for built-in file tools", nil)
 
 	return nil
 }

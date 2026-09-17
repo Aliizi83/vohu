@@ -178,3 +178,43 @@ func TestCustomToolSources_PathEscapeIsRejected(t *testing.T) {
 		t.Fatalf("expected a path escape to be rejected, got %+v", result)
 	}
 }
+
+// TestCustomToolSources_AbsolutePathMatchingWorkDirIsNotDoubled guards the
+// bug ssh_execute and these tools disagreed on in practice: a caller who
+// (very naturally) supplies the real absolute path to a file already
+// inside the tool's own working directory — e.g. workDir is an SSH login
+// shell's home directory, and the caller writes to that same absolute
+// path — must land at that literal path, not workDir+path. Before the
+// fix, filepath.Join(workDir, path) doesn't special-case an absolute
+// second argument, it just concatenates, silently doubling the path into
+// somewhere ssh_execute (which treats paths literally, no sandboxing)
+// would never find it.
+func TestCustomToolSources_AbsolutePathMatchingWorkDirIsNotDoubled(t *testing.T) {
+	workDir := t.TempDir()
+	writeFile := buildTool(t, "write_file.go.txt")
+	readFile := buildTool(t, "read_file.go.txt")
+
+	absPath := filepath.Join(workDir, "file_manager.py")
+
+	result := runTool(t, writeFile, workDir, map[string]any{"path": absPath, "content": "print('hi')\n"})
+	if result["success"] != true {
+		t.Fatalf("write_file with an absolute in-workdir path failed: %+v", result)
+	}
+
+	if _, err := os.Stat(absPath); err != nil {
+		t.Fatalf("expected the file at the literal absolute path %q, got: %v", absPath, err)
+	}
+	doubled := filepath.Join(workDir, absPath)
+	if _, err := os.Stat(doubled); err == nil {
+		t.Fatalf("file was written to the doubled path %q (workDir joined onto an absolute path) instead of the literal one", doubled)
+	}
+
+	result = runTool(t, readFile, workDir, map[string]any{"path": absPath})
+	if result["success"] != true {
+		t.Fatalf("read_file with the same absolute path failed: %+v", result)
+	}
+	data := result["data"].(map[string]any)
+	if !strings.Contains(data["content"].(string), "print('hi')") {
+		t.Fatalf("expected the written content back, got %+v", data["content"])
+	}
+}
