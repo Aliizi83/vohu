@@ -133,11 +133,13 @@ func main() {
 	agentToolService := agenttool.NewService(agentToolRepo, hasAccessLevel)
 	agentToolHandler := agenttool.NewHandler(agentToolService)
 
+	goBuilder := toolbuild.NewGoBuilder()
+
 	customToolRepo := customtool.NewRepository(db.GetDB())
 	customToolService := customtool.NewService(customToolRepo, grantCreatorAccess, hasAccessLevel)
-	customToolHandler := customtool.NewHandler(customToolService)
+	customToolHandler := customtool.NewHandler(customToolService, goBuilder)
 
-	toolDeployer := tooldeploy.NewDeployer(toolbuild.NewGoBuilder())
+	toolDeployer := tooldeploy.NewDeployer(goBuilder)
 
 	// Custom tool build/deploy/execute runs on a worker consuming this
 	// queue, not inline in the chat request — see

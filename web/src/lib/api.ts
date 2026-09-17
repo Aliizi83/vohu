@@ -204,6 +204,17 @@ export interface CustomToolVersionDto {
   createdByUserId: number
 }
 
+export interface SourceDiagnosticDto {
+  line: number
+  column: number
+  message: string
+}
+
+export interface CheckSourceResultDto {
+  success: boolean
+  diagnostics: SourceDiagnosticDto[]
+}
+
 export type AccessLevel = "read" | "write" | "manage"
 export type GranteeType = "user" | "role"
 export type ResourceEffect = "accepted" | "prohibited"
@@ -419,6 +430,8 @@ export const api = {
       }),
     createVersion: (toolId: number, data: { version: string; sourceCode: string }) =>
       request<CustomToolVersionDto>("POST", `/custom-tools/${toolId}/versions`, { body: data }),
+    checkSource: (sourceCode: string) =>
+      request<CheckSourceResultDto>("POST", "/custom-tools/check-source", { body: { sourceCode } }),
   },
 
   resourceAccess: {

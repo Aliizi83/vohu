@@ -913,7 +913,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Sends a message and streams the reply as a Server-Sent Events response (Content-Type: text/event-stream) — this is NOT a plain JSON endpoint despite the shared.BaseResponse envelope every other route uses; it's documented here for completeness but tools like \"Try it out\" won't render it usefully. Events, in order: zero or more \"chunk\" (data is a raw string — one piece of assistant text as it streams in), then either \"done\" (data is []MessageResponse — every message this turn produced: the assistant's reply and any tool call/result pairs, already persisted) or \"error\" (data is a plain error string; nothing was persisted).",
+                "description": "Sends a message and streams the reply as a Server-Sent Events response (Content-Type: text/event-stream) — this is NOT a plain JSON endpoint despite the shared.BaseResponse envelope every other route uses; it's documented here for completeness but tools like \"Try it out\" won't render it usefully. Events, in order: zero or more \"chunk\" (data is a raw string — one piece of assistant text as it streams in) interleaved with zero or more \"tool_call\" (data is an ai_model.ToolCall — fired the moment the model requests a call, before it runs) each eventually followed by its own \"tool_result\" (data is a ToolResultResponse, matched to its call by toolCallId) once that call finishes; then either \"done\" (data is []MessageResponse — every message this turn produced: the assistant's reply and any tool call/result pairs, already persisted) or \"error\" (data is a plain error string; nothing was persisted).",
                 "consumes": [
                     "application/json"
                 ],
@@ -1425,6 +1425,69 @@
                                     "properties": {
                                         "result": {
                                             "$ref": "#/definitions/internal_platform_customtool.Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/custom-tools/check-source": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Compiles the given source exactly as it would be compiled for a real deploy (see internal/toolbuild), for the host's own OS/arch — not tied to any existing tool or version, so it can be called before either exists yet. Never fails with an HTTP error for a source that doesn't compile; that's reported as success=false with line/column diagnostics instead. Requires wildcard \"write\" access on resource type \"custom_tool\", same bar as creating a tool.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "custom-tools"
+                ],
+                "summary": "Check a Go source string for build errors",
+                "parameters": [
+                    {
+                        "description": "Source to check",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_platform_customtool.CheckSourceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "$ref": "#/definitions/internal_platform_customtool.CheckSourceResponse"
                                         }
                                     }
                                 }
@@ -3941,6 +4004,31 @@
                 }
             }
         },
+        "internal_platform_customtool.CheckSourceRequest": {
+            "type": "object",
+            "required": [
+                "sourceCode"
+            ],
+            "properties": {
+                "sourceCode": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_platform_customtool.CheckSourceResponse": {
+            "type": "object",
+            "properties": {
+                "diagnostics": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_platform_customtool.SourceDiagnostic"
+                    }
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
         "internal_platform_customtool.CreateToolRequest": {
             "type": "object",
             "required": [
@@ -4008,6 +4096,20 @@
                 },
                 "visibility": {
                     "$ref": "#/definitions/internal_platform_customtool.Visibility"
+                }
+            }
+        },
+        "internal_platform_customtool.SourceDiagnostic": {
+            "type": "object",
+            "properties": {
+                "column": {
+                    "type": "integer"
+                },
+                "line": {
+                    "type": "integer"
+                },
+                "message": {
+                    "type": "string"
                 }
             }
         },

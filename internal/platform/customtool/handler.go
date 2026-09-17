@@ -3,17 +3,22 @@ package customtool
 import (
 	"errors"
 	"net/http"
+	"regexp"
+	"runtime"
+	"strconv"
 
 	"github.com/Aliizi83/vohu/internal/platform/shared"
+	"github.com/Aliizi83/vohu/internal/toolbuild"
 	"github.com/gin-gonic/gin"
 )
 
 type Handler struct {
 	service Service
+	builder toolbuild.Builder
 }
 
-func NewHandler(service Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service Service, builder toolbuild.Builder) *Handler {
+	return &Handler{service: service, builder: builder}
 }
 
 func mapError(err error) (int, shared.ResultCode) {
@@ -149,6 +154,58 @@ func (h *Handler) List(c *gin.Context) {
 	}
 
 	shared.RespondSuccess(c, http.StatusOK, shared.NewPagedList(responses, total, page))
+}
+
+// goErrorPattern matches the standard `go build` diagnostic line format —
+// e.g. "./main.go:5:2: undefined: fmt" — the same shape toolbuild.GoBuilder
+// produces since it always compiles a file named main.go from its own temp
+// dir.
+var goErrorPattern = regexp.MustCompile(`(?m)^\./main\.go:(\d+):(\d+): (.+)$`)
+
+// @Summary		Check a Go source string for build errors
+// @Description	Compiles the given source exactly as it would be compiled for a real deploy (see internal/toolbuild), for the host's own OS/arch — not tied to any existing tool or version, so it can be called before either exists yet. Never fails with an HTTP error for a source that doesn't compile; that's reported as success=false with line/column diagnostics instead. Requires wildcard "write" access on resource type "custom_tool", same bar as creating a tool.
+// @Tags			custom-tools
+// @Accept			json
+// @Produce		json
+// @Param			request	body		CheckSourceRequest	true	"Source to check"
+// @Success		200		{object}	shared.BaseResponse{result=CheckSourceResponse}
+// @Failure		400		{object}	shared.BaseResponse
+// @Failure		401		{object}	shared.BaseResponse
+// @Security		BearerAuth
+// @Router			/custom-tools/check-source [post]
+func (h *Handler) CheckSource(c *gin.Context) {
+	var req CheckSourceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		shared.RespondValidationError(c, err)
+		return
+	}
+
+	_, err := h.builder.Build(c.Request.Context(), toolbuild.Request{
+		SourceCode: req.SourceCode,
+		GOOS:       runtime.GOOS,
+		GOARCH:     runtime.GOARCH,
+	})
+	if err == nil {
+		shared.RespondSuccess(c, http.StatusOK, CheckSourceResponse{Success: true})
+		return
+	}
+
+	shared.RespondSuccess(c, http.StatusOK, CheckSourceResponse{Success: false, Diagnostics: parseGoErrors(err.Error())})
+}
+
+func parseGoErrors(raw string) []SourceDiagnostic {
+	matches := goErrorPattern.FindAllStringSubmatch(raw, -1)
+	if matches == nil {
+		return []SourceDiagnostic{{Line: 1, Column: 1, Message: raw}}
+	}
+
+	diagnostics := make([]SourceDiagnostic, 0, len(matches))
+	for _, m := range matches {
+		line, _ := strconv.Atoi(m[1])
+		column, _ := strconv.Atoi(m[2])
+		diagnostics = append(diagnostics, SourceDiagnostic{Line: line, Column: column, Message: m[3]})
+	}
+	return diagnostics
 }
 
 // @Summary		Add a new version to a custom tool

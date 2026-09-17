@@ -22,6 +22,21 @@ type CreateVersionRequest struct {
 	SourceCode string `json:"sourceCode" binding:"required"`
 }
 
+type CheckSourceRequest struct {
+	SourceCode string `json:"sourceCode" binding:"required"`
+}
+
+type SourceDiagnostic struct {
+	Line    int    `json:"line"`
+	Column  int    `json:"column"`
+	Message string `json:"message"`
+}
+
+type CheckSourceResponse struct {
+	Success     bool               `json:"success"`
+	Diagnostics []SourceDiagnostic `json:"diagnostics"`
+}
+
 type Response struct {
 	ID              uint       `json:"id"`
 	Name            string     `json:"name"`
