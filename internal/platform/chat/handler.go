@@ -8,6 +8,7 @@ import (
 
 	"github.com/Aliizi83/vohu/internal/agent"
 	"github.com/Aliizi83/vohu/internal/ai_model"
+	"github.com/Aliizi83/vohu/internal/jobqueue"
 	"github.com/Aliizi83/vohu/internal/platform/agenttool"
 	"github.com/Aliizi83/vohu/internal/platform/commandrule"
 	"github.com/Aliizi83/vohu/internal/platform/conversation"
@@ -16,7 +17,6 @@ import (
 	"github.com/Aliizi83/vohu/internal/platform/providerkey"
 	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"github.com/Aliizi83/vohu/internal/platform/sshconn"
-	"github.com/Aliizi83/vohu/internal/tooldeploy"
 	"github.com/gin-gonic/gin"
 )
 
@@ -25,15 +25,16 @@ import (
 // internal/ai_model/models (via llm.go) — every other platform module
 // stays free of any dependency on Vohu's actual agent core.
 type Handler struct {
-	conversations conversation.Service
-	sshconns      sshconn.Service
-	canAccess     shared.AccessLevelCheck
-	commandRules  commandrule.Service
-	providerKeys  providerkey.Service
-	customModels  custommodel.Service
-	agentTools    agenttool.Service
-	customTools   customtool.Service
-	deployer      *tooldeploy.Deployer
+	conversations  conversation.Service
+	sshconns       sshconn.Service
+	canAccess      shared.AccessLevelCheck
+	commandRules   commandrule.Service
+	providerKeys   providerkey.Service
+	customModels   custommodel.Service
+	agentTools     agenttool.Service
+	customTools    customtool.Service
+	jobs           jobqueue.Store
+	defaultRetries int
 }
 
 func NewHandler(
@@ -45,18 +46,20 @@ func NewHandler(
 	customModels custommodel.Service,
 	agentTools agenttool.Service,
 	customTools customtool.Service,
-	deployer *tooldeploy.Deployer,
+	jobs jobqueue.Store,
+	defaultRetries int,
 ) *Handler {
 	return &Handler{
-		conversations: conversations,
-		sshconns:      sshconns,
-		canAccess:     canAccess,
-		commandRules:  commandRules,
-		providerKeys:  providerKeys,
-		customModels:  customModels,
-		agentTools:    agentTools,
-		customTools:   customTools,
-		deployer:      deployer,
+		conversations:  conversations,
+		sshconns:       sshconns,
+		canAccess:      canAccess,
+		commandRules:   commandRules,
+		providerKeys:   providerKeys,
+		customModels:   customModels,
+		agentTools:     agentTools,
+		customTools:    customTools,
+		jobs:           jobs,
+		defaultRetries: defaultRetries,
 	}
 }
 
@@ -355,7 +358,7 @@ func (h *Handler) SendMessage(c *gin.Context) {
 	turnInput := append(history, userMessage)
 	originalLen := len(history)
 
-	registry, err := buildRegistry(c.Request.Context(), userID, h.agentTools, h.customTools, h.sshconns, h.canAccess, h.commandRules, h.deployer)
+	registry, err := buildRegistry(c.Request.Context(), userID, h.agentTools, h.customTools, h.sshconns, h.canAccess, h.commandRules, h.jobs, h.defaultRetries)
 	if err != nil {
 		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, err)
 		return

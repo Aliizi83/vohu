@@ -9,7 +9,7 @@ import (
 )
 
 func TestCustomTool_Execute_MissingConnectionId(t *testing.T) {
-	tool := NewCustomTool(customtool.Tool{Name: "read_file"}, 1, &stubSSHConnService{}, allowAccess, &stubCustomToolService{}, nil)
+	tool := NewCustomTool(customtool.Tool{Name: "read_file"}, 1, &stubSSHConnService{}, allowAccess, nil, 0)
 
 	result, err := tool.Execute(context.Background(), map[string]any{})
 	if err != nil {
@@ -22,7 +22,7 @@ func TestCustomTool_Execute_MissingConnectionId(t *testing.T) {
 
 func TestCustomTool_Execute_AccessDeniedNeverReachesConnection(t *testing.T) {
 	svc := &stubSSHConnService{getErr: errors.New("GetByID should never be called")}
-	tool := NewCustomTool(customtool.Tool{Name: "read_file"}, 1, svc, denyAccess, &stubCustomToolService{}, nil)
+	tool := NewCustomTool(customtool.Tool{Name: "read_file"}, 1, svc, denyAccess, nil, 0)
 
 	result, err := tool.Execute(context.Background(), map[string]any{"connectionId": float64(1)})
 	if err != nil {

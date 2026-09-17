@@ -6,25 +6,27 @@ import (
 	"fmt"
 
 	"github.com/Aliizi83/vohu/internal/ai_model"
+	"github.com/Aliizi83/vohu/internal/jobqueue"
 	"github.com/Aliizi83/vohu/internal/platform/customtool"
 	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"github.com/Aliizi83/vohu/internal/platform/sshconn"
-	"github.com/Aliizi83/vohu/internal/tooldeploy"
 	"github.com/Aliizi83/vohu/internal/tools"
-	"golang.org/x/crypto/ssh"
 )
 
-// CustomTool runs a customtool.Tool's latest version against a caller-named
-// SSH connection, via tooldeploy (build-if-missing, deploy, execute — see
-// its package doc comment for why this never goes through
-// internal/tools/command.Policy the way ssh_execute does).
+// CustomTool checks the caller's access to a named SSH connection, then
+// hands the actual build/deploy/execute work to a jobqueue worker (see
+// custom_tool_worker.go) and blocks on the result — that work can take
+// seconds (a fresh build) and shouldn't run inline in the HTTP request's
+// goroutine. The access check itself stays here, in the request path,
+// since it's specific to the calling user; the worker trusts whatever
+// connectionId/toolId it's handed.
 type CustomTool struct {
-	row       customtool.Tool
-	userID    uint
-	sshconns  sshconn.Service
-	canAccess shared.AccessLevelCheck
-	tools     customtool.Service
-	deployer  *tooldeploy.Deployer
+	row            customtool.Tool
+	userID         uint
+	sshconns       sshconn.Service
+	canAccess      shared.AccessLevelCheck
+	jobs           jobqueue.Store
+	defaultRetries int
 }
 
 func NewCustomTool(
@@ -32,12 +34,12 @@ func NewCustomTool(
 	userID uint,
 	sshconns sshconn.Service,
 	canAccess shared.AccessLevelCheck,
-	toolsService customtool.Service,
-	deployer *tooldeploy.Deployer,
+	jobs jobqueue.Store,
+	defaultRetries int,
 ) *CustomTool {
 	return &CustomTool{
 		row: row, userID: userID, sshconns: sshconns,
-		canAccess: canAccess, tools: toolsService, deployer: deployer,
+		canAccess: canAccess, jobs: jobs, defaultRetries: defaultRetries,
 	}
 }
 
@@ -68,53 +70,44 @@ func (t *CustomTool) Execute(ctx context.Context, args map[string]any) (tools.To
 		return tools.ToolResult{Success: false, Data: "access to this SSH connection is not permitted"}, nil
 	}
 
-	conn, err := t.sshconns.GetByID(ctx, connectionID)
-	if err != nil {
-		return tools.ToolResult{Success: false, Data: fmt.Sprintf("connection not found: %v", err)}, nil
-	}
-
-	privateKey, err := t.sshconns.DecryptPrivateKey(conn)
-	if err != nil {
-		return tools.ToolResult{Success: false, Data: "failed to decrypt connection private key"}, nil
-	}
-	signer, err := ssh.ParsePrivateKey([]byte(privateKey))
-	if err != nil {
-		return tools.ToolResult{Success: false, Data: "failed to parse private key"}, nil
-	}
-
-	version, err := t.tools.LatestVersionForTool(ctx, t.row.ID)
-	if err != nil {
-		return tools.ToolResult{Success: false, Data: fmt.Sprintf("no version available for %s: %v", t.row.Name, err)}, nil
-	}
-
-	payload := make(map[string]any, len(args))
+	toolArgs := make(map[string]any, len(args))
 	for k, v := range args {
 		if k != "connectionId" {
-			payload[k] = v
+			toolArgs[k] = v
 		}
 	}
-	stdin, err := json.Marshal(payload)
+	payload, err := json.Marshal(customToolJobPayload{ToolID: t.row.ID, ConnectionID: connectionID, Args: toolArgs})
 	if err != nil {
 		return tools.ToolResult{Success: false, Data: fmt.Sprintf("failed to encode arguments: %v", err)}, nil
 	}
 
-	output, err := t.deployer.Run(ctx,
-		tooldeploy.Connection{Host: conn.Host, Port: conn.Port, Username: conn.Username, Auth: ssh.PublicKeys(signer)},
-		tooldeploy.Tool{Name: t.row.Name, Description: t.row.Description, Version: version.Version, SourceCode: version.SourceCode},
-		stdin,
-	)
-	if err != nil {
-		return tools.ToolResult{Success: false, Data: fmt.Sprintf("failed to run %s: %v (output: %s)", t.row.Name, err, output)}, nil
+	job := jobqueue.Job{
+		ID:            jobqueue.NewJobID(),
+		Queue:         CustomToolQueue,
+		Type:          customToolJobType,
+		Payload:       payload,
+		RetryIfFailed: t.defaultRetries,
+	}
+	if err := t.jobs.Enqueue(ctx, job); err != nil {
+		return tools.ToolResult{Success: false, Data: fmt.Sprintf("failed to queue %s: %v", t.row.Name, err)}, nil
 	}
 
-	var result struct {
+	result, err := t.jobs.AwaitResult(ctx, job.ID)
+	if err != nil {
+		return tools.ToolResult{Success: false, Data: fmt.Sprintf("failed to run %s: %v", t.row.Name, err)}, nil
+	}
+	if result.Err != "" {
+		return tools.ToolResult{Success: false, Data: fmt.Sprintf("failed to run %s: %s", t.row.Name, result.Err)}, nil
+	}
+
+	var parsed struct {
 		Success bool `json:"success"`
 		Data    any  `json:"data"`
 	}
-	if err := json.Unmarshal(output, &result); err != nil {
-		return tools.ToolResult{Success: false, Data: fmt.Sprintf("invalid output from %s: %s", t.row.Name, output)}, nil
+	if err := json.Unmarshal(result.Output, &parsed); err != nil {
+		return tools.ToolResult{Success: false, Data: fmt.Sprintf("invalid output from %s: %s", t.row.Name, result.Output)}, nil
 	}
-	return tools.ToolResult{Success: result.Success, Data: result.Data}, nil
+	return tools.ToolResult{Success: parsed.Success, Data: parsed.Data}, nil
 }
 
 // parseParamsSchema reads the flat {"type":"object","properties":{...},

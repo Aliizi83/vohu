@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/Aliizi83/vohu/config"
+	"github.com/Aliizi83/vohu/internal/jobqueue"
 	"github.com/Aliizi83/vohu/internal/platform/agenttool"
 	"github.com/Aliizi83/vohu/internal/platform/auth"
 	"github.com/Aliizi83/vohu/internal/platform/chat"
@@ -138,9 +139,21 @@ func main() {
 
 	toolDeployer := tooldeploy.NewDeployer(toolbuild.NewGoBuilder())
 
+	// Custom tool build/deploy/execute runs on a worker consuming this
+	// queue, not inline in the chat request — see
+	// chat.RegisterCustomToolWorker's doc comment.
+	jobStore := jobqueue.NewRedisStore(cache.GetRedis())
+	customToolWorker := jobqueue.NewWorker(jobStore, logger, chat.CustomToolQueue)
+	chat.RegisterCustomToolWorker(customToolWorker, sshconnService, customToolService, toolDeployer)
+	go func() {
+		if err := customToolWorker.Run(context.Background()); err != nil {
+			logger.Error(err, logging.General, logging.JobQueue, "custom tool worker stopped", nil)
+		}
+	}()
+
 	chatHandler := chat.NewHandler(
 		conversationService, sshconnService, hasAccessLevel, commandRuleService, providerKeyService, customModelService, agentToolService,
-		customToolService, toolDeployer,
+		customToolService, jobStore, cfg.JobQueue.DefaultRetries,
 	)
 
 	engine, v1 := httpserver.NewEngine(logger)

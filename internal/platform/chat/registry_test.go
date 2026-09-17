@@ -76,7 +76,7 @@ func (s *stubCustomToolService) LatestVersionForTool(context.Context, uint) (*cu
 func TestBuildRegistry_RegistersSSHExecute(t *testing.T) {
 	agentTools := &stubAgentToolService{rows: []agenttool.Tool{{Name: "ssh_execute"}}}
 
-	registry, err := buildRegistry(context.Background(), 1, agentTools, &stubCustomToolService{}, &stubSSHConnService{}, allowAccess, noopCommandRules{}, nil)
+	registry, err := buildRegistry(context.Background(), 1, agentTools, &stubCustomToolService{}, &stubSSHConnService{}, allowAccess, noopCommandRules{}, nil, 0)
 	if err != nil {
 		t.Fatalf("buildRegistry failed: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestBuildRegistry_UnknownNameIsSkippedNotFatal(t *testing.T) {
 		{Name: "ssh_execute"},
 	}}
 
-	registry, err := buildRegistry(context.Background(), 1, agentTools, &stubCustomToolService{}, &stubSSHConnService{}, allowAccess, noopCommandRules{}, nil)
+	registry, err := buildRegistry(context.Background(), 1, agentTools, &stubCustomToolService{}, &stubSSHConnService{}, allowAccess, noopCommandRules{}, nil, 0)
 	if err != nil {
 		t.Fatalf("buildRegistry failed: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestBuildRegistry_NoAccessibleToolsMeansEmptyRegistry(t *testing.T) {
 	// allow.
 	agentTools := &stubAgentToolService{rows: nil}
 
-	registry, err := buildRegistry(context.Background(), 1, agentTools, &stubCustomToolService{}, &stubSSHConnService{}, allowAccess, noopCommandRules{}, nil)
+	registry, err := buildRegistry(context.Background(), 1, agentTools, &stubCustomToolService{}, &stubSSHConnService{}, allowAccess, noopCommandRules{}, nil, 0)
 	if err != nil {
 		t.Fatalf("buildRegistry failed: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestBuildRegistry_NoAccessibleToolsMeansEmptyRegistry(t *testing.T) {
 func TestBuildRegistry_PropagatesListForCallerError(t *testing.T) {
 	agentTools := &stubAgentToolService{err: errTestListFailed}
 
-	_, err := buildRegistry(context.Background(), 1, agentTools, &stubCustomToolService{}, &stubSSHConnService{}, allowAccess, noopCommandRules{}, nil)
+	_, err := buildRegistry(context.Background(), 1, agentTools, &stubCustomToolService{}, &stubSSHConnService{}, allowAccess, noopCommandRules{}, nil, 0)
 	if err == nil {
 		t.Fatal("expected buildRegistry to propagate a ListForCaller error")
 	}
@@ -135,7 +135,7 @@ func TestBuildRegistry_RegistersCustomTools(t *testing.T) {
 		{Name: "read_file", Description: "reads a file", ParamsSchema: `{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}`},
 	}}
 
-	registry, err := buildRegistry(context.Background(), 1, agentTools, customTools, &stubSSHConnService{}, allowAccess, noopCommandRules{}, nil)
+	registry, err := buildRegistry(context.Background(), 1, agentTools, customTools, &stubSSHConnService{}, allowAccess, noopCommandRules{}, nil, 0)
 	if err != nil {
 		t.Fatalf("buildRegistry failed: %v", err)
 	}
@@ -161,7 +161,7 @@ func TestBuildRegistry_PropagatesCustomToolsListError(t *testing.T) {
 	agentTools := &stubAgentToolService{}
 	customTools := &stubCustomToolService{err: errTestListFailed}
 
-	_, err := buildRegistry(context.Background(), 1, agentTools, customTools, &stubSSHConnService{}, allowAccess, noopCommandRules{}, nil)
+	_, err := buildRegistry(context.Background(), 1, agentTools, customTools, &stubSSHConnService{}, allowAccess, noopCommandRules{}, nil, 0)
 	if err == nil {
 		t.Fatal("expected buildRegistry to propagate a customtool ListToolsForCaller error")
 	}

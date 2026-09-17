@@ -3,12 +3,12 @@ package chat
 import (
 	"context"
 
+	"github.com/Aliizi83/vohu/internal/jobqueue"
 	"github.com/Aliizi83/vohu/internal/platform/agenttool"
 	"github.com/Aliizi83/vohu/internal/platform/commandrule"
 	"github.com/Aliizi83/vohu/internal/platform/customtool"
 	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"github.com/Aliizi83/vohu/internal/platform/sshconn"
-	"github.com/Aliizi83/vohu/internal/tooldeploy"
 	"github.com/Aliizi83/vohu/internal/tools"
 )
 
@@ -34,7 +34,8 @@ func buildRegistry(
 	sshconns sshconn.Service,
 	canAccess shared.AccessLevelCheck,
 	commandRules commandrule.Service,
-	deployer *tooldeploy.Deployer,
+	jobs jobqueue.Store,
+	defaultRetries int,
 ) (*tools.Registry, error) {
 	rows, _, err := agentTools.ListForCaller(ctx, userID, shared.DynamicFilter{}, shared.Pagination{PageNumber: 1, PageSize: 500})
 	if err != nil {
@@ -53,7 +54,7 @@ func buildRegistry(
 		return nil, err
 	}
 	for _, row := range customRows {
-		registry.Register(NewCustomTool(row, userID, sshconns, canAccess, customTools, deployer))
+		registry.Register(NewCustomTool(row, userID, sshconns, canAccess, jobs, defaultRetries))
 	}
 
 	return registry, nil
