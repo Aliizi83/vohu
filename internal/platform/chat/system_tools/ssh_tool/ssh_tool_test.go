@@ -8,7 +8,29 @@ import (
 	"github.com/Aliizi83/vohu/internal/platform/chat/system_tools/testsupport"
 	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"github.com/Aliizi83/vohu/internal/platform/sshconn"
+	"github.com/Aliizi83/vohu/internal/tools/command"
 )
+
+func TestBuildCommandPolicy_AcceptModeDeniesUnmatched(t *testing.T) {
+	policy := buildCommandPolicy(sshconn.CommandPolicyModeAccept, nil)
+	if policy.Evaluate(command.Command{Program: "ls"}).Allowed {
+		t.Fatal("expected accept mode with no matching rule to deny the command")
+	}
+}
+
+func TestBuildCommandPolicy_ProhibitedModeAllowsUnmatched(t *testing.T) {
+	policy := buildCommandPolicy(sshconn.CommandPolicyModeProhibited, nil)
+	if !policy.Evaluate(command.Command{Program: "ls"}).Allowed {
+		t.Fatal("expected prohibited mode with no matching rule to allow the command")
+	}
+}
+
+func TestBuildCommandPolicy_UnrecognizedModeFallsBackToAccept(t *testing.T) {
+	policy := buildCommandPolicy("", nil)
+	if policy.Evaluate(command.Command{Program: "ls"}).Allowed {
+		t.Fatal("expected an empty/unrecognized mode to fall back to accept (deny unmatched), the safe direction")
+	}
+}
 
 func TestSSHTool_Execute_MissingConnectionID(t *testing.T) {
 	tool := NewSSHTool(1, &testsupport.StubSSHConnService{}, testsupport.AllowAccess, testsupport.NoopCommandRules{})

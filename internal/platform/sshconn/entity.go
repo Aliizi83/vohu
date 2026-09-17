@@ -12,6 +12,23 @@ import "github.com/Aliizi83/vohu/internal/platform/shared"
 // form). Who may reach *this specific* connection is decided by
 // rbac.ResourceAccess (resourceType "ssh_connection", resourceID = this
 // row's ID), not by anything in this struct.
+// CommandPolicyMode values mirror command.PolicyMode's own string values —
+// this package never imports internal/tools/command directly (same
+// decoupling rule commandrule/ssh_tool.go's buildCommandPolicy doc comment
+// already documents), so they're just plain strings here, translated back
+// to the real type at the one call site that builds a command.Policy.
+const (
+	// CommandPolicyModeAccept is the safe-by-default mode: a command not
+	// matched by any of this connection's rules is denied. This is what
+	// every connection had, unconditionally, before the mode became a
+	// per-connection, toggleable setting.
+	CommandPolicyModeAccept = "accept"
+	// CommandPolicyModeProhibited inverts that: every command is allowed
+	// except one matched by a rule — "deny only what's listed" instead of
+	// "allow only what's listed".
+	CommandPolicyModeProhibited = "prohibited"
+)
+
 type SSHConnection struct {
 	shared.BaseModel
 	Name                string `gorm:"type:varchar(100);not null"`
@@ -19,7 +36,13 @@ type SSHConnection struct {
 	Port                int    `gorm:"not null;default:22"`
 	Username            string `gorm:"type:varchar(100);not null"`
 	EncryptedPrivateKey string `gorm:"type:text;not null"`
-	CreatedByUserID     uint   `gorm:"not null"`
+	// CommandPolicyMode governs how this connection's commandrule.Rule
+	// rows are interpreted for ssh_execute — see the two constants above.
+	// AutoMigrate adds a new column as NULL for pre-existing rows
+	// regardless of this "default" tag (it only governs new rows), so
+	// migrations.UpP_4 backfills it for rows that predate this field.
+	CommandPolicyMode string `gorm:"type:varchar(20);not null;default:'accept'"`
+	CreatedByUserID   uint   `gorm:"not null"`
 }
 
 func (SSHConnection) TableName() string { return "ssh_connections" }

@@ -17,27 +17,33 @@ type UpdateSSHConnectionRequest struct {
 	// key," since there is no way to show it back to the client to
 	// prefill a form.
 	PrivateKey string `json:"privateKey"`
+	// CommandPolicyMode toggles how this connection's command rules are
+	// interpreted (see SSHConnection.CommandPolicyMode) — omitted means
+	// "leave it as-is".
+	CommandPolicyMode string `json:"commandPolicyMode" binding:"omitempty,oneof=accept prohibited"`
 }
 
 // Response deliberately never includes the private key, encrypted or not —
 // the API is write-only for it, same as user.Response never includes the
 // password hash.
 type Response struct {
-	ID              uint   `json:"id"`
-	Name            string `json:"name"`
-	Host            string `json:"host"`
-	Port            int    `json:"port"`
-	Username        string `json:"username"`
-	CreatedByUserID uint   `json:"createdByUserId"`
+	ID                uint   `json:"id"`
+	Name              string `json:"name"`
+	Host              string `json:"host"`
+	Port              int    `json:"port"`
+	Username          string `json:"username"`
+	CommandPolicyMode string `json:"commandPolicyMode"`
+	CreatedByUserID   uint   `json:"createdByUserId"`
 }
 
 func toResponse(conn SSHConnection) Response {
 	return Response{
-		ID:              conn.ID,
-		Name:            conn.Name,
-		Host:            conn.Host,
-		Port:            conn.Port,
-		Username:        conn.Username,
-		CreatedByUserID: conn.CreatedByUserID,
+		ID:                conn.ID,
+		Name:              conn.Name,
+		Host:              conn.Host,
+		Port:              conn.Port,
+		Username:          conn.Username,
+		CommandPolicyMode: conn.CommandPolicyMode,
+		CreatedByUserID:   conn.CreatedByUserID,
 	}
 }

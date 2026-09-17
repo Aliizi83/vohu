@@ -6,6 +6,12 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-c", "export PATH=\"$HOME/.local/node/bin:$PATH\" && cd web && npm run dev -- --host"],
       "port": 5173
+    },
+    {
+      "name": "vohu-api",
+      "runtimeExecutable": "go",
+      "runtimeArgs": ["run", "./cmd/server"],
+      "port": 5005
     }
   ]
 }

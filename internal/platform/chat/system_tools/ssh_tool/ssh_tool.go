@@ -47,12 +47,17 @@ func NewSSHTool(
 }
 
 // buildCommandPolicy converts one connection's stored rules into the
-// command package's own Policy shape — commandrule never imports
-// internal/tools/command itself (same decoupling rule every platform
+// command package's own Policy shape — commandrule/sshconn never import
+// internal/tools/command themselves (same decoupling rule every platform
 // module besides chat follows), so that conversion has to happen here.
-// Always accept-mode (allow-list): a connection with no rules permits
-// nothing, matching commandrule.Rule's own doc comment.
-func buildCommandPolicy(rules []commandrule.Rule) command.Policy {
+// mode is a connection's own sshconn.SSHConnection.CommandPolicyMode
+// (plain string, same decoupling reason). Accept mode (allow-list, the
+// long-standing default): a connection with no rules permits nothing.
+// Prohibited mode (deny-list, opt-in per connection): a connection with
+// no rules permits everything — an unrecognized/empty mode string falls
+// back to Accept, the safe direction, rather than silently allowing
+// everything.
+func buildCommandPolicy(mode string, rules []commandrule.Rule) command.Policy {
 	converted := make([]command.Rule, 0, len(rules))
 	for _, r := range rules {
 		converted = append(converted, command.Rule{
@@ -61,7 +66,12 @@ func buildCommandPolicy(rules []commandrule.Rule) command.Policy {
 			Allowed:      r.Allowed,
 		})
 	}
-	return command.NewCommandPolicy(command.PolicyModeAccept, converted)
+
+	policyMode := command.PolicyModeAccept
+	if mode == sshconn.CommandPolicyModeProhibited {
+		policyMode = command.PolicyModeProhibited
+	}
+	return command.NewCommandPolicy(policyMode, converted)
 }
 
 func (t *SSHTool) Name() string { return "ssh_execute" }
@@ -134,7 +144,7 @@ func (t *SSHTool) Execute(ctx context.Context, args map[string]any) (tools.ToolR
 	if err != nil {
 		return tools.ToolResult{Success: false, Data: fmt.Sprintf("failed to load command policy: %v", err)}, nil
 	}
-	policy := buildCommandPolicy(rules)
+	policy := buildCommandPolicy(conn.CommandPolicyMode, rules)
 
 	executor := command.NewSSHExecutor(conn.Host, conn.Port, conn.Username, ssh.PublicKeys(signer), policy)
 

@@ -59,3 +59,18 @@ func UpP_3(database *gorm.DB, logger logging.Logger) error {
 
 	return nil
 }
+
+// UpP_4 backfills ssh_connections.command_policy_mode for rows that
+// predate that column — same AutoMigrate-adds-NULL reasoning as UpP_2.
+// An unrecognized/empty mode already falls back to "accept" at the one
+// place that reads it (ssh_tool.buildCommandPolicy), so this is a
+// belt-and-suspenders backfill, not a correctness fix on its own.
+// Idempotent — a no-op once no NULL/empty rows remain.
+func UpP_4(database *gorm.DB, logger logging.Logger) error {
+	if err := database.Exec("UPDATE ssh_connections SET command_policy_mode = 'accept' WHERE command_policy_mode IS NULL OR command_policy_mode = ''").Error; err != nil {
+		return err
+	}
+	logger.Info(logging.Postgres, logging.Migration, "backfilled ssh_connections.command_policy_mode", nil)
+
+	return nil
+}

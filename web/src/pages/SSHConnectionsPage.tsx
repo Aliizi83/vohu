@@ -133,19 +133,22 @@ export default function SSHConnectionsPage() {
                 <TableCell>{conn.username}</TableCell>
                 <TableCell className="text-end space-x-2 rtl:space-x-reverse">
                   {hasLevel("ssh_connection", "write") && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      nativeButton={false}
-                      render={<Link to={`/ssh-connections/${conn.id}/terminal`} />}
-                    >
-                      <TerminalIcon />
-                      {t("sshConnections.openTerminal")}
-                    </Button>
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        nativeButton={false}
+                        render={<Link to={`/ssh-connections/${conn.id}/terminal`} />}
+                      >
+                        <TerminalIcon />
+                        {t("sshConnections.openTerminal")}
+                      </Button>
+                      <EditConnectionDialog connection={conn} onUpdated={load} />
+                    </>
                   )}
                   {hasLevel("ssh_connection", "manage") && (
                     <>
-                      <CommandRulesDialog connection={conn} />
+                      <CommandRulesDialog connection={conn} onConnectionUpdated={load} />
                       <Button variant="destructive" size="sm" onClick={() => handleDelete(conn)}>
                         {t("common.delete")}
                       </Button>
@@ -264,14 +267,149 @@ function CreateConnectionDialog({ onCreated }: { onCreated: () => void }) {
   )
 }
 
-// CommandRulesDialog manages one connection's own command allow-list —
-// see internal/platform/commandrule.Rule. Each rule here is created with
-// at most one args prefix (a single word sequence, or none to match any
-// args); commandrule.Rule technically supports several prefixes per row,
-// but expressing "git status OR git log" as two separate same-program
-// rules evaluates identically (command.Policy checks rules in order,
-// first match wins) and needs no extra UI for the common case.
-function CommandRulesDialog({ connection }: { connection: SSHConnectionDto }) {
+// EditConnectionDialog changes an existing connection's host/port/
+// username/key — seeded from the connection prop every time it opens
+// (not just on mount), so re-opening after another edit shows the latest
+// values rather than the ones from the first time this row rendered.
+// privateKey always starts blank: the server never returns it, so there
+// is nothing to prefill, and blank means "keep the existing key" (see
+// UpdateSSHConnectionRequest's own doc comment).
+function EditConnectionDialog({
+  connection,
+  onUpdated,
+}: {
+  connection: SSHConnectionDto
+  onUpdated: () => void
+}) {
+  const { t } = useLanguage()
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState(connection.name)
+  const [host, setHost] = useState(connection.host)
+  const [port, setPort] = useState(String(connection.port))
+  const [username, setUsername] = useState(connection.username)
+  const [privateKey, setPrivateKey] = useState("")
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    setName(connection.name)
+    setHost(connection.host)
+    setPort(String(connection.port))
+    setUsername(connection.username)
+    setPrivateKey("")
+  }, [open, connection])
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      await api.sshConnections.update(connection.id, {
+        name,
+        host,
+        port: Number(port) || undefined,
+        username,
+        privateKey: privateKey || undefined,
+      })
+      toast.success(t("sshConnections.updated", { name }))
+      setOpen(false)
+      onUpdated()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("sshConnections.updateFailed"))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger render={<Button variant="outline" size="sm">{t("sshConnections.edit")}</Button>} />
+      <DialogContent>
+        <form onSubmit={handleSubmit}>
+          <DialogHeader>
+            <DialogTitle>{t("sshConnections.editDialogTitle")}</DialogTitle>
+            <DialogDescription>{t("sshConnections.editDialogDescription")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor={`edit-conn-name-${connection.id}`}>{t("sshConnections.name")}</Label>
+              <Input
+                id={`edit-conn-name-${connection.id}`}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="col-span-2 space-y-2">
+                <Label htmlFor={`edit-conn-host-${connection.id}`}>{t("sshConnections.host")}</Label>
+                <Input
+                  id={`edit-conn-host-${connection.id}`}
+                  value={host}
+                  onChange={(e) => setHost(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={`edit-conn-port-${connection.id}`}>{t("sshConnections.port")}</Label>
+                <Input
+                  id={`edit-conn-port-${connection.id}`}
+                  type="number"
+                  value={port}
+                  onChange={(e) => setPort(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`edit-conn-username-${connection.id}`}>{t("sshConnections.username")}</Label>
+              <Input
+                id={`edit-conn-username-${connection.id}`}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`edit-conn-private-key-${connection.id}`}>{t("sshConnections.privateKey")}</Label>
+              <textarea
+                id={`edit-conn-private-key-${connection.id}`}
+                value={privateKey}
+                onChange={(e) => setPrivateKey(e.target.value)}
+                placeholder={t("sshConnections.privateKeyEditPlaceholder")}
+                rows={6}
+                spellCheck={false}
+                className="w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1.5 font-mono text-xs transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={loading}>
+              {loading ? t("common.saving") : t("common.save")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// CommandRulesDialog manages one connection's own command rules — see
+// internal/platform/commandrule.Rule — plus the connection's policy mode
+// (SSHConnectionDto.commandPolicyMode), which decides whether these rules
+// act as an allow-list ("accept": everything denied except what's listed)
+// or a deny-list ("prohibited": everything allowed except what's listed).
+// Each rule here is created with at most one args prefix (a single word
+// sequence, or none to match any args); commandrule.Rule technically
+// supports several prefixes per row, but expressing "git status OR git
+// log" as two separate same-program rules evaluates identically
+// (command.Policy checks rules in order, first match wins) and needs no
+// extra UI for the common case.
+function CommandRulesDialog({
+  connection,
+  onConnectionUpdated,
+}: {
+  connection: SSHConnectionDto
+  onConnectionUpdated: () => void
+}) {
   const { t } = useLanguage()
   const { confirm, confirmDialog } = useConfirm()
   const [open, setOpen] = useState(false)
@@ -290,6 +428,16 @@ function CommandRulesDialog({ connection }: { connection: SSHConnectionDto }) {
   useEffect(() => {
     if (open) load()
   }, [open, load])
+
+  async function handleToggleMode() {
+    const nextMode = connection.commandPolicyMode === "prohibited" ? "accept" : "prohibited"
+    try {
+      await api.sshConnections.update(connection.id, { commandPolicyMode: nextMode })
+      onConnectionUpdated()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("commandRules.policyModeToggleFailed"))
+    }
+  }
 
   async function handleToggle(rule: CommandRuleDto) {
     try {
@@ -324,6 +472,26 @@ function CommandRulesDialog({ connection }: { connection: SSHConnectionDto }) {
         </DialogHeader>
 
         <div className="space-y-4">
+          <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+            <div>
+              <div className="text-sm font-medium">{t("commandRules.policyModeLabel")}</div>
+              <div className="text-xs text-muted-foreground">
+                {connection.commandPolicyMode === "prohibited"
+                  ? t("commandRules.policyModeProhibitedDescription")
+                  : t("commandRules.policyModeAcceptDescription")}
+              </div>
+            </div>
+            <Badge
+              variant={connection.commandPolicyMode === "prohibited" ? "destructive" : "default"}
+              className="shrink-0 cursor-pointer"
+              onClick={handleToggleMode}
+            >
+              {connection.commandPolicyMode === "prohibited"
+                ? t("commandRules.policyModeProhibited")
+                : t("commandRules.policyModeAccept")}
+            </Badge>
+          </div>
+
           <div className="rounded-md border">
             <Table>
               <TableHeader>

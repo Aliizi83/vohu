@@ -123,12 +123,19 @@ export interface MessageDto {
   toolResults?: ToolResultDto[]
 }
 
+export type CommandPolicyMode = "accept" | "prohibited"
+
 export interface SSHConnectionDto {
   id: number
   name: string
   host: string
   port: number
   username: string
+  // "accept" (default): a command not matched by any rule below is
+  // denied — the connection's commandRules are an allow-list. "prohibited"
+  // inverts that: every command is allowed except one matched by a rule
+  // — the same rules become a deny-list instead.
+  commandPolicyMode: CommandPolicyMode
   createdByUserId: number
 }
 
@@ -152,12 +159,13 @@ export interface CustomModelDto {
   modelName: string
 }
 
-// CommandRuleDto is one entry of an SSH connection's own command
-// allow-list (see internal/platform/commandrule.Rule) — evaluated
-// first-match-wins by connection; a connection with zero rules permits
-// nothing. argsPrefixes is an OR of prefixes: an empty array matches any
-// args at all, a non-empty one requires the command's args to start with
-// one of the listed word sequences.
+// CommandRuleDto is one entry of an SSH connection's own command rule
+// list (see internal/platform/commandrule.Rule) — evaluated first-match-
+// wins; whether an unmatched command is denied or allowed depends on the
+// connection's own commandPolicyMode (SSHConnectionDto). argsPrefixes is
+// an OR of prefixes: an empty array matches any args at all, a non-empty
+// one requires the command's args to start with one of the listed word
+// sequences.
 export interface CommandRuleDto {
   id: number
   sshConnectionId: number
@@ -351,6 +359,19 @@ export const api = {
       username: string
       privateKey: string
     }) => request<SSHConnectionDto>("POST", "/ssh-connections", { body: data }),
+    update: (
+      id: number,
+      data: {
+        name?: string
+        host?: string
+        port?: number
+        username?: string
+        // Omitted (or empty) keeps the existing key — there is no way to
+        // show it back from the server to prefill a form.
+        privateKey?: string
+        commandPolicyMode?: CommandPolicyMode
+      },
+    ) => request<SSHConnectionDto>("PUT", `/ssh-connections/${id}`, { body: data }),
     remove: (id: number) => request<null>("DELETE", `/ssh-connections/${id}`),
     // One-time, 30s-lived ticket for the web terminal's WebSocket — see
     // terminal.Handler.ServeWS's doc comment for why the socket itself

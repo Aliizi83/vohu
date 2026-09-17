@@ -111,6 +111,7 @@ func (s *service) Create(ctx context.Context, userID uint, req CreateSSHConnecti
 		Port:                port,
 		Username:            req.Username,
 		EncryptedPrivateKey: encrypted,
+		CommandPolicyMode:   CommandPolicyModeAccept,
 		CreatedByUserID:     userID,
 	}
 
@@ -157,6 +158,9 @@ func (s *service) Update(ctx context.Context, id uint, req UpdateSSHConnectionRe
 			return nil, err
 		}
 		conn.EncryptedPrivateKey = encrypted
+	}
+	if req.CommandPolicyMode != "" {
+		conn.CommandPolicyMode = req.CommandPolicyMode
 	}
 
 	if err := s.repo.Update(ctx, conn); err != nil {
