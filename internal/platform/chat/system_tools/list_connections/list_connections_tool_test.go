@@ -1,27 +1,16 @@
-package chat
+package list_connections
 
 import (
 	"context"
 	"testing"
 
-	"github.com/Aliizi83/vohu/internal/platform/shared"
+	"github.com/Aliizi83/vohu/internal/platform/chat/system_tools/testsupport"
 	"github.com/Aliizi83/vohu/internal/platform/sshconn"
 )
 
-// listStubSSHConnService only implements List — the one method this
-// tool calls.
-type listStubSSHConnService struct {
-	stubSSHConnService
-	items []sshconn.SSHConnection
-}
-
-func (s *listStubSSHConnService) List(context.Context, shared.DynamicFilter, shared.Pagination) ([]sshconn.SSHConnection, int64, error) {
-	return s.items, int64(len(s.items)), nil
-}
-
 func TestListSSHConnectionsTool_Execute_RequestsReadLevel(t *testing.T) {
-	svc := &listStubSSHConnService{items: []sshconn.SSHConnection{{Name: "box", Host: "1.1.1.1"}}}
-	svc.items[0].ID = 1
+	svc := &testsupport.StubSSHConnService{Items: []sshconn.SSHConnection{{Name: "box", Host: "1.1.1.1"}}}
+	svc.Items[0].ID = 1
 
 	var gotLevel string
 	spy := func(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) (bool, error) {
@@ -40,14 +29,14 @@ func TestListSSHConnectionsTool_Execute_RequestsReadLevel(t *testing.T) {
 }
 
 func TestListSSHConnectionsTool_Execute_OnlyReturnsAccessibleConnections(t *testing.T) {
-	svc := &listStubSSHConnService{
-		items: []sshconn.SSHConnection{
+	svc := &testsupport.StubSSHConnService{
+		Items: []sshconn.SSHConnection{
 			{Name: "allowed-box", Host: "1.1.1.1", Username: "u1"},
 			{Name: "denied-box", Host: "2.2.2.2", Username: "u2"},
 		},
 	}
-	svc.items[0].ID = 1
-	svc.items[1].ID = 2
+	svc.Items[0].ID = 1
+	svc.Items[1].ID = 2
 
 	canAccess := func(ctx context.Context, userID uint, resourceType string, resourceID uint, level string) (bool, error) {
 		return resourceID == 1, nil // only connection 1 is visible to this user
@@ -76,12 +65,12 @@ func TestListSSHConnectionsTool_Execute_OnlyReturnsAccessibleConnections(t *test
 }
 
 func TestListSSHConnectionsTool_Execute_NoAccessibleConnectionsReturnsEmptyNotNil(t *testing.T) {
-	svc := &listStubSSHConnService{
-		items: []sshconn.SSHConnection{{Name: "denied-box", Host: "2.2.2.2"}},
+	svc := &testsupport.StubSSHConnService{
+		Items: []sshconn.SSHConnection{{Name: "denied-box", Host: "2.2.2.2"}},
 	}
-	svc.items[0].ID = 1
+	svc.Items[0].ID = 1
 
-	tool := NewListSSHConnectionsTool(7, svc, denyAccess)
+	tool := NewListSSHConnectionsTool(7, svc, testsupport.DenyAccess)
 
 	result, err := tool.Execute(context.Background(), nil)
 	if err != nil {

@@ -1,4 +1,4 @@
-package chat
+package custom_tools
 
 import (
 	"context"
@@ -103,6 +103,15 @@ func (t *CreateCustomToolTool) Execute(ctx context.Context, args map[string]any)
 	}
 	if len(name) > 100 {
 		return tools.ToolResult{Success: false, Data: "name must be 100 characters or fewer"}, nil
+	}
+	// A custom tool's name is only unique among custom tools — nothing
+	// stops it from colliding with a builtin's name (ssh_execute, say),
+	// and buildRegistry would refuse to register it over the real one
+	// rather than let it silently bypass that tool's own access
+	// controls. Reject it here too, so the model gets a clear reason
+	// instead of a tool that gets created but never actually takes effect.
+	if _, exists := t.registry.Get(name); exists {
+		return tools.ToolResult{Success: false, Data: fmt.Sprintf("%q is already a registered tool name — choose a different name", name)}, nil
 	}
 
 	visibility := customtool.Visibility(visibilityArg)

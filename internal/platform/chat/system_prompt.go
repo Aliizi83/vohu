@@ -66,13 +66,19 @@ func formatToolDefinition(def ai_model.ToolDefinition) string {
 		required[name] = true
 	}
 
-	params := make([]string, 0, len(def.Parameters.Properties))
-	for name, prop := range def.Parameters.Properties {
+	names := make([]string, 0, len(def.Parameters.Properties))
+	for name := range def.Parameters.Properties {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	params := make([]string, 0, len(names))
+	for _, name := range names {
 		suffix := ""
 		if required[name] {
 			suffix = ", required"
 		}
-		params = append(params, fmt.Sprintf("%s (%s%s)", name, prop.Type, suffix))
+		params = append(params, fmt.Sprintf("%s (%s%s)", name, def.Parameters.Properties[name].Type, suffix))
 	}
 
 	return fmt.Sprintf("- %s: %s [%s]\n", def.Name, def.Description, strings.Join(params, ", "))

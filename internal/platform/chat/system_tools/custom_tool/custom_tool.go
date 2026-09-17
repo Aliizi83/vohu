@@ -1,4 +1,4 @@
-package chat
+package custom_tools
 
 import (
 	"context"
@@ -57,12 +57,12 @@ func (t *CustomTool) Parameters() ai_model.ToolParameters {
 }
 
 func (t *CustomTool) Execute(ctx context.Context, args map[string]any) (tools.ToolResult, error) {
-	connectionID, ok := parseUintArg(args["connectionId"])
+	connectionID, ok := tools.ParseUintArg(args["connectionId"])
 	if !ok {
 		return tools.ToolResult{Success: false, Data: "connectionId is required and must be a number"}, nil
 	}
 
-	allowed, err := t.canAccess(ctx, t.userID, sshconn.ResourceTypeSSHConnection, connectionID, accessLevelWrite)
+	allowed, err := t.canAccess(ctx, t.userID, sshconn.ResourceTypeSSHConnection, connectionID, tools.AccessLevelWrite)
 	if err != nil {
 		return tools.ToolResult{Success: false, Data: fmt.Sprintf("permission check failed: %v", err)}, nil
 	}

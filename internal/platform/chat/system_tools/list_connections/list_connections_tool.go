@@ -1,4 +1,4 @@
-package chat
+package list_connections
 
 import (
 	"context"

@@ -1,10 +1,12 @@
-package chat
+package custom_tools
 
 import (
 	"context"
 	"errors"
 	"testing"
 
+	"github.com/Aliizi83/vohu/internal/ai_model"
+	"github.com/Aliizi83/vohu/internal/platform/chat/system_tools/testsupport"
 	"github.com/Aliizi83/vohu/internal/platform/customtool"
 	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"github.com/Aliizi83/vohu/internal/toolbuild"
@@ -75,11 +77,11 @@ func (s *creatingCustomToolService) LatestVersionForTool(context.Context, uint) 
 const validParamsSchema = `{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}`
 
 func newTestCreateCustomToolTool(canAccess func(context.Context, uint, string, uint, string) (bool, error), builderErr error, customTools *creatingCustomToolService, registry *tools.Registry) *CreateCustomToolTool {
-	return NewCreateCustomToolTool(1, canAccess, customTools, &stubBuilder{err: builderErr}, &stubSSHConnService{}, nil, 0, registry)
+	return NewCreateCustomToolTool(1, canAccess, customTools, &stubBuilder{err: builderErr}, &testsupport.StubSSHConnService{}, nil, 0, registry)
 }
 
 func TestCreateCustomToolTool_Execute_MissingRequiredFields(t *testing.T) {
-	tool := newTestCreateCustomToolTool(allowAccess, nil, &creatingCustomToolService{}, tools.NewRegistry())
+	tool := newTestCreateCustomToolTool(testsupport.AllowAccess, nil, &creatingCustomToolService{}, tools.NewRegistry())
 
 	result, err := tool.Execute(context.Background(), map[string]any{"name": "x"})
 	if err != nil {
@@ -91,7 +93,7 @@ func TestCreateCustomToolTool_Execute_MissingRequiredFields(t *testing.T) {
 }
 
 func TestCreateCustomToolTool_Execute_InvalidParamsSchema(t *testing.T) {
-	tool := newTestCreateCustomToolTool(allowAccess, nil, &creatingCustomToolService{}, tools.NewRegistry())
+	tool := newTestCreateCustomToolTool(testsupport.AllowAccess, nil, &creatingCustomToolService{}, tools.NewRegistry())
 
 	result, err := tool.Execute(context.Background(), map[string]any{
 		"name": "my_tool", "description": "does a thing", "paramsSchema": "not json", "sourceCode": "package main",
@@ -105,7 +107,7 @@ func TestCreateCustomToolTool_Execute_InvalidParamsSchema(t *testing.T) {
 }
 
 func TestCreateCustomToolTool_Execute_AccessDeniedNeverReachesBuilder(t *testing.T) {
-	tool := newTestCreateCustomToolTool(denyAccess, errors.New("Build should never be called"), &creatingCustomToolService{}, tools.NewRegistry())
+	tool := newTestCreateCustomToolTool(testsupport.DenyAccess, errors.New("Build should never be called"), &creatingCustomToolService{}, tools.NewRegistry())
 
 	result, err := tool.Execute(context.Background(), map[string]any{
 		"name": "my_tool", "description": "does a thing", "paramsSchema": validParamsSchema, "sourceCode": "package main",
@@ -120,7 +122,7 @@ func TestCreateCustomToolTool_Execute_AccessDeniedNeverReachesBuilder(t *testing
 
 func TestCreateCustomToolTool_Execute_CompileFailureReturnsDiagnosticsNotCreated(t *testing.T) {
 	customTools := &creatingCustomToolService{}
-	tool := newTestCreateCustomToolTool(allowAccess, errors.New("building: exit status 1: ./main.go:3:2: undefined: fmt"), customTools, tools.NewRegistry())
+	tool := newTestCreateCustomToolTool(testsupport.AllowAccess, errors.New("building: exit status 1: ./main.go:3:2: undefined: fmt"), customTools, tools.NewRegistry())
 
 	result, err := tool.Execute(context.Background(), map[string]any{
 		"name": "my_tool", "description": "does a thing", "paramsSchema": validParamsSchema, "sourceCode": "package main",
@@ -143,7 +145,7 @@ func TestCreateCustomToolTool_Execute_CompileFailureReturnsDiagnosticsNotCreated
 func TestCreateCustomToolTool_Execute_SuccessCreatesAndRegistersLive(t *testing.T) {
 	customTools := &creatingCustomToolService{}
 	registry := tools.NewRegistry()
-	tool := newTestCreateCustomToolTool(allowAccess, nil, customTools, registry)
+	tool := newTestCreateCustomToolTool(testsupport.AllowAccess, nil, customTools, registry)
 
 	result, err := tool.Execute(context.Background(), map[string]any{
 		"name": "my_new_tool", "description": "does a thing", "paramsSchema": validParamsSchema, "sourceCode": "package main\nfunc main() {}",
@@ -167,5 +169,39 @@ func TestCreateCustomToolTool_Execute_SuccessCreatesAndRegistersLive(t *testing.
 	}
 	if _, isCustom := registered.(*CustomTool); !isCustom {
 		t.Fatalf("expected the registered tool to be a *CustomTool, got %T", registered)
+	}
+}
+
+// noopTool is a minimal tools.Tool double standing in for a builtin (e.g.
+// ssh_execute) already registered before create_custom_tool runs.
+type noopTool struct{}
+
+func (noopTool) Name() string                        { return "ssh_execute" }
+func (noopTool) Description() string                 { return "the real thing" }
+func (noopTool) Parameters() ai_model.ToolParameters { return ai_model.ToolParameters{} }
+func (noopTool) Execute(context.Context, map[string]any) (tools.ToolResult, error) {
+	return tools.ToolResult{Success: true}, nil
+}
+
+func TestCreateCustomToolTool_Execute_RejectsNameCollidingWithAnAlreadyRegisteredTool(t *testing.T) {
+	customTools := &creatingCustomToolService{}
+	registry := tools.NewRegistry()
+	registry.Register(noopTool{})
+	tool := newTestCreateCustomToolTool(testsupport.AllowAccess, nil, customTools, registry)
+
+	result, err := tool.Execute(context.Background(), map[string]any{
+		"name": "ssh_execute", "description": "does a thing", "paramsSchema": validParamsSchema, "sourceCode": "package main\nfunc main() {}",
+	})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if result.Success {
+		t.Fatal("expected Success=false when the name collides with an already-registered tool")
+	}
+	if customTools.createdTool != nil {
+		t.Fatal("expected CreateTool to never be called when the name collides")
+	}
+	if registered, _ := registry.Get("ssh_execute"); registered != (tools.Tool)(noopTool{}) {
+		t.Fatal("expected the original tool to remain registered, untouched")
 	}
 }

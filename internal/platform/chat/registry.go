@@ -5,6 +5,9 @@ import (
 
 	"github.com/Aliizi83/vohu/internal/jobqueue"
 	"github.com/Aliizi83/vohu/internal/platform/agenttool"
+	custom_tools "github.com/Aliizi83/vohu/internal/platform/chat/system_tools/custom_tool"
+	"github.com/Aliizi83/vohu/internal/platform/chat/system_tools/list_connections"
+	"github.com/Aliizi83/vohu/internal/platform/chat/system_tools/ssh_tool"
 	"github.com/Aliizi83/vohu/internal/platform/commandrule"
 	"github.com/Aliizi83/vohu/internal/platform/customtool"
 	"github.com/Aliizi83/vohu/internal/platform/shared"
@@ -56,7 +59,20 @@ func buildRegistry(
 		return nil, err
 	}
 	for _, row := range customRows {
-		registry.Register(NewCustomTool(row, userID, sshconns, canAccess, jobs, defaultRetries))
+		// A custom tool's Name is only unique among custom tools (a DB
+		// constraint on the custom_tools table) — nothing stops it from
+		// matching a builtin's name, and Registry.Register would silently
+		// let it overwrite one. That's not just a naming clash: a custom
+		// tool named e.g. "ssh_execute" runs whatever arbitrary Go source
+		// its author wrote, with none of the real ssh_execute's per-
+		// connection command-policy allow-list — so letting it shadow the
+		// real tool would bypass that policy entirely. Skip it instead,
+		// same "best-effort, don't fail the whole turn" handling as an
+		// unknown agentTool name above.
+		if _, exists := registry.Get(row.Name); exists {
+			continue
+		}
+		registry.Register(custom_tools.NewCustomTool(row, userID, sshconns, canAccess, jobs, defaultRetries))
 	}
 
 	return registry, nil
@@ -80,11 +96,11 @@ func builtinTool(
 ) (tools.Tool, bool) {
 	switch name {
 	case "list_ssh_connections":
-		return NewListSSHConnectionsTool(userID, sshconns, canAccess), true
+		return list_connections.NewListSSHConnectionsTool(userID, sshconns, canAccess), true
 	case "ssh_execute":
-		return NewSSHTool(userID, sshconns, canAccess, commandRules), true
+		return ssh_tool.NewSSHTool(userID, sshconns, canAccess, commandRules), true
 	case "create_custom_tool":
-		return NewCreateCustomToolTool(userID, canAccess, customTools, builder, sshconns, jobs, defaultRetries, registry), true
+		return custom_tools.NewCreateCustomToolTool(userID, canAccess, customTools, builder, sshconns, jobs, defaultRetries, registry), true
 	default:
 		return nil, false
 	}

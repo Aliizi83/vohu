@@ -1,15 +1,16 @@
-package chat
+package custom_tools
 
 import (
 	"context"
 	"errors"
 	"testing"
 
+	"github.com/Aliizi83/vohu/internal/platform/chat/system_tools/testsupport"
 	"github.com/Aliizi83/vohu/internal/platform/customtool"
 )
 
 func TestCustomTool_Execute_MissingConnectionId(t *testing.T) {
-	tool := NewCustomTool(customtool.Tool{Name: "read_file"}, 1, &stubSSHConnService{}, allowAccess, nil, 0)
+	tool := NewCustomTool(customtool.Tool{Name: "read_file"}, 1, &testsupport.StubSSHConnService{}, testsupport.AllowAccess, nil, 0)
 
 	result, err := tool.Execute(context.Background(), map[string]any{})
 	if err != nil {
@@ -21,8 +22,8 @@ func TestCustomTool_Execute_MissingConnectionId(t *testing.T) {
 }
 
 func TestCustomTool_Execute_AccessDeniedNeverReachesConnection(t *testing.T) {
-	svc := &stubSSHConnService{getErr: errors.New("GetByID should never be called")}
-	tool := NewCustomTool(customtool.Tool{Name: "read_file"}, 1, svc, denyAccess, nil, 0)
+	svc := &testsupport.StubSSHConnService{GetErr: errors.New("GetByID should never be called")}
+	tool := NewCustomTool(customtool.Tool{Name: "read_file"}, 1, svc, testsupport.DenyAccess, nil, 0)
 
 	result, err := tool.Execute(context.Background(), map[string]any{"connectionId": float64(1)})
 	if err != nil {

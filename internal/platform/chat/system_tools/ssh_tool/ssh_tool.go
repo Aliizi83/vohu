@@ -1,4 +1,4 @@
-package chat
+package ssh_tool
 
 import (
 	"context"
@@ -12,13 +12,6 @@ import (
 	"github.com/Aliizi83/vohu/internal/tools/command"
 	"golang.org/x/crypto/ssh"
 )
-
-// accessLevelWrite is what executing a command over a connection
-// requires — running anything, even something read-only in intent,
-// changes state on the remote system (a process runs, output is
-// produced), so it's gated at Write, not the bare Read that
-// ListSSHConnectionsTool's discovery-only listing requires.
-const accessLevelWrite = "write"
 
 // SSHTool is the platform's own tool — distinct from command.Tool, which
 // runs locally on whatever process it's in. It never constructs a
@@ -99,7 +92,7 @@ func (t *SSHTool) Parameters() ai_model.ToolParameters {
 }
 
 func (t *SSHTool) Execute(ctx context.Context, args map[string]any) (tools.ToolResult, error) {
-	connectionID, ok := parseUintArg(args["connectionId"])
+	connectionID, ok := tools.ParseUintArg(args["connectionId"])
 	if !ok {
 		return tools.ToolResult{Success: false, Data: "connectionId is required and must be a number"}, nil
 	}
@@ -109,12 +102,12 @@ func (t *SSHTool) Execute(ctx context.Context, args map[string]any) (tools.ToolR
 		return tools.ToolResult{Success: false, Data: "program is required"}, nil
 	}
 
-	commandArgs, err := parseStringArrayArg(args["args"])
+	commandArgs, err := tools.ParseStringArrayArg(args["args"])
 	if err != nil {
 		return tools.ToolResult{Success: false, Data: err.Error()}, nil
 	}
 
-	allowed, err := t.canAccess(ctx, t.userID, sshconn.ResourceTypeSSHConnection, connectionID, accessLevelWrite)
+	allowed, err := t.canAccess(ctx, t.userID, sshconn.ResourceTypeSSHConnection, connectionID, tools.AccessLevelWrite)
 	if err != nil {
 		return tools.ToolResult{Success: false, Data: fmt.Sprintf("permission check failed: %v", err)}, nil
 	}
@@ -162,46 +155,4 @@ func (t *SSHTool) Execute(ctx context.Context, args map[string]any) (tools.ToolR
 			"output": output,
 		},
 	}, nil
-}
-
-// parseUintArg handles the float64 shape encoding/json produces for
-// numbers decoded into map[string]any — which is exactly how a tool
-// call's arguments arrive from every provider in this codebase.
-func parseUintArg(v any) (uint, bool) {
-	switch n := v.(type) {
-	case float64:
-		if n < 0 {
-			return 0, false
-		}
-		return uint(n), true
-	case int:
-		if n < 0 {
-			return 0, false
-		}
-		return uint(n), true
-	default:
-		return 0, false
-	}
-}
-
-func parseStringArrayArg(v any) ([]string, error) {
-	if v == nil {
-		return nil, nil
-	}
-
-	list, ok := v.([]any)
-	if !ok {
-		return nil, fmt.Errorf("args must be an array")
-	}
-
-	result := make([]string, 0, len(list))
-	for _, item := range list {
-		s, ok := item.(string)
-		if !ok {
-			return nil, fmt.Errorf("all command arguments must be strings")
-		}
-		result = append(result, s)
-	}
-
-	return result, nil
 }
