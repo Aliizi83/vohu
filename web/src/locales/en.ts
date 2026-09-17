@@ -129,6 +129,15 @@ export const en = {
     testingConnection: "Testing connection...",
     created: 'Connection "{{name}}" created',
     createFailed: "Failed to create connection",
+    openTerminal: "Terminal",
+  },
+
+  terminal: {
+    back: "Back",
+    connecting: "Connecting…",
+    connected: "Connected",
+    disconnected: "Disconnected",
+    connectFailed: "Failed to connect",
   },
 
   commandRules: {

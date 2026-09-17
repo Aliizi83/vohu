@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { lazy, Suspense, type ReactNode } from "react"
 import { ThemeProvider } from "next-themes"
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 import { Toaster } from "@/components/ui/sonner"
@@ -16,6 +16,10 @@ import ResourceAccessPage from "@/pages/ResourceAccessPage"
 import RolesPage from "@/pages/RolesPage"
 import SSHConnectionsPage from "@/pages/SSHConnectionsPage"
 import UsersPage from "@/pages/UsersPage"
+
+// Lazy, same reasoning as CodeEditor — xterm.js only needs to load for
+// whoever actually opens a terminal, not on every page.
+const TerminalPage = lazy(() => import("@/pages/TerminalPage"))
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth()
@@ -53,6 +57,16 @@ export default function App() {
             <BrowserRouter>
               <Routes>
                 <Route path="/login" element={<LoginPage />} />
+                <Route
+                  path="/ssh-connections/:id/terminal"
+                  element={
+                    <ProtectedRoute>
+                      <Suspense fallback={null}>
+                        <TerminalPage />
+                      </Suspense>
+                    </ProtectedRoute>
+                  }
+                />
                 <Route
                   path="/"
                   element={

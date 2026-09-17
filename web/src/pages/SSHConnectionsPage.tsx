@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react"
+import { TerminalIcon } from "lucide-react"
+import { Link } from "react-router-dom"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -130,6 +132,17 @@ export default function SSHConnectionsPage() {
                 </TableCell>
                 <TableCell>{conn.username}</TableCell>
                 <TableCell className="text-end space-x-2 rtl:space-x-reverse">
+                  {hasLevel("ssh_connection", "write") && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      nativeButton={false}
+                      render={<Link to={`/ssh-connections/${conn.id}/terminal`} />}
+                    >
+                      <TerminalIcon />
+                      {t("sshConnections.openTerminal")}
+                    </Button>
+                  )}
                   {hasLevel("ssh_connection", "manage") && (
                     <>
                       <CommandRulesDialog connection={conn} />

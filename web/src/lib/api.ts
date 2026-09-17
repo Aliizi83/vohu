@@ -3,7 +3,7 @@
 // shared.BaseResponse{result, success, resultCode, validationErrors, error}
 // — see internal/platform/shared/response.go.
 
-const API_BASE = "/api/v1"
+export const API_BASE = "/api/v1"
 
 export class ApiError extends Error {
   status: number
@@ -352,6 +352,10 @@ export const api = {
       privateKey: string
     }) => request<SSHConnectionDto>("POST", "/ssh-connections", { body: data }),
     remove: (id: number) => request<null>("DELETE", `/ssh-connections/${id}`),
+    // One-time, 30s-lived ticket for the web terminal's WebSocket — see
+    // terminal.Handler.ServeWS's doc comment for why the socket itself
+    // can't just carry the normal Bearer token.
+    terminalTicket: (id: number) => request<{ ticket: string }>("POST", `/ssh-connections/${id}/terminal-ticket`),
   },
 
   providerKeys: {

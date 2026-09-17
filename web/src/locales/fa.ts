@@ -130,6 +130,15 @@ export const fa: Dictionary = {
     testingConnection: "در حال تست اتصال...",
     created: "اتصال «{{name}}» ایجاد شد",
     createFailed: "ایجاد اتصال ناموفق بود",
+    openTerminal: "ترمینال",
+  },
+
+  terminal: {
+    back: "بازگشت",
+    connecting: "در حال اتصال…",
+    connected: "متصل شد",
+    disconnected: "قطع شد",
+    connectFailed: "اتصال ناموفق بود",
   },
 
   commandRules: {

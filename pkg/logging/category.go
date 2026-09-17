@@ -20,6 +20,7 @@ const (
 	Startup         SubCategory = "Startup"
 	ExternalService SubCategory = "ExternalService"
 	JobQueue        SubCategory = "JobQueue"
+	Terminal        SubCategory = "Terminal"
 
 	// Postgres
 	Migration SubCategory = "Migration"

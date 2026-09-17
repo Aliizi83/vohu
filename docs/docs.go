@@ -2947,6 +2947,102 @@ const docTemplate = `{
                 }
             }
         },
+        "/ssh-connections/{id}/terminal-ticket": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mints a short-lived (30s), single-use ticket for GET /ssh-connections/{id}/terminal-ws — needed because a WebSocket handshake can't carry the normal Bearer header. Requires \"write\" access to this connection.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ssh-connections"
+                ],
+                "summary": "Get a one-time ticket to open a web terminal",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "SSH connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "result": {
+                                            "type": "object",
+                                            "properties": {
+                                                "ticket": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ssh-connections/{id}/terminal-ws": {
+            "get": {
+                "description": "Upgrades to a WebSocket and bridges it to an interactive SSH shell (a real PTY, not run through any command allow-list — see internal/tools/command.Policy's doc comment for why that's a deliberate, separate trust boundary from ssh_execute). Client→server messages are JSON: {\"type\":\"input\",\"data\":\"...\"} for keystrokes, {\"type\":\"resize\",\"cols\":N,\"rows\":N} for terminal resizes. Server→client messages are the shell's raw output. ticket comes from POST .../terminal-ticket.",
+                "tags": [
+                    "ssh-connections"
+                ],
+                "summary": "Open a web terminal (WebSocket)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "SSH connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "One-time ticket from POST .../terminal-ticket",
+                        "name": "ticket",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "101": {
+                        "description": "Switching Protocols",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/users": {
             "get": {
                 "security": [

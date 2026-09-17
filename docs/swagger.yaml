@@ -2720,6 +2720,72 @@ paths:
       summary: Update an SSH connection
       tags:
       - ssh-connections
+  /ssh-connections/{id}/terminal-ticket:
+    post:
+      description: Mints a short-lived (30s), single-use ticket for GET /ssh-connections/{id}/terminal-ws
+        — needed because a WebSocket handshake can't carry the normal Bearer header.
+        Requires "write" access to this connection.
+      parameters:
+      - description: SSH connection ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+            - properties:
+                result:
+                  properties:
+                    ticket:
+                      type: string
+                  type: object
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a one-time ticket to open a web terminal
+      tags:
+      - ssh-connections
+  /ssh-connections/{id}/terminal-ws:
+    get:
+      description: 'Upgrades to a WebSocket and bridges it to an interactive SSH shell
+        (a real PTY, not run through any command allow-list — see internal/tools/command.Policy''s
+        doc comment for why that''s a deliberate, separate trust boundary from ssh_execute).
+        Client→server messages are JSON: {"type":"input","data":"..."} for keystrokes,
+        {"type":"resize","cols":N,"rows":N} for terminal resizes. Server→client messages
+        are the shell''s raw output. ticket comes from POST .../terminal-ticket.'
+      parameters:
+      - description: SSH connection ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: One-time ticket from POST .../terminal-ticket
+        in: query
+        name: ticket
+        required: true
+        type: string
+      responses:
+        "101":
+          description: Switching Protocols
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Aliizi83_vohu_internal_platform_shared.BaseResponse'
+      summary: Open a web terminal (WebSocket)
+      tags:
+      - ssh-connections
   /users:
     get:
       description: Lists users the caller holds at least "read" access to — every

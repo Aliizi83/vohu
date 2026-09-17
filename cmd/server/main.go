@@ -17,6 +17,7 @@ import (
 	"github.com/Aliizi83/vohu/internal/platform/providerkey"
 	"github.com/Aliizi83/vohu/internal/platform/rbac"
 	"github.com/Aliizi83/vohu/internal/platform/sshconn"
+	"github.com/Aliizi83/vohu/internal/platform/terminal"
 	"github.com/Aliizi83/vohu/internal/platform/user"
 	"github.com/Aliizi83/vohu/internal/toolbuild"
 	"github.com/Aliizi83/vohu/internal/tooldeploy"
@@ -104,6 +105,8 @@ func main() {
 	sshconnService := sshconn.NewService(sshconnRepo, secretBox, grantCreatorAccess, hasAccessLevel, testSSHConnection)
 	sshconnHandler := sshconn.NewHandler(sshconnService)
 
+	terminalHandler := terminal.NewHandler(terminal.NewTicketStore(cache.GetRedis()), sshconnService, logger)
+
 	authService := auth.NewService(cfg, userService)
 	authHandler := auth.NewHandler(authService)
 
@@ -170,6 +173,7 @@ func main() {
 	user.RegisterRoutes(v1, userHandler, authMiddleware, hasAccessLevel)
 	rbac.RegisterRoutes(v1, rbacHandler, authMiddleware, rbacService)
 	sshconn.RegisterRoutes(v1, sshconnHandler, authMiddleware, hasAccessLevel)
+	terminal.RegisterRoutes(v1, terminalHandler, authMiddleware, hasAccessLevel)
 	providerkey.RegisterRoutes(v1, providerKeyHandler, authMiddleware, hasAccessLevel)
 	custommodel.RegisterRoutes(v1, customModelHandler, authMiddleware, hasAccessLevel)
 	agenttool.RegisterRoutes(v1, agentToolHandler, authMiddleware, hasAccessLevel)
