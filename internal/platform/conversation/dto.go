@@ -1,7 +1,14 @@
 package conversation
 
 type CreateConversationRequest struct {
-	Title    string `json:"title" binding:"required,max=255"`
+	// Title is optional — a caller with nothing meaningful to name the
+	// conversation yet (the normal case: a brand-new chat has no
+	// messages) can omit it entirely and get a generic default (see
+	// Service.Create). chat.Handler.SendMessage renames it from the
+	// first actual message the moment there's real content to name it
+	// after, the same "picks a name for you" convention ChatGPT and
+	// similar products use.
+	Title    string `json:"title" binding:"omitempty,max=255"`
 	Provider string `json:"provider" binding:"required"`
 	Model    string `json:"model" binding:"required"`
 

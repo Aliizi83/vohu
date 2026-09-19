@@ -333,7 +333,12 @@ export const api = {
       request<PagedList<ConversationDto>>("GET", "/conversations", {
         query: { ...listQuery(page, pageSize), archived: archived ? "true" : undefined },
       }),
-    create: (data: { title: string; provider: string; model: string; customModelId?: number }) =>
+    // No title: the server names a new conversation generically and
+    // renames it from the first message once one's actually sent (see
+    // chat.Handler.SendMessage) — the same "picks a name for you" feel
+    // as ChatGPT and friends, without asking upfront for a name for a
+    // conversation that doesn't have any content yet.
+    create: (data: { provider: string; model: string; customModelId?: number }) =>
       request<ConversationDto>("POST", "/conversations", { body: data }),
     // provider/model/customModelId travel together — set provider+model to
     // switch which model this conversation talks to going forward (omit
@@ -480,6 +485,10 @@ export interface StreamHandlers {
   onChunk?: (text: string) => void
   onToolCall?: (call: ToolCallDto) => void
   onToolResult?: (result: ToolResultDto) => void
+  // Fired only for a conversation's first message, once the server has
+  // renamed it from its initial generic title to something derived from
+  // that message — see chat.Handler.SendMessage.
+  onTitleChanged?: (title: string) => void
   onDone?: (messages: MessageDto[]) => void
   onError?: (message: string) => void
 }
@@ -544,6 +553,7 @@ export async function streamMessage(
       if (event === "chunk") handlers.onChunk?.(payload as string)
       else if (event === "tool_call") handlers.onToolCall?.(payload as ToolCallDto)
       else if (event === "tool_result") handlers.onToolResult?.(payload as ToolResultDto)
+      else if (event === "title") handlers.onTitleChanged?.(payload as string)
       else if (event === "done") handlers.onDone?.(payload as MessageDto[])
       else if (event === "error") handlers.onError?.(payload as string)
     }

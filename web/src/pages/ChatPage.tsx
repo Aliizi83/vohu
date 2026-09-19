@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react"
-import { ArchiveIcon, ArchiveRestoreIcon, PencilIcon, Trash2Icon } from "lucide-react"
+import { ArchiveIcon, ArchiveRestoreIcon, ChevronDownIcon, PencilIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 import { Markdown } from "@/components/Markdown"
 import { useConfirm } from "@/components/ConfirmDialog"
@@ -343,6 +343,9 @@ export default function ChatPage() {
             },
           }
         })
+      },
+      onTitleChanged: (title) => {
+        setConversations((prev) => prev?.map((c) => (c.id === conversationId ? { ...c, title } : c)) ?? prev)
       },
       onDone: (newMessages) => {
         // Only the currently-selected conversation's `messages` array is
@@ -781,7 +784,6 @@ function ModelSelectFields({
 function NewConversationDialog({ onCreated }: { onCreated: (conv: ConversationDto) => void }) {
   const { t } = useLanguage()
   const [open, setOpen] = useState(false)
-  const [title, setTitle] = useState("")
   const [selectedKey, setSelectedKey] = useState(builtinKey(0))
   const [customModel, setCustomModel] = useState("")
   const [loading, setLoading] = useState(false)
@@ -810,13 +812,9 @@ function NewConversationDialog({ onCreated }: { onCreated: (conv: ConversationDt
 
     setLoading(true)
     try {
-      const conv = await api.conversations.create({
-        title: title.trim() || t("chat.titlePlaceholder"),
-        ...resolved,
-      })
+      const conv = await api.conversations.create(resolved)
       toast.success(t("chat.conversationCreated"))
       setOpen(false)
-      setTitle("")
       setCustomModel("")
       onCreated(conv)
     } catch (err) {
@@ -836,15 +834,6 @@ function NewConversationDialog({ onCreated }: { onCreated: (conv: ConversationDt
             <DialogDescription>{t("chat.newConversationDialogDescription")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="conv-title">{t("chat.titleLabel")}</Label>
-              <Input
-                id="conv-title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder={t("chat.titlePlaceholder")}
-              />
-            </div>
             <ModelSelectFields
               selectedKey={selectedKey}
               onSelectedKeyChange={setSelectedKey}
@@ -952,8 +941,9 @@ function ChangeModelDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
-          <button className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
+          <button className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground hover:border-foreground/30 hover:text-foreground">
             {conversation.provider} · {conversation.model}
+            <ChevronDownIcon className="size-3" />
           </button>
         }
       />

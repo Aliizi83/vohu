@@ -12,6 +12,12 @@ var ErrNotOwner = errors.New("conversation does not belong to this user")
 
 const resourceTypeConversation = "conversation"
 
+// defaultTitle names a conversation created with no title of its own —
+// chat.Handler.SendMessage overwrites it with something derived from the
+// first real message the moment there is one, so this is only ever seen
+// briefly, before that first message.
+const defaultTitle = "New chat"
+
 type Service interface {
 	Create(ctx context.Context, userID uint, req CreateConversationRequest) (*Conversation, error)
 
@@ -62,9 +68,14 @@ func NewService(repo Repository, hasAccessLevel shared.AccessLevelCheck) Service
 }
 
 func (s *service) Create(ctx context.Context, userID uint, req CreateConversationRequest) (*Conversation, error) {
+	title := req.Title
+	if title == "" {
+		title = defaultTitle
+	}
+
 	conv := &Conversation{
 		UserID:        userID,
-		Title:         req.Title,
+		Title:         title,
 		Provider:      req.Provider,
 		Model:         req.Model,
 		CustomModelID: req.CustomModelID,

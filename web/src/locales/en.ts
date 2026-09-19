@@ -273,8 +273,6 @@ export const en = {
     toolError: "error: {{error}}",
     newConversationDialogTitle: "New conversation",
     newConversationDialogDescription: "You can switch the model later from the conversation header.",
-    titleLabel: "Title",
-    titlePlaceholder: "New chat",
     modelLabel: "Model",
     modelNameLabel: "Model name",
     modelNamePlaceholder: "e.g. gpt-4o, deepseek-chat",

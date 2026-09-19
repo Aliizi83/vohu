@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/Aliizi83/vohu/internal/agent"
 	"github.com/Aliizi83/vohu/internal/ai_model"
@@ -305,7 +306,7 @@ func (h *Handler) GetMessages(c *gin.Context) {
 // agent produced are persisted only after the turn finishes.
 //
 //	@Summary		Send a message (SSE stream)
-//	@Description	Sends a message and streams the reply as a Server-Sent Events response (Content-Type: text/event-stream) — this is NOT a plain JSON endpoint despite the shared.BaseResponse envelope every other route uses; it's documented here for completeness but tools like "Try it out" won't render it usefully. Events, in order: zero or more "chunk" (data is a raw string — one piece of assistant text as it streams in) interleaved with zero or more "tool_call" (data is an ai_model.ToolCall — fired the moment the model requests a call, before it runs) each eventually followed by its own "tool_result" (data is a ToolResultResponse, matched to its call by toolCallId) once that call finishes; then either "done" (data is []MessageResponse — every message this turn produced: the assistant's reply and any tool call/result pairs, already persisted) or "error" (data is a plain error string; nothing was persisted).
+//	@Description	Sends a message and streams the reply as a Server-Sent Events response (Content-Type: text/event-stream) — this is NOT a plain JSON endpoint despite the shared.BaseResponse envelope every other route uses; it's documented here for completeness but tools like "Try it out" won't render it usefully. Events, in order: zero or more "chunk" (data is a raw string — one piece of assistant text as it streams in) interleaved with zero or more "tool_call" (data is an ai_model.ToolCall — fired the moment the model requests a call, before it runs) each eventually followed by its own "tool_result" (data is a ToolResultResponse, matched to its call by toolCallId) once that call finishes; an optional "title" (data is a plain string — only fired for a conversation's first message, once it's been renamed from the conversation's initial generic title to something derived from that message); then either "done" (data is []MessageResponse — every message this turn produced: the assistant's reply and any tool call/result pairs, already persisted) or "error" (data is a plain error string; nothing was persisted).
 //	@Tags			chat
 //	@Accept			json
 //	@Produce		text/event-stream
@@ -403,9 +404,43 @@ func (h *Handler) SendMessage(c *gin.Context) {
 		return
 	}
 
+	// A conversation is created with no title (see
+	// conversation.CreateConversationRequest's doc comment) — the first
+	// message that actually lands is the first point there's anything
+	// meaningful to name it after. Best-effort: a failed rename doesn't
+	// invalidate an otherwise-successful turn, so its error is dropped
+	// rather than surfaced as an "error" event.
+	if len(history) == 0 {
+		title := deriveTitle(req.Content)
+		if _, err := h.conversations.Update(c.Request.Context(), userID, conversationID, conversation.UpdateConversationRequest{Title: title}); err == nil {
+			writeSSE("title", title)
+		}
+	}
+
 	responses := make([]MessageResponse, 0, len(newMessages))
 	for _, msg := range newMessages {
 		responses = append(responses, toMessageResponse(msg))
 	}
 	writeSSE("done", responses)
+}
+
+// maxDerivedTitleLength keeps a derived title readable in a sidebar
+// row — well under Conversation.Title's own 255-char column limit.
+const maxDerivedTitleLength = 60
+
+// deriveTitle turns a user's first message into a short conversation
+// title — the same "picks a name for you" convention ChatGPT and similar
+// products use, since asking upfront for a title on a conversation that
+// doesn't have any messages yet just adds friction for no benefit.
+func deriveTitle(content string) string {
+	collapsed := strings.Join(strings.Fields(content), " ")
+	if collapsed == "" {
+		return "New chat"
+	}
+
+	runes := []rune(collapsed)
+	if len(runes) <= maxDerivedTitleLength {
+		return collapsed
+	}
+	return string(runes[:maxDerivedTitleLength]) + "…"
 }

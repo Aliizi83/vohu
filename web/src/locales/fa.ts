@@ -274,8 +274,6 @@ export const fa: Dictionary = {
     toolError: "خطا: {{error}}",
     newConversationDialogTitle: "گفتگوی جدید",
     newConversationDialogDescription: "بعداً می‌تونی مدل رو از بالای گفتگو تغییر بدی.",
-    titleLabel: "عنوان",
-    titlePlaceholder: "گفتگوی جدید",
     modelLabel: "مدل",
     modelNameLabel: "نام مدل",
     modelNamePlaceholder: "مثلاً gpt-4o یا deepseek-chat",
