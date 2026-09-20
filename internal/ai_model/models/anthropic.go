@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/Aliizi83/vohu/internal/ai_model"
 	"github.com/anthropics/anthropic-sdk-go"
@@ -182,9 +183,18 @@ func accumulateAnthropicResponse(
 
 		case anthropic.ToolUseBlock:
 
+			// Same defensive handling as the OpenAI-compatible path: a
+			// tool with no parameters should get "{}", but treat a
+			// genuinely empty input the same way rather than failing the
+			// whole turn over what's meant to be an empty object.
+			input := variant.Input
+			if len(strings.TrimSpace(string(input))) == 0 {
+				input = []byte("{}")
+			}
+
 			args := make(map[string]any)
 
-			if err := json.Unmarshal(variant.Input, &args); err != nil {
+			if err := json.Unmarshal(input, &args); err != nil {
 				return err
 			}
 

@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/Aliizi83/vohu/internal/ai_model"
 	"github.com/openai/openai-go"
@@ -166,9 +167,21 @@ func accumulateOpenAIMessage(
 
 	for _, call := range message.ToolCalls {
 
+		// A tool with no parameters (list_ssh_connections, say) is
+		// correctly called with an empty argument string by some
+		// OpenAI-compatible providers instead of the "{}" the spec
+		// implies — json.Unmarshal on an empty string always fails with
+		// "unexpected end of JSON input" (it's not valid JSON on its
+		// own), which isn't a real problem with the call, just an empty
+		// object spelled differently.
+		argsJSON := call.Function.Arguments
+		if strings.TrimSpace(argsJSON) == "" {
+			argsJSON = "{}"
+		}
+
 		args := make(map[string]any)
 
-		if err := json.Unmarshal([]byte(call.Function.Arguments), &args); err != nil {
+		if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 			return err
 		}
 
