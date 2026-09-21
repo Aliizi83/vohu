@@ -1,144 +1,599 @@
-<img src="web/public/favicon.svg" alt="Vohu logo" width="72" height="72">
-
 # Vohu
 
-[![Go](https://github.com/Aliizi83/vohu/actions/workflows/go.yml/badge.svg)](https://github.com/Aliizi83/vohu/actions/workflows/go.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+**A self-hosted AI agent runtime for developers and infrastructure.**
 
-**A provider-independent AI agent runtime for Go.** Vohu runs a real tool-calling agent loop — not a one-shot chat wrapper — behind either a terminal or a full multi-user web platform, sharing the exact same core.
+Vohu is a Go-based AI agent platform designed to give LLMs controlled access to real development environments, local systems, and remote infrastructure through structured tools and explicit execution policies.
 
-> From thought to action.
+Instead of building another AI chat application, Vohu focuses on the runtime behind an agent:
 
-## What Vohu actually does
+* Provider-independent LLM integration
+* Structured tool calling
+* Local filesystem operations
+* Command execution with security policies
+* SSH-based remote execution
+* Conversation persistence
+* Role-based access control
+* CLI and web interfaces sharing the same agent core
 
+The goal is simple:
+
+> **Let AI interact with real systems without giving it unrestricted control.**
+
+---
+
+## ✨ Features
+
+### 🤖 Agent Runtime
+
+Vohu implements a tool-using agent loop:
+
+```text
+User
+  │
+  ▼
+Agent
+  │
+  ▼
+LLM
+  │
+  ├── Final response ──────────────► User
+  │
+  └── Tool call
+          │
+          ▼
+       Tool Registry
+          │
+          ▼
+       Tool execution
+          │
+          ▼
+       Tool result
+          │
+          └──────────────► LLM
 ```
-user message → model → tool call → tool execution → tool result → model → ... → final response
+
+The agent can execute multiple tool calls across several iterations before producing a final response.
+
+The core agent is intentionally independent of HTTP, UI, persistence, and individual tools, allowing the same runtime to power different interfaces.
+
+---
+
+## 🧠 Multi-Provider LLM Architecture
+
+Vohu uses a provider abstraction so the agent does not depend on a specific LLM vendor.
+
+Currently supported integrations include:
+
+* Google Gemini
+* OpenAI
+* OpenAI-compatible APIs
+* Anthropic
+
+The internal agent works with provider-independent concepts such as:
+
+* Messages
+* Tool definitions
+* Tool calls
+* Tool results
+* Provider metadata
+
+Provider-specific details are handled inside their respective adapters.
+
+```text
+                  Agent Core
+                      │
+                      ▼
+                 LLM Interface
+                      │
+          ┌───────────┼───────────┐
+          ▼           ▼           ▼
+       Gemini       OpenAI    Anthropic
+          │           │           │
+          ▼           ▼           ▼
+       Provider-specific API
 ```
 
-The model isn't just generating text — it can ask to run a shell command or reach a remote server over SSH, see the real output, and decide what to do next, looping until it has an actual answer instead of a guess. Every tool call passes through an explicit, evaluated-before-execution security policy first; nothing runs just because the model asked.
+This allows the same tools and agent logic to work across different model providers.
 
-This repository is two things built on that same loop:
+---
 
-- **`cmd/vohu`** — a terminal chat client. Pick a model, start talking. No database, no setup beyond an API key.
-- **`cmd/server` + `web/`** — a multi-user platform. Users log in, register SSH connections and API keys, and chat with an agent that can use those connections as tools, through a browser.
+# 🛠️ Tool System
 
-Both run the identical `internal/agent` loop against the identical `internal/tools` — the platform doesn't fork the core to add multi-tenancy, it wraps it.
+Tools are first-class components in Vohu.
 
-## Quickstart
+A tool provides:
 
-### Terminal (fastest way to see it work)
+* A name
+* A description
+* Structured parameters
+* An execution method
+* A structured result
+
+Tools are registered in a central registry and their definitions can be exposed directly to the LLM.
+
+This means adding a new capability does not require modifying the agent loop itself.
+
+```text
+Tool
+ ├── Name
+ ├── Description
+ ├── Parameters
+ └── Execute()
+       │
+       ▼
+   ToolResult
+```
+
+### Current tool categories
+
+#### Filesystem
+
+* Read files
+* Write files
+* Edit files
+* List directories
+* Search files
+* Find files
+
+Filesystem tools operate inside a configured workspace and include protections against escaping the workspace through paths or symlinks.
+
+Large outputs are bounded to avoid unnecessarily filling the model context.
+
+---
+
+### Command Execution
+
+Vohu provides command execution tools with explicit execution policies.
+
+Policies can control commands based on:
+
+* Program
+* Argument prefixes
+* Allow/deny behavior
+
+For example:
+
+```text
+git status
+git log
+docker ps
+docker logs
+```
+
+can be explicitly permitted while unknown commands can be denied.
+
+Two policy modes are available:
+
+* **Accept mode** — commands must be explicitly allowed.
+* **Prohibited mode** — explicitly prohibited commands are denied.
+
+This allows deployments to choose between restrictive and permissive execution models.
+
+---
+
+### Shell Execution
+
+Vohu also provides shell execution for cases where a command needs shell semantics.
+
+Because shell commands can contain arbitrary command chains and shell syntax, shell execution should be treated as a higher-risk capability than structured command execution.
+
+---
+
+### SSH
+
+Vohu can execute commands on remote systems through SSH.
+
+The same command policy concepts can be applied to remote execution, allowing an agent to interact with infrastructure without giving it unrestricted access.
+
+```text
+Agent
+  │
+  ▼
+SSH Tool
+  │
+  ▼
+Policy
+  │
+  ▼
+Remote Host
+```
+
+---
+
+### System Tools
+
+Vohu also includes system-level tools such as retrieving the current system time.
+
+The tool architecture is intentionally extensible so additional capabilities can be introduced without changing the agent core.
+
+---
+
+# 🔐 Security
+
+Vohu is designed around the assumption that an LLM should **not automatically receive unrestricted access to the system**.
+
+Several layers are used to constrain agent capabilities.
+
+### Workspace Isolation
+
+Filesystem operations are resolved against a configured workspace.
+
+Path validation includes protection against:
+
+* `..` traversal
+* Absolute paths escaping the workspace
+* Symlink-based workspace escapes
+
+---
+
+### Command Policies
+
+Command execution is evaluated by a policy layer before reaching the operating system.
+
+```text
+LLM
+ │
+ ▼
+Tool
+ │
+ ▼
+Command Policy
+ │
+ ├── Allowed ───────► Executor
+ │
+ └── Denied ────────► Tool Error
+```
+
+This keeps execution policy separate from the LLM and the command executor.
+
+---
+
+### Safer File Modification
+
+File-writing operations include additional safeguards.
+
+For example, modifying an existing file requires the file to have been read by the agent first.
+
+The `edit_file` tool also requires an exact match for the target text, preventing ambiguous replacements when the same content appears multiple times.
+
+---
+
+# 🧩 Context-Aware Tooling
+
+Vohu's tools are designed with LLM context limits in mind.
+
+For example:
+
+* File reads are bounded.
+* File reads support offsets and limits.
+* Directory listings have entry limits.
+* Common high-volume directories can be excluded from recursive listings.
+* Tool results are returned through structured result objects.
+
+These constraints prevent a single tool call from accidentally flooding the model context with an entire repository, log file, or generated directory.
+
+---
+
+# 👥 Conversations & Access Control
+
+Vohu includes persistent conversations and user-oriented access control.
+
+The platform supports:
+
+* Users
+* Roles
+* Resource access
+* Explicit permissions
+* Explicit prohibitions
+
+Permission decisions can distinguish between operations such as:
+
+```text
+read
+write
+manage
+prohibited
+```
+
+Explicit prohibitions can override broader grants, allowing more restrictive user-specific policies.
+
+---
+
+# 🌐 Interfaces
+
+The same agent core can be used through multiple interfaces.
+
+```text
+                    Agent Core
+                   /          \
+                  /            \
+                 ▼              ▼
+              CLI/TUI         Web/API
+```
+
+The CLI and web application do not implement separate agent logic.
+
+This keeps the behavior of the agent consistent regardless of how it is accessed.
+
+---
+
+## Web Architecture
+
+The web layer provides the application-facing API and streaming communication while delegating agent execution to the same core runtime.
+
+The frontend is built with React and TypeScript.
+
+Streaming responses allow the UI to display model output and agent activity without waiting for the entire response to finish.
+
+---
+
+# 🏗️ Architecture
+
+At a high level, Vohu is organized around several independent layers:
+
+```text
+┌──────────────────────────────────────────────┐
+│                 Interfaces                   │
+│                                              │
+│              CLI / Web / API                 │
+└──────────────────────┬───────────────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────┐
+│                 Agent Core                   │
+│                                              │
+│       Agent Loop / Context / Tool Calls      │
+└───────────────┬──────────────────┬───────────┘
+                │                  │
+                ▼                  ▼
+        ┌──────────────┐    ┌──────────────┐
+        │ LLM Provider │    │ Tool Registry│
+        └──────┬───────┘    └──────┬───────┘
+               │                   │
+        ┌──────┼──────┐      ┌─────┼─────────────┐
+        ▼      ▼      ▼      ▼     ▼      ▼      ▼
+     Gemini  OpenAI  Claude  FS  Command  SSH  System
+```
+
+The important architectural boundary is between the **agent runtime**, **providers**, and **tools**.
+
+The agent should not need to know how a particular model provider implements tool calling, nor how a particular tool executes its operation.
+
+---
+
+# 📁 Project Structure
+
+A simplified view of the repository:
+
+```text
+vohu/
+├── cmd/
+│   ├── vohu/          # CLI application
+│   └── server/        # Web/API server
+│
+├── internal/
+│   ├── agent/         # Agent runtime and execution loop
+│   │
+│   ├── ai_model/      # LLM abstraction and providers
+│   │   └── models/
+│   │       ├── gemini/
+│   │       ├── openai/
+│   │       └── anthropic/
+│   │
+│   ├── tools/         # Agent tools
+│   │   ├── filesystem/
+│   │   ├── command/
+│   │   ├── ssh/
+│   │   └── ...
+│   │
+│   ├── platform/      # Application/platform services
+│   │
+│   └── ...
+│
+└── ...
+```
+
+The exact package structure may evolve as the project grows, but the core separation remains:
+
+**Agent → Provider / Tools → Infrastructure**
+
+---
+
+# 🚀 Getting Started
+
+## Requirements
+
+* Go
+* A supported LLM provider/API key
+* Node.js for the web frontend
+* Optional: SSH access for remote execution
+
+---
+
+## Run the CLI
+
+Clone the repository:
 
 ```bash
 git clone https://github.com/Aliizi83/vohu.git
 cd vohu
-export GEMINI_API_KEY=...      # or ANTHROPIC_API_KEY, or nothing (pick "OpenAI-compatible" and enter a key at the prompt)
+```
+
+Configure your model provider credentials and run:
+
+```bash
 go run ./cmd/vohu
 ```
 
-You'll be prompted to pick a model, then you're chatting — with the full tool set below available out of the box, rooted at the directory you ran it from.
+---
 
-### Platform (server + web app)
+## Run the Server
+
+Start the backend:
 
 ```bash
-# 1. Postgres + pgadmin, matching config/config-development.yml's defaults
-cp docker/.env.example docker/.env
-docker compose -f docker/docker-compose.yml --env-file docker/.env up -d
-
-# 2. API server — migrates the schema and seeds default data on first run
 go run ./cmd/server
-
-# 3. Frontend, in a second terminal
-cd web && npm install && npm run dev
 ```
 
-Log in at the printed dev URL with the seeded default admin: **`admin` / `change-me-now`**. Change that password — and the dev-only JWT secrets and AES key in `config/config-development.yml` — before this is ever exposed beyond localhost.
+Then start the frontend according to the frontend project configuration.
 
-## How it's organized
+---
 
-The agent core knows nothing about HTTP, databases, or multiple users — that separation is deliberate, not incidental.
+# ⚙️ Configuration
 
-| Package | Responsibility |
-|---|---|
-| [`internal/ai_model`](internal/ai_model) | Provider-agnostic types: the `LLM` interface, `ChatRequest`/`ChatResponse`, `Message`, `ToolCall`/`ToolResult`. |
-| [`internal/ai_model/models`](internal/ai_model/models) | `LLM` implementations — Gemini ([`google.golang.org/genai`](https://pkg.go.dev/google.golang.org/genai)), Anthropic ([`anthropic-sdk-go`](https://github.com/anthropics/anthropic-sdk-go)), and OpenAI/OpenAI-compatible ([`openai-go`](https://github.com/openai/openai-go), any base URL — DeepSeek, Groq, a local Ollama server, ...). |
-| [`internal/agent`](internal/agent) | The loop itself: calls the model, executes requested tools through the registry, feeds results back, repeats until the model stops asking for tools. No knowledge of terminals, providers, or specific tools. |
-| [`internal/tools`](internal/tools) | The `Tool` interface and `Registry` — register a tool, and its model-facing definition is auto-derived. Nothing to keep in sync by hand. |
-| [`internal/tools/command`](internal/tools/command) | `Command`, a rule-based `Policy` (allow-list or deny-list, matched on program + argument prefixes), a `LocalExecutor`/`SSHExecutor` that check the policy before anything runs, `execute_command` (one program, no shell) and `execute_shell` (`sh -c`, so pipes/redirects work — policy is checked against shell execution as a whole, since there's no sound way to allow-list what's chained inside an arbitrary shell string), and `TestDial` for verifying an SSH key works before a connection is ever saved. |
-| [`internal/tools/filesystem`](internal/tools/filesystem) | `read_file`, `write_file` (refuses to overwrite a file that hasn't been read first), `edit_file` (exact-match str_replace), `list_directory`, `search_files` (grep), `find_files` (glob, `**` supported) — every one resolved through a shared `Workspace` that rejects any path escaping its root, string-based or via a symlink. |
-| [`internal/tools/network`](internal/tools/network) | `http_fetch` — HTML responses come back as extracted text, not raw markup. |
-| [`internal/tools/system_tools`](internal/tools/system_tools) | Example tool: current system time. |
-| [`cmd/vohu`](cmd/vohu) | Terminal entry point. |
-| [`cmd/server`](cmd/server) | HTTP entry point — composition root for every `internal/platform` module below. |
+Vohu is designed to keep provider configuration separate from the agent runtime.
 
-## The platform
+Typical configuration includes:
 
-| Module | Responsibility |
-|---|---|
-| [`internal/platform/user`](internal/platform/user) | Accounts — CRUD, bcrypt password hashing. |
-| [`internal/platform/auth`](internal/platform/auth) | Login, JWT access/refresh tokens, the middleware every other module's routes sit behind. |
-| [`internal/platform/rbac`](internal/platform/rbac) | The one authorization mechanism in the platform. A `ResourceAccess` row grants a level (`read`/`write`/`manage`) on a resource type + ID to a grantee — a specific user, or every member of a role at once. A role-level grant cascades to its members; a more specific per-user row (including an explicit `prohibited` one) always wins. No separate flat-permission system running alongside it. |
-| [`internal/platform/sshconn`](internal/platform/sshconn) | SSH connections a user can grant the agent access to. Private-key auth only; a connection is test-dialed (real handshake, no command run) *before* it's saved, so a bad host or mismatched key fails loudly at creation time, not mid-conversation. Keys are AES-GCM encrypted at rest and never returned by the API. |
-| [`internal/platform/commandrule`](internal/platform/commandrule) | Each SSH connection's own command policy — an allow-list of program + argument-prefix rules, stored per connection rather than one policy shared by every connection. `chat.SSHTool` reads a connection's rules fresh on every `ssh_execute` call; a connection with no rules yet permits nothing. |
-| [`internal/platform/conversation`](internal/platform/conversation) | Chat threads and messages, with two separate read paths on purpose: `LoadHistory` (unpaginated, feeds the agent's own context) and `ListMessages` (paginated, newest page first, for the UI's scroll-up-to-load-older behavior). |
-| [`internal/platform/providerkey`](internal/platform/providerkey) | One API key per provider, per user or global — a personal key always wins over the account-wide default. |
-| [`internal/platform/custommodel`](internal/platform/custommodel) | Any number of *named* OpenAI-compatible presets (URL + key + model), per user or global — where `providerkey` gives one "openai" slot, this is what lets one account use a local Ollama server *and* a DeepSeek account side by side. |
-| [`internal/platform/agenttool`](internal/platform/agenttool) | The fixed, built-in catalog of tools the agent can call (`ssh_execute`, `list_ssh_connections`) — each row matched by name to a concrete Go implementation in `internal/platform/chat`, public or gated by `rbac.ResourceAccess`. |
-| [`internal/platform/customtool`](internal/platform/customtool) | The user/agent-authored tool catalog — a `Tool` (name/description/params schema) plus its immutable `ToolVersion` rows (one per build of its source). Storage only so far: compiling a version for a target host and running it over SSH is a later phase, not wired up yet. |
-| [`internal/platform/chat`](internal/platform/chat) | Resolves a conversation's provider/model (or custom preset) into a concrete `ai_model.LLM`, runs the agent loop with the caller's SSH connections registered as tools, streams the reply back over SSE. |
-| [`internal/platform/shared`](internal/platform/shared) | Generic CRUD/pagination/dynamic-filter helpers every module builds on, so list endpoints, response envelopes, and access-level route guards aren't reimplemented per module. |
-| [`internal/platform/httpserver`](internal/platform/httpserver) / [`migrations`](internal/platform/migrations) / [`seeders`](internal/platform/seeders) | Gin router setup; schema migration + default-data seeding on startup. |
-| [`web`](web) | React + TypeScript + Tailwind + shadcn/ui frontend — English and Persian, full RTL support. |
-
-## Safe by default
-
-Two independent mechanisms, not one blanket guardrail:
-
-- **What a tool is allowed to do** — every command (local or over SSH) is checked against a `command.Policy` *before* it runs: an accept-mode allow-list or a prohibited-mode deny-list, matched on the program name and argument prefixes. The model can ask for anything; only what the policy permits actually executes.
-- **What a user is allowed to see** — in the platform, every resource (an SSH connection, a conversation, another user) is gated by `rbac.ResourceAccess`. A caller with no grant on a conversation gets a 404, not a 403 — existence itself isn't leaked to someone with no access.
-
-## API docs
-
-Every `cmd/server` endpoint (all 55 of them) is documented with Swagger/OpenAPI — generated from `@Summary`/`@Param`/`@Success`/... comments on each handler via [swaggo/swag](https://github.com/swaggo/swag). With the server running, open `/swagger/index.html` for the interactive UI (`/swagger/doc.json` for the raw spec).
-
-A handler's annotations changing means regenerating `docs/` (committed, since `cmd/server` imports it — the build doesn't call `swag` itself):
-
-```bash
-go install github.com/swaggo/swag/cmd/swag@latest
-swag init -g cmd/server/main.go -o docs --parseDependency --parseInternal
+```text
+LLM provider
+API key
+Model
+Workspace
+Tool policies
+SSH connections
+Application settings
 ```
 
-## Development
+Provider-specific configuration is handled by the corresponding adapter while the agent itself remains provider-agnostic.
 
-```bash
-go build ./... && go vet ./... && gofmt -l .   # build, vet, format check
-go test ./...                                   # unit + integration tests (sqlite in-memory, no DB needed)
+---
 
-cd web
-npm run build    # tsc -b && vite build
-npm run lint     # oxlint
+# 🔌 Extending Vohu
+
+Adding a new tool should not require changing the agent loop.
+
+A typical tool follows this conceptual structure:
+
+```go
+type Tool interface {
+    Name() string
+    Description() string
+    Parameters() ToolParameters
+    Execute(ctx context.Context, args map[string]any) (ToolResult, error)
+}
 ```
 
-## Supported models
+Once registered, the tool can become available to the agent and its structured definition can be exposed to compatible LLM providers.
 
-- Gemini Flash, Gemini Flash Lite 3.5
-- Claude Opus 5, Claude Sonnet 5, Claude Haiku 4.5
-- Any OpenAI-compatible endpoint — OpenAI itself, or a custom base URL (DeepSeek, Groq, a local Ollama server, ...)
+This makes Vohu suitable for gradually adding capabilities such as:
 
-## Roadmap
+* Git
+* Docker
+* Kubernetes
+* Databases
+* Cloud infrastructure
+* Monitoring systems
+* CI/CD systems
+* Developer workflows
 
-- [x] Agent loop with tool-calling and a security policy
-- [x] Multi-provider support (Gemini, Anthropic, OpenAI-compatible)
-- [x] HTTP platform: users, roles, polymorphic resource access
-- [x] SSH connections as agent tools, with pre-save connection testing
-- [x] Persisted, paginated conversations
-- [x] Web frontend (React, i18n, RTL)
-- [x] Filesystem tools (read/write/edit/list/search/find), scoped to a workspace root
-- [x] Shell + HTTP fetch tools
-- [ ] Web search
-- [ ] Structured parameter schemas for tool definitions
-- [ ] Additional tools (Docker, a persistent task list)
-- [ ] Broader test coverage
+without coupling those capabilities to the core agent implementation.
 
-## License
+---
 
-MIT — see [LICENSE](LICENSE).
+# 🎯 Design Goals
+
+Vohu is built around several principles.
+
+### 1. Provider Independence
+
+The agent should not be tightly coupled to one model vendor.
+
+### 2. Controlled Capabilities
+
+LLMs should interact with systems through explicit tools rather than unrestricted access.
+
+### 3. Secure Defaults
+
+Filesystem and command execution should have meaningful boundaries.
+
+### 4. Small Agent Core
+
+The agent loop should remain simple even as the number of tools and providers grows.
+
+### 5. Real System Interaction
+
+Vohu is intended to interact with real development environments and infrastructure, not just generate text.
+
+### 6. Self Hosting
+
+The platform is designed to run under the user's own infrastructure and configuration.
+
+---
+
+# 🧪 Current Status
+
+Vohu is actively evolving.
+
+The current implementation already provides the core pieces required for a practical tool-using AI agent:
+
+* Multi-provider LLM support
+* Agent execution loop
+* Structured tool calling
+* Filesystem operations
+* Command execution
+* Command policies
+* SSH execution
+* Conversation persistence
+* Access control
+* CLI
+* Web/API
+* Streaming responses
+
+The project is currently focused on strengthening the runtime, safety model, context management, and infrastructure capabilities rather than simply adding more model integrations.
+
+---
+
+# 🗺️ Roadmap
+
+Potential areas of development include:
+
+* [ ] Parallel tool execution
+* [ ] Better context management and compaction
+* [ ] Dynamic tool discovery
+* [ ] Improved tool error semantics
+* [ ] Approval workflows for sensitive operations
+* [ ] Git tools
+* [ ] Docker tools
+* [ ] Kubernetes tools
+* [ ] Background tasks
+* [ ] Scheduled agents
+* [ ] Agent observability and tracing
+* [ ] More infrastructure integrations
+* [ ] MCP integration
+
+The roadmap is intentionally focused on improving the agent runtime rather than turning Vohu into a collection of unrelated features.
+
+---
+
+# 🤝 Contributing
+
+Contributions, ideas, and discussions are welcome.
+
+If you want to add a new capability, prefer implementing it as an independent tool or provider adapter rather than modifying the agent core.
+
+For larger architectural changes, opening an issue or discussion first is recommended.
+
+---
+
+# 📄 License
+
+See the repository license for details.
+
+---
+
+## Why Vohu?
+
+Most AI applications focus on the interface between the user and the model.
+
+Vohu focuses on what happens **after the model decides to act**.
+
+The interesting problem is not only:
+
+> "How do I ask an LLM a question?"
+
+It is:
+
+> "How can an LLM safely interact with the systems that matter?"
+
+Vohu explores that problem through a small, provider-independent agent runtime built in Go.
