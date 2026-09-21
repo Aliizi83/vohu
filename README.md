@@ -1,155 +1,275 @@
 # Vohu
 
-**A self-hosted AI agent runtime for developers and infrastructure.**
+<p align="center">
+  <strong>A self-hosted AI agent runtime for developers and infrastructure.</strong>
+</p>
 
-Vohu is a Go-based AI agent platform designed to give LLMs controlled access to real development environments, local systems, and remote infrastructure through structured tools and explicit execution policies.
+<p align="center">
+  Give AI access to real systems — with tools, policies, boundaries, and control.
+</p>
 
-Instead of building another AI chat application, Vohu focuses on the runtime behind an agent:
-
-* Provider-independent LLM integration
-* Structured tool calling
-* Local filesystem operations
-* Command execution with security policies
-* SSH-based remote execution
-* Conversation persistence
-* Role-based access control
-* CLI and web interfaces sharing the same agent core
-
-The goal is simple:
-
-> **Let AI interact with real systems without giving it unrestricted control.**
+<p align="center">
+  <a href="https://github.com/Aliizi83/vohu">GitHub</a>
+  ·
+  <a href="#-quick-start">Quick Start</a>
+  ·
+  <a href="#-architecture">Architecture</a>
+  ·
+  <a href="#-tools">Tools</a>
+  ·
+  <a href="#-roadmap">Roadmap</a>
+</p>
 
 ---
 
-## ✨ Features
+## 🧠 What is Vohu?
+
+Vohu is a **self-hosted AI agent runtime written in Go**.
+
+It allows LLMs to interact with real development environments and infrastructure through structured tools instead of unrestricted system access.
+
+An agent can:
+
+* Read and modify files
+* Search through a project
+* Execute commands
+* Interact with remote machines over SSH
+* Inspect system state
+* Work across multiple tool calls
+* Maintain conversations
+* Operate through a CLI or web interface
+
+The important part is not simply connecting an LLM to a terminal.
+
+Vohu provides the runtime around that interaction:
+
+```text
+                        ┌──────────────┐
+                        │     User     │
+                        └──────┬───────┘
+                               │
+                               ▼
+                        ┌──────────────┐
+                        │     Vohu     │
+                        │ Agent Runtime│
+                        └──────┬───────┘
+                               │
+                         Tool Calling
+                               │
+             ┌─────────────────┼─────────────────┐
+             │                 │                 │
+             ▼                 ▼                 ▼
+        Filesystem          Commands            SSH
+             │                 │                 │
+             └─────────────────┼─────────────────┘
+                               │
+                               ▼
+                        Real Environment
+```
+
+> **Vohu is built around a simple idea: AI should be able to act, but its capabilities should be explicit and controllable.**
+
+---
+
+# ✨ Highlights
+
+<table>
+<tr>
+<td width="50%">
 
 ### 🤖 Agent Runtime
 
-Vohu implements a tool-using agent loop:
+A real tool-using agent loop with iterative tool execution and model feedback.
+
+</td>
+<td width="50%">
+
+### 🔌 Multi-Provider
+
+Gemini, OpenAI, OpenAI-compatible APIs, and Anthropic through a provider abstraction.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+### 🛠️ Structured Tools
+
+Tools expose names, descriptions, parameters, and structured results to LLMs.
+
+</td>
+<td>
+
+### 🔐 Execution Policies
+
+Commands can be controlled using explicit allow/deny policies before execution.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+### 📁 Workspace Isolation
+
+Filesystem operations are restricted to a configured workspace, including symlink-aware path validation.
+
+</td>
+<td>
+
+### 🌐 Local + Remote
+
+Interact with local systems and remote infrastructure through SSH.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+### 💬 Persistent Conversations
+
+Conversations are persisted and can be reused as agent context.
+
+</td>
+<td>
+
+### 🖥️ CLI + Web
+
+Different interfaces share the same underlying agent runtime.
+
+</td>
+</tr>
+</table>
+
+---
+
+# 🎬 How It Works
+
+Vohu follows an iterative agent loop:
 
 ```text
-User
-  │
-  ▼
-Agent
-  │
-  ▼
+┌──────────┐
+│   User   │
+└────┬─────┘
+     │
+     ▼
+┌──────────┐
+│   Agent  │
+└────┬─────┘
+     │
+     ▼
+┌──────────┐
+│   LLM    │
+└────┬─────┘
+     │
+     ├───────────────┐
+     │               │
+     ▼               ▼
+Final Answer      Tool Call
+                     │
+                     ▼
+               ┌──────────┐
+               │   Tool   │
+               └────┬─────┘
+                    │
+                    ▼
+               Tool Result
+                    │
+                    └──────────────► LLM
+```
+
+For example:
+
+```text
+User:
+"Why is my nginx service failing?"
+
+        ↓
+
 LLM
-  │
-  ├── Final response ──────────────► User
-  │
-  └── Tool call
-          │
-          ▼
-       Tool Registry
-          │
-          ▼
-       Tool execution
-          │
-          ▼
-       Tool result
-          │
-          └──────────────► LLM
+        ↓
+ssh_execute("systemctl status nginx")
+
+        ↓
+
+Tool Result
+        ↓
+LLM
+        ↓
+ssh_execute("journalctl -u nginx --no-pager -n 50")
+
+        ↓
+
+Tool Result
+        ↓
+
+LLM
+        ↓
+
+"nginx is failing because..."
 ```
 
-The agent can execute multiple tool calls across several iterations before producing a final response.
-
-The core agent is intentionally independent of HTTP, UI, persistence, and individual tools, allowing the same runtime to power different interfaces.
+The agent decides **which tool to use and when**, while Vohu controls how that tool is executed.
 
 ---
 
-## 🧠 Multi-Provider LLM Architecture
-
-Vohu uses a provider abstraction so the agent does not depend on a specific LLM vendor.
-
-Currently supported integrations include:
-
-* Google Gemini
-* OpenAI
-* OpenAI-compatible APIs
-* Anthropic
-
-The internal agent works with provider-independent concepts such as:
-
-* Messages
-* Tool definitions
-* Tool calls
-* Tool results
-* Provider metadata
-
-Provider-specific details are handled inside their respective adapters.
-
-```text
-                  Agent Core
-                      │
-                      ▼
-                 LLM Interface
-                      │
-          ┌───────────┼───────────┐
-          ▼           ▼           ▼
-       Gemini       OpenAI    Anthropic
-          │           │           │
-          ▼           ▼           ▼
-       Provider-specific API
-```
-
-This allows the same tools and agent logic to work across different model providers.
-
----
-
-# 🛠️ Tool System
+# 🧩 Tools
 
 Tools are first-class components in Vohu.
 
-A tool provides:
+Each tool provides structured information that can be translated into the native tool/function-calling format of supported model providers.
 
-* A name
-* A description
-* Structured parameters
-* An execution method
-* A structured result
-
-Tools are registered in a central registry and their definitions can be exposed directly to the LLM.
-
-This means adding a new capability does not require modifying the agent loop itself.
+Conceptually:
 
 ```text
 Tool
- ├── Name
- ├── Description
- ├── Parameters
- └── Execute()
-       │
-       ▼
-   ToolResult
+├── Name
+├── Description
+├── Parameters
+└── Execute()
+      │
+      ▼
+  ToolResult
 ```
 
-### Current tool categories
+This keeps tools independent from the LLM provider.
 
-#### Filesystem
+## Current capabilities
 
-* Read files
-* Write files
-* Edit files
-* List directories
-* Search files
-* Find files
+### 📁 Filesystem
 
-Filesystem tools operate inside a configured workspace and include protections against escaping the workspace through paths or symlinks.
+* `read_file`
+* `write_file`
+* `edit_file`
+* `list_directory`
+* `search_files`
+* `find_files`
 
-Large outputs are bounded to avoid unnecessarily filling the model context.
+Filesystem tools include:
+
+* Workspace boundaries
+* Path traversal protection
+* Symlink-aware validation
+* Bounded file reads
+* Offset/limit support
+* Directory entry limits
+* Large-directory exclusions
 
 ---
 
-### Command Execution
+### ⚙️ Command Execution
 
-Vohu provides command execution tools with explicit execution policies.
+Vohu can execute system commands through a policy-controlled execution layer.
 
-Policies can control commands based on:
+Commands can be restricted using:
 
-* Program
-* Argument prefixes
-* Allow/deny behavior
+```text
+Program
+Arguments / prefixes
+Allow / deny decision
+```
 
 For example:
 
@@ -160,75 +280,138 @@ docker ps
 docker logs
 ```
 
-can be explicitly permitted while unknown commands can be denied.
+can be explicitly allowed while unknown commands can remain blocked.
 
-Two policy modes are available:
-
-* **Accept mode** — commands must be explicitly allowed.
-* **Prohibited mode** — explicitly prohibited commands are denied.
-
-This allows deployments to choose between restrictive and permissive execution models.
-
----
-
-### Shell Execution
-
-Vohu also provides shell execution for cases where a command needs shell semantics.
-
-Because shell commands can contain arbitrary command chains and shell syntax, shell execution should be treated as a higher-risk capability than structured command execution.
-
----
-
-### SSH
-
-Vohu can execute commands on remote systems through SSH.
-
-The same command policy concepts can be applied to remote execution, allowing an agent to interact with infrastructure without giving it unrestricted access.
+Two policy strategies are available:
 
 ```text
-Agent
-  │
-  ▼
-SSH Tool
-  │
-  ▼
-Policy
-  │
-  ▼
-Remote Host
+Accept Mode
+───────────
+Unknown command → Deny
+
+
+Prohibited Mode
+───────────────
+Unknown command → Allow
+Explicitly prohibited → Deny
 ```
 
 ---
 
-### System Tools
+### 🐚 Shell Execution
 
-Vohu also includes system-level tools such as retrieving the current system time.
+For commands requiring shell semantics, Vohu also provides shell execution.
 
-The tool architecture is intentionally extensible so additional capabilities can be introduced without changing the agent core.
-
----
-
-# 🔐 Security
-
-Vohu is designed around the assumption that an LLM should **not automatically receive unrestricted access to the system**.
-
-Several layers are used to constrain agent capabilities.
-
-### Workspace Isolation
-
-Filesystem operations are resolved against a configured workspace.
-
-Path validation includes protection against:
-
-* `..` traversal
-* Absolute paths escaping the workspace
-* Symlink-based workspace escapes
+Because shell commands can contain pipelines, command chains, substitutions, and other shell features, shell execution represents a higher-trust capability than structured command execution.
 
 ---
 
-### Command Policies
+### 🌐 SSH
 
-Command execution is evaluated by a policy layer before reaching the operating system.
+Vohu can interact with remote machines through SSH.
+
+The same execution-policy concepts can be applied to remote commands.
+
+```text
+                  Vohu
+                    │
+                    ▼
+                  Agent
+                    │
+                    ▼
+                SSH Tool
+                    │
+                    ▼
+                 Policy
+                    │
+                    ▼
+              Remote Host
+```
+
+This makes infrastructure-oriented workflows possible without embedding SSH logic into the agent itself.
+
+---
+
+### 🕐 System
+
+System-level capabilities such as retrieving the current system time are exposed through the same tool architecture.
+
+---
+
+# 🔌 LLM Providers
+
+Vohu separates the agent runtime from provider-specific APIs.
+
+```text
+                       Agent
+                         │
+                         ▼
+                    LLM Interface
+                         │
+          ┌──────────────┼──────────────┐
+          │              │              │
+          ▼              ▼              ▼
+       Gemini          OpenAI       Anthropic
+          │              │              │
+          ▼              ▼              ▼
+       Provider-specific adapters
+```
+
+The agent works with internal concepts such as:
+
+* Messages
+* Tool definitions
+* Tool calls
+* Tool results
+* Provider metadata
+
+Provider-specific behavior stays inside the adapters.
+
+### Supported
+
+| Provider               | Tool Calling | Notes                   |
+| ---------------------- | ------------ | ----------------------- |
+| Google Gemini          | ✅            | Native function calling |
+| OpenAI                 | ✅            | Native tool calling     |
+| OpenAI-compatible APIs | ✅            | Configurable base URL   |
+| Anthropic              | ✅            | Native tool use         |
+
+---
+
+# 🔐 Security Model
+
+Vohu treats LLM access to the operating system as a capability that should be explicitly controlled.
+
+## Filesystem boundaries
+
+Filesystem tools operate inside a configured workspace.
+
+Path resolution accounts for:
+
+* Relative path traversal
+* Absolute paths
+* Existing symlinks
+* Workspace containment
+
+A symlink such as:
+
+```text
+workspace/link → /etc
+```
+
+should not allow:
+
+```text
+read_file("link/passwd")
+```
+
+to escape the workspace.
+
+---
+
+## Command policies
+
+The command executor is separated from the policy engine:
 
 ```text
 LLM
@@ -237,363 +420,284 @@ LLM
 Tool
  │
  ▼
-Command Policy
+Policy
  │
- ├── Allowed ───────► Executor
+ ├── Allowed ───────► Executor ─────► OS
  │
- └── Denied ────────► Tool Error
+ └── Denied ────────► Tool Result
 ```
 
-This keeps execution policy separate from the LLM and the command executor.
+This means the model does not directly control the executor.
 
 ---
 
-### Safer File Modification
+## Safer file modification
 
-File-writing operations include additional safeguards.
+Vohu includes additional safeguards around file modification.
 
-For example, modifying an existing file requires the file to have been read by the agent first.
+For existing files, the agent is expected to have read the file before overwriting it.
 
-The `edit_file` tool also requires an exact match for the target text, preventing ambiguous replacements when the same content appears multiple times.
-
----
-
-# 🧩 Context-Aware Tooling
-
-Vohu's tools are designed with LLM context limits in mind.
-
-For example:
-
-* File reads are bounded.
-* File reads support offsets and limits.
-* Directory listings have entry limits.
-* Common high-volume directories can be excluded from recursive listings.
-* Tool results are returned through structured result objects.
-
-These constraints prevent a single tool call from accidentally flooding the model context with an entire repository, log file, or generated directory.
-
----
-
-# 👥 Conversations & Access Control
-
-Vohu includes persistent conversations and user-oriented access control.
-
-The platform supports:
-
-* Users
-* Roles
-* Resource access
-* Explicit permissions
-* Explicit prohibitions
-
-Permission decisions can distinguish between operations such as:
-
-```text
-read
-write
-manage
-prohibited
-```
-
-Explicit prohibitions can override broader grants, allowing more restrictive user-specific policies.
-
----
-
-# 🌐 Interfaces
-
-The same agent core can be used through multiple interfaces.
-
-```text
-                    Agent Core
-                   /          \
-                  /            \
-                 ▼              ▼
-              CLI/TUI         Web/API
-```
-
-The CLI and web application do not implement separate agent logic.
-
-This keeps the behavior of the agent consistent regardless of how it is accessed.
-
----
-
-## Web Architecture
-
-The web layer provides the application-facing API and streaming communication while delegating agent execution to the same core runtime.
-
-The frontend is built with React and TypeScript.
-
-Streaming responses allow the UI to display model output and agent activity without waiting for the entire response to finish.
+`edit_file` also requires an exact target match, avoiding ambiguous replacements when the same text occurs multiple times.
 
 ---
 
 # 🏗️ Architecture
 
-At a high level, Vohu is organized around several independent layers:
+Vohu is intentionally divided into independent layers.
 
 ```text
-┌──────────────────────────────────────────────┐
-│                 Interfaces                   │
-│                                              │
-│              CLI / Web / API                 │
-└──────────────────────┬───────────────────────┘
-                       │
-                       ▼
-┌──────────────────────────────────────────────┐
-│                 Agent Core                   │
-│                                              │
-│       Agent Loop / Context / Tool Calls      │
-└───────────────┬──────────────────┬───────────┘
-                │                  │
-                ▼                  ▼
-        ┌──────────────┐    ┌──────────────┐
-        │ LLM Provider │    │ Tool Registry│
-        └──────┬───────┘    └──────┬───────┘
-               │                   │
-        ┌──────┼──────┐      ┌─────┼─────────────┐
-        ▼      ▼      ▼      ▼     ▼      ▼      ▼
-     Gemini  OpenAI  Claude  FS  Command  SSH  System
+┌───────────────────────────────────────────────────┐
+│                   Interfaces                      │
+│                                                   │
+│                   CLI / Web                       │
+└────────────────────────┬──────────────────────────┘
+                         │
+                         ▼
+┌───────────────────────────────────────────────────┐
+│                   Agent Core                      │
+│                                                   │
+│            Agent Loop / Tool Calls                │
+└───────────────┬───────────────────┬───────────────┘
+                │                   │
+                ▼                   ▼
+        ┌───────────────┐   ┌────────────────┐
+        │ LLM Providers │   │ Tool Registry  │
+        └───────┬───────┘   └───────┬────────┘
+                │                   │
+        ┌───────┼────────┐    ┌─────┼─────────────┐
+        ▼       ▼        ▼    ▼     ▼      ▼      ▼
+     Gemini   OpenAI  Claude FS  Command  SSH   System
 ```
 
-The important architectural boundary is between the **agent runtime**, **providers**, and **tools**.
+The core principle is:
 
-The agent should not need to know how a particular model provider implements tool calling, nor how a particular tool executes its operation.
+> **The agent should not know how a provider works, and the provider should not know how a tool works.**
 
 ---
 
-# 📁 Project Structure
-
-A simplified view of the repository:
+# 📦 Project Structure
 
 ```text
 vohu/
+│
 ├── cmd/
-│   ├── vohu/          # CLI application
-│   └── server/        # Web/API server
+│   ├── vohu/              # CLI application
+│   └── server/            # Web/API server
 │
 ├── internal/
-│   ├── agent/         # Agent runtime and execution loop
 │   │
-│   ├── ai_model/      # LLM abstraction and providers
-│   │   └── models/
-│   │       ├── gemini/
-│   │       ├── openai/
-│   │       └── anthropic/
+│   ├── agent/             # Agent runtime
 │   │
-│   ├── tools/         # Agent tools
+│   ├── ai_model/          # LLM abstraction
+│   │   └── models/        # Provider adapters
+│   │
+│   ├── tools/             # Agent capabilities
 │   │   ├── filesystem/
 │   │   ├── command/
 │   │   ├── ssh/
 │   │   └── ...
 │   │
-│   ├── platform/      # Application/platform services
-│   │
-│   └── ...
+│   └── platform/          # Application/platform services
 │
 └── ...
 ```
 
-The exact package structure may evolve as the project grows, but the core separation remains:
-
-**Agent → Provider / Tools → Infrastructure**
+The goal is to keep the core runtime independent from the interface through which it is used.
 
 ---
 
-# 🚀 Getting Started
+# 💻 CLI + Web
+
+Vohu can expose the same agent through different interfaces.
+
+```text
+                   Agent Core
+                  /          \
+                 /            \
+                ▼              ▼
+             CLI/TUI        Web/API
+```
+
+This avoids maintaining separate implementations of the agent for different clients.
+
+The web interface uses streaming communication so model output can be delivered progressively to the frontend.
+
+---
+
+# 🚀 Quick Start
 
 ## Requirements
 
 * Go
-* A supported LLM provider/API key
+* API key for a supported LLM provider
 * Node.js for the web frontend
-* Optional: SSH access for remote execution
+* Optional SSH access for remote execution
 
----
-
-## Run the CLI
-
-Clone the repository:
+### Clone
 
 ```bash
 git clone https://github.com/Aliizi83/vohu.git
 cd vohu
 ```
 
-Configure your model provider credentials and run:
+### Run the CLI
 
 ```bash
 go run ./cmd/vohu
 ```
 
----
-
-## Run the Server
-
-Start the backend:
+### Run the server
 
 ```bash
 go run ./cmd/server
 ```
 
-Then start the frontend according to the frontend project configuration.
+Configure the required provider credentials and application settings according to the project's configuration.
 
 ---
 
-# ⚙️ Configuration
+# 🧪 Example
 
-Vohu is designed to keep provider configuration separate from the agent runtime.
-
-Typical configuration includes:
+Once running, you can ask Vohu questions that require actual system interaction.
 
 ```text
-LLM provider
-API key
-Model
-Workspace
-Tool policies
-SSH connections
-Application settings
+> Inspect this project and tell me why the tests are failing.
 ```
 
-Provider-specific configuration is handled by the corresponding adapter while the agent itself remains provider-agnostic.
+Instead of simply generating an answer, the agent can:
 
----
-
-# 🔌 Extending Vohu
-
-Adding a new tool should not require changing the agent loop.
-
-A typical tool follows this conceptual structure:
-
-```go
-type Tool interface {
-    Name() string
-    Description() string
-    Parameters() ToolParameters
-    Execute(ctx context.Context, args map[string]any) (ToolResult, error)
-}
+```text
+list_directory
+       ↓
+find_files
+       ↓
+read_file
+       ↓
+execute_command
+       ↓
+read_file
+       ↓
+final response
 ```
 
-Once registered, the tool can become available to the agent and its structured definition can be exposed to compatible LLM providers.
+Another example:
 
-This makes Vohu suitable for gradually adding capabilities such as:
+```text
+> Check the disk usage on my server.
+```
 
-* Git
-* Docker
-* Kubernetes
-* Databases
-* Cloud infrastructure
-* Monitoring systems
-* CI/CD systems
-* Developer workflows
+The agent can reason through:
 
-without coupling those capabilities to the core agent implementation.
+```text
+ssh_execute
+    ↓
+df
+    ↓
+ssh_execute
+    ↓
+du
+    ↓
+analysis
+```
 
----
+The model handles the reasoning.
 
-# 🎯 Design Goals
-
-Vohu is built around several principles.
-
-### 1. Provider Independence
-
-The agent should not be tightly coupled to one model vendor.
-
-### 2. Controlled Capabilities
-
-LLMs should interact with systems through explicit tools rather than unrestricted access.
-
-### 3. Secure Defaults
-
-Filesystem and command execution should have meaningful boundaries.
-
-### 4. Small Agent Core
-
-The agent loop should remain simple even as the number of tools and providers grows.
-
-### 5. Real System Interaction
-
-Vohu is intended to interact with real development environments and infrastructure, not just generate text.
-
-### 6. Self Hosting
-
-The platform is designed to run under the user's own infrastructure and configuration.
+Vohu handles the capabilities and boundaries.
 
 ---
 
-# 🧪 Current Status
+# 🧠 Why Build Another Agent?
 
-Vohu is actively evolving.
+There are already many AI assistants.
 
-The current implementation already provides the core pieces required for a practical tool-using AI agent:
+Vohu explores a slightly different problem:
 
-* Multi-provider LLM support
-* Agent execution loop
-* Structured tool calling
-* Filesystem operations
-* Command execution
-* Command policies
-* SSH execution
-* Conversation persistence
-* Access control
-* CLI
-* Web/API
-* Streaming responses
+### How do we build the runtime that sits between an LLM and a real system?
 
-The project is currently focused on strengthening the runtime, safety model, context management, and infrastructure capabilities rather than simply adding more model integrations.
+That introduces questions beyond ordinary chat:
+
+* What is the model allowed to execute?
+* How are tools represented across different providers?
+* How do we prevent filesystem escapes?
+* How do we constrain shell access?
+* How should remote execution be controlled?
+* What happens when a tool fails?
+* How do we keep tool results from consuming the entire context?
+* How should different LLM APIs expose the same capability?
+* How can the same agent core power both CLI and web clients?
+
+Vohu is an attempt to solve these problems in a small, understandable Go codebase.
+
+---
+
+# 🎯 Design Principles
+
+### Provider-agnostic
+
+The agent should not be tied to one LLM vendor.
+
+### Tool-first
+
+Capabilities should be explicit, structured, and independently executable.
+
+### Controlled execution
+
+LLMs should not receive unrestricted access to the host.
+
+### Small core
+
+The agent loop should remain understandable even as capabilities grow.
+
+### Self-hosted
+
+The runtime should be deployable under the user's own infrastructure.
+
+### Real-world interaction
+
+The purpose of tools is to interact with real systems, not only generate text.
 
 ---
 
 # 🗺️ Roadmap
 
-Potential areas of development include:
+Vohu is actively evolving.
+
+Planned or potential improvements include:
 
 * [ ] Parallel tool execution
-* [ ] Better context management and compaction
+* [ ] Context management and compaction
 * [ ] Dynamic tool discovery
-* [ ] Improved tool error semantics
-* [ ] Approval workflows for sensitive operations
-* [ ] Git tools
-* [ ] Docker tools
-* [ ] Kubernetes tools
+* [ ] Better tool error semantics
+* [ ] Human approval workflows
+* [ ] Git integration
+* [ ] Docker integration
+* [ ] Kubernetes integration
 * [ ] Background tasks
 * [ ] Scheduled agents
 * [ ] Agent observability and tracing
-* [ ] More infrastructure integrations
+* [ ] Additional infrastructure integrations
 * [ ] MCP integration
 
-The roadmap is intentionally focused on improving the agent runtime rather than turning Vohu into a collection of unrelated features.
+The focus is on improving the **agent runtime** rather than simply accumulating features.
 
 ---
 
 # 🤝 Contributing
 
-Contributions, ideas, and discussions are welcome.
+Contributions are welcome.
 
-If you want to add a new capability, prefer implementing it as an independent tool or provider adapter rather than modifying the agent core.
+When adding a new capability, prefer creating an independent tool or provider adapter rather than coupling it directly to the agent loop.
 
 For larger architectural changes, opening an issue or discussion first is recommended.
 
 ---
 
-# 📄 License
+# 📜 License
 
 See the repository license for details.
 
 ---
 
-## Why Vohu?
-
-Most AI applications focus on the interface between the user and the model.
-
-Vohu focuses on what happens **after the model decides to act**.
-
-The interesting problem is not only:
-
-> "How do I ask an LLM a question?"
-
-It is:
-
-> "How can an LLM safely interact with the systems that matter?"
-
-Vohu explores that problem through a small, provider-independent agent runtime built in Go.
+<p align="center">
+  <sub>Built with Go · Designed for real systems · Powered by AI</sub>
+</p>
