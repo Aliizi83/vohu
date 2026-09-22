@@ -77,6 +77,9 @@ func main() {
 	if err := migrations.UpP_5(db.GetDB(), logger); err != nil {
 		logger.Fatal(err, logging.Postgres, logging.Migration, err.Error(), nil)
 	}
+	if err := migrations.UpP_6(db.GetDB(), logger); err != nil {
+		logger.Fatal(err, logging.Postgres, logging.Migration, err.Error(), nil)
+	}
 
 	rbacRepo := rbac.NewCachedRepository(rbac.NewRepository(db.GetDB()), cache.GetRedis())
 	rbacService := rbac.NewService(rbacRepo)

@@ -122,3 +122,25 @@ func UpP_5(database *gorm.DB, logger logging.Logger) error {
 
 	return nil
 }
+
+// UpP_6 backfills a chat_settings row for every conversation that predates
+// that table — conversation.Service.Create now inserts both rows together
+// (see conversation.Service.Create's transaction), but a conversation
+// created before chat_settings existed never got one. Idempotent — the
+// WHERE NOT EXISTS skips any conversation that already has a row.
+func UpP_6(database *gorm.DB, logger logging.Logger) error {
+	err := database.Exec(`
+		INSERT INTO chat_settings (conversation_id, max_tool_integration, created_at, updated_at)
+		SELECT c.id, 10, now(), now()
+		FROM conversations c
+		WHERE NOT EXISTS (
+			SELECT 1 FROM chat_settings cs WHERE cs.conversation_id = c.id
+		)
+	`).Error
+	if err != nil {
+		return err
+	}
+	logger.Info(logging.Postgres, logging.Migration, "backfilled chat_settings for pre-existing conversations", nil)
+
+	return nil
+}
