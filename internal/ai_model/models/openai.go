@@ -67,9 +67,7 @@ func (agent *OpenAIAgent) Chat(
 		return response, nil
 	}
 
-	if err := accumulateOpenAIMessage(&response, result.Choices[0].Message); err != nil {
-		return response, err
-	}
+	accumulateOpenAIMessage(&response, result.Choices[0].Message)
 
 	return response, nil
 }
@@ -120,9 +118,7 @@ func (agent *OpenAIAgent) StreamChat(
 		return response, nil
 	}
 
-	if err := accumulateOpenAIMessage(&response, acc.Choices[0].Message); err != nil {
-		return response, err
-	}
+	accumulateOpenAIMessage(&response, acc.Choices[0].Message)
 
 	return response, nil
 }
@@ -161,7 +157,7 @@ func buildOpenAITools(definitions []ai_model.ToolDefinition) []openai.ChatComple
 func accumulateOpenAIMessage(
 	response *ai_model.ChatResponse,
 	message openai.ChatCompletionMessage,
-) error {
+) {
 
 	response.Content += message.Content
 
@@ -180,9 +176,23 @@ func accumulateOpenAIMessage(
 		}
 
 		args := make(map[string]any)
+		var metadata map[string]any
 
 		if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-			return err
+			// Genuinely malformed (as opposed to merely empty) arguments
+			// are usually the model's own output getting cut off
+			// mid-argument — a large generated file hitting the
+			// provider's max-output-tokens limit before the JSON closes.
+			// Returning err here would abort the whole Chat/StreamChat
+			// call and, with it, the entire turn (nothing gets
+			// persisted, the user just sees a bare "unexpected end of
+			// JSON input"). Recording the failure on the call instead
+			// lets agent.Run turn it into an ordinary failed tool result
+			// — visible, and something the model can react to (e.g. by
+			// splitting the work into smaller calls) — without losing
+			// the turn.
+			args = map[string]any{}
+			metadata = map[string]any{ai_model.MetadataParseError: err.Error()}
 		}
 
 		response.ToolCalls = append(
@@ -191,11 +201,10 @@ func accumulateOpenAIMessage(
 				ID:        call.ID,
 				Name:      call.Function.Name,
 				Arguments: args,
+				Metadata:  metadata,
 			},
 		)
 	}
-
-	return nil
 }
 
 func buildOpenAIMessages(

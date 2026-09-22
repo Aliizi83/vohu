@@ -68,6 +68,16 @@ type ToolCall struct {
 	Metadata  map[string]any `json:"metadata"`
 }
 
+// MetadataParseError is the Metadata key a provider sets when a model's
+// tool call arrived with arguments that don't parse as JSON — usually the
+// model's own output got cut off mid-argument (a large generated file
+// hitting the provider's max-output-tokens limit) rather than a real bug
+// in the call. Arguments is left as an empty map in that case; agent.Run
+// checks this key before ever handing Arguments to the tool, so a
+// malformed call surfaces as an ordinary failed tool result instead of
+// aborting the whole turn.
+const MetadataParseError = "parseError"
+
 type ToolResult struct {
 	ToolCallID string
 	Name       string

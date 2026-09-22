@@ -50,6 +50,19 @@ import { cn } from "cn"
 // for it, large enough that a normal-length conversation loads in one page.
 const MESSAGES_PAGE_SIZE = 30
 
+// A tool's result is usually a plain string (file content, ...) but
+// output-producing tools (ssh_execute, run_shell_command) wrap it as
+// {output, ...} instead — pulling "output" back out keeps real newlines
+// intact in the <pre> below rather than JSON.stringify escaping them into
+// literal "\n" text, which is what made failed commands unreadable.
+function formatToolResult(result: unknown): string {
+  if (typeof result === "string") return result
+  if (result && typeof result === "object" && typeof (result as Record<string, unknown>).output === "string") {
+    return (result as Record<string, unknown>).output as string
+  }
+  return result === undefined || result === null ? "" : JSON.stringify(result, null, 2)
+}
+
 // A tool call that's been requested this turn, shown the instant it's
 // requested (result undefined) and updated in place once its result
 // arrives — rather than only appearing once the whole turn is done.
@@ -623,18 +636,21 @@ const MessageBubble = memo(function MessageBubble({ message, pending }: { messag
   if (message.role === "tool") {
     return (
       <div className="space-y-1 rounded-md border bg-muted/50 px-3 py-2 text-xs">
-        {message.toolResults?.map((result, i) => (
-          <div key={i}>
-            <span className="font-medium">{result.name}</span>{" "}
-            {result.error ? (
-              <span className="text-destructive">{t("chat.toolError", { error: result.error })}</span>
-            ) : (
-              <pre className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">
-                {typeof result.result === "string" ? result.result : JSON.stringify(result.result, null, 2)}
-              </pre>
-            )}
-          </div>
-        ))}
+        {message.toolResults?.map((result, i) => {
+          const formatted = formatToolResult(result.result)
+          const showOutput = formatted && formatted !== result.error
+          return (
+            <div key={i}>
+              <span className="font-medium">{result.name}</span>
+              {result.error && (
+                <div className="text-destructive">{t("chat.toolError", { error: result.error })}</div>
+              )}
+              {showOutput && (
+                <pre className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">{formatted}</pre>
+              )}
+            </div>
+          )
+        })}
       </div>
     )
   }
@@ -668,6 +684,8 @@ const MessageBubble = memo(function MessageBubble({ message, pending }: { messag
 function LiveToolCallBubble({ toolCall }: { toolCall: LiveToolCall }) {
   const { t } = useLanguage()
   const { call, result } = toolCall
+  const formatted = result ? formatToolResult(result.result) : ""
+  const showOutput = result && formatted && formatted !== result.error
 
   return (
     <div className="max-w-[75%] space-y-1 rounded-md border bg-muted/50 px-3 py-2 text-xs">
@@ -679,10 +697,8 @@ function LiveToolCallBubble({ toolCall }: { toolCall: LiveToolCall }) {
         <span className="text-muted-foreground">{t("chat.callingTool", { name: call.name, args: JSON.stringify(call.arguments) })}</span>
       )}
       {result?.error && <span className="text-destructive">{t("chat.toolError", { error: result.error })}</span>}
-      {result && !result.error && (
-        <pre className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">
-          {typeof result.result === "string" ? result.result : JSON.stringify(result.result, null, 2)}
-        </pre>
+      {showOutput && (
+        <pre className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">{formatted}</pre>
       )}
     </div>
   )

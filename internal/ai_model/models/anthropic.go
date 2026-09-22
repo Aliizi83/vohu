@@ -75,9 +75,7 @@ func (agent *AnthropicAgent) Chat(
 		return response, err
 	}
 
-	if err := accumulateAnthropicResponse(&response, result.Content); err != nil {
-		return response, err
-	}
+	accumulateAnthropicResponse(&response, result.Content)
 
 	return response, nil
 }
@@ -126,9 +124,7 @@ func (agent *AnthropicAgent) StreamChat(
 		return response, err
 	}
 
-	if err := accumulateAnthropicResponse(&response, message.Content); err != nil {
-		return response, err
-	}
+	accumulateAnthropicResponse(&response, message.Content)
 
 	return response, nil
 }
@@ -173,7 +169,7 @@ func buildAnthropicTools(definitions []ai_model.ToolDefinition) []anthropic.Tool
 func accumulateAnthropicResponse(
 	response *ai_model.ChatResponse,
 	content []anthropic.ContentBlockUnion,
-) error {
+) {
 
 	for _, block := range content {
 		switch variant := block.AsAny().(type) {
@@ -193,9 +189,17 @@ func accumulateAnthropicResponse(
 			}
 
 			args := make(map[string]any)
+			var metadata map[string]any
 
 			if err := json.Unmarshal(input, &args); err != nil {
-				return err
+				// See the identical handling in accumulateOpenAIMessage:
+				// this is usually the model's own output getting cut off
+				// mid-argument, not a bug in the call itself — recording
+				// it here instead of returning err keeps the turn alive
+				// so agent.Run can surface it as an ordinary failed tool
+				// result.
+				args = map[string]any{}
+				metadata = map[string]any{ai_model.MetadataParseError: err.Error()}
 			}
 
 			response.ToolCalls = append(
@@ -204,12 +208,11 @@ func accumulateAnthropicResponse(
 					ID:        variant.ID,
 					Name:      variant.Name,
 					Arguments: args,
+					Metadata:  metadata,
 				},
 			)
 		}
 	}
-
-	return nil
 }
 
 func buildAnthropicMessages(

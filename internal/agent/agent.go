@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/Aliizi83/vohu/internal/ai_model"
@@ -57,7 +58,25 @@ func (a *Agent) Run(
 		}, onChunk)
 
 		if err != nil {
-			return messages, err
+			// Callers (chat.Handler.SendMessage) only persist a turn's
+			// history once Run returns without error — and messages
+			// already includes the user's own new message, appended by
+			// the caller before Run was ever called. Propagating err
+			// as-is, even on this very first call, would silently drop
+			// that message along with anything this turn already did (one
+			// or more tool calls may have already run and be sitting in
+			// messages). A transient provider hiccup (a proxy cutting a
+			// long stream short, say) shouldn't cost the user their own
+			// message and whatever real progress already happened —
+			// closing the turn out with an explanatory note instead keeps
+			// all of it in history.
+			return append(messages, ai_model.Message{
+				Role: ai_model.RoleAssistant,
+				Content: fmt.Sprintf(
+					"The model provider returned an error, so this turn is ending early: %v",
+					err,
+				),
+			}), nil
 		}
 
 		if len(response.ToolCalls) == 0 {
@@ -101,13 +120,24 @@ func (a *Agent) executeTool(
 	call ai_model.ToolCall,
 ) ai_model.ToolResult {
 
+	if parseErr, ok := call.Metadata[ai_model.MetadataParseError].(string); ok {
+		return ai_model.ToolResult{
+			ToolCallID: call.ID,
+			Name:       call.Name,
+			Error: fmt.Errorf(
+				"the model's arguments for this call didn't parse as JSON (%s) — this usually means its response was cut off after hitting the output length limit; try asking for a smaller step",
+				parseErr,
+			),
+		}
+	}
+
 	tool, ok := a.registry.Get(call.Name)
 
 	if !ok {
 		return ai_model.ToolResult{
 			ToolCallID: call.ID,
 			Name:       call.Name,
-			Result:     fmt.Sprintf("Unknown tool: %s", call.Name),
+			Error:      fmt.Errorf("unknown tool: %s", call.Name),
 		}
 	}
 
@@ -117,13 +147,41 @@ func (a *Agent) executeTool(
 		return ai_model.ToolResult{
 			ToolCallID: call.ID,
 			Name:       call.Name,
-			Result:     fmt.Sprintf("Tool execution failed: %v", err),
+			Error:      fmt.Errorf("tool execution failed: %w", err),
 		}
 	}
 
-	return ai_model.ToolResult{
+	// result.Data is the actual payload (a command's output, a file's
+	// content, ...) — passed through as-is rather than wrapped in
+	// result's own {data, success} struct, so callers downstream (the
+	// SSE response, the stored history, the frontend) see the real
+	// content instead of one more layer of JSON to unwrap. Success/failure
+	// is carried by Error instead of by re-inspecting Data's shape.
+	toolResult := ai_model.ToolResult{
 		ToolCallID: call.ID,
 		Name:       call.Name,
-		Result:     result,
+		Result:     result.Data,
 	}
+	if !result.Success {
+		toolResult.Error = errors.New(describeFailure(result.Data))
+	}
+	return toolResult
+}
+
+// describeFailure extracts a short, human-readable failure message from a
+// failed tool's Data. Most tools return a plain string; the ones that also
+// carry output alongside the failure (ssh_execute, run_shell_command) use
+// {"output": ..., "error": ...} — pulling just "error" out keeps that
+// message and the terminal output it's about visually separate instead of
+// the same line.
+func describeFailure(data any) string {
+	switch v := data.(type) {
+	case string:
+		return v
+	case map[string]any:
+		if errText, ok := v["error"].(string); ok {
+			return errText
+		}
+	}
+	return fmt.Sprintf("%v", data)
 }

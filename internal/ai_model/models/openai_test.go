@@ -27,9 +27,7 @@ func TestAccumulateOpenAIMessage_EmptyArgumentsIsTreatedAsEmptyObject(t *testing
 	}
 
 	var response ai_model.ChatResponse
-	if err := accumulateOpenAIMessage(&response, message); err != nil {
-		t.Fatalf("expected no error for an empty-string arguments field, got %v", err)
-	}
+	accumulateOpenAIMessage(&response, message)
 
 	if len(response.ToolCalls) != 1 {
 		t.Fatalf("expected exactly 1 tool call, got %d", len(response.ToolCalls))
@@ -39,6 +37,9 @@ func TestAccumulateOpenAIMessage_EmptyArgumentsIsTreatedAsEmptyObject(t *testing
 	}
 	if len(response.ToolCalls[0].Arguments) != 0 {
 		t.Fatalf("expected an empty arguments map, got %+v", response.ToolCalls[0].Arguments)
+	}
+	if response.ToolCalls[0].Metadata != nil {
+		t.Fatalf("expected no parseError metadata for a merely-empty argument string, got %+v", response.ToolCalls[0].Metadata)
 	}
 }
 
@@ -50,8 +51,10 @@ func TestAccumulateOpenAIMessage_WhitespaceOnlyArgumentsIsTreatedAsEmptyObject(t
 	}
 
 	var response ai_model.ChatResponse
-	if err := accumulateOpenAIMessage(&response, message); err != nil {
-		t.Fatalf("expected no error for whitespace-only arguments, got %v", err)
+	accumulateOpenAIMessage(&response, message)
+
+	if response.ToolCalls[0].Metadata != nil {
+		t.Fatalf("expected no parseError metadata for whitespace-only arguments, got %+v", response.ToolCalls[0].Metadata)
 	}
 }
 
@@ -69,15 +72,27 @@ func TestAccumulateOpenAIMessage_RealArgumentsStillParseNormally(t *testing.T) {
 	}
 
 	var response ai_model.ChatResponse
-	if err := accumulateOpenAIMessage(&response, message); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	accumulateOpenAIMessage(&response, message)
+
 	if response.ToolCalls[0].Arguments["program"] != "ls" {
 		t.Fatalf("expected real arguments to still parse correctly, got %+v", response.ToolCalls[0].Arguments)
 	}
+	if response.ToolCalls[0].Metadata != nil {
+		t.Fatalf("expected no parseError metadata for valid arguments, got %+v", response.ToolCalls[0].Metadata)
+	}
 }
 
-func TestAccumulateOpenAIMessage_TrulyInvalidArgumentsStillFails(t *testing.T) {
+// TestAccumulateOpenAIMessage_TrulyInvalidArgumentsIsRecordedNotFatal
+// guards the bug this test used to pin down the wrong way: truly
+// malformed JSON (most often the model's own output getting cut off
+// mid-argument, e.g. a large generated file hitting the provider's
+// max-output-tokens limit) used to make this function return an error,
+// which aborted the entire Chat/StreamChat call — and with it the whole
+// turn, with nothing persisted and the user seeing a bare "unexpected end
+// of JSON input". It's now recorded on the call itself instead, so
+// agent.Run can turn it into an ordinary failed tool result and the turn
+// survives.
+func TestAccumulateOpenAIMessage_TrulyInvalidArgumentsIsRecordedNotFatal(t *testing.T) {
 	message := openai.ChatCompletionMessage{
 		ToolCalls: []openai.ChatCompletionMessageToolCall{
 			{ID: "call-1", Function: openai.ChatCompletionMessageToolCallFunction{Name: "ssh_execute", Arguments: "{not json"}},
@@ -85,7 +100,15 @@ func TestAccumulateOpenAIMessage_TrulyInvalidArgumentsStillFails(t *testing.T) {
 	}
 
 	var response ai_model.ChatResponse
-	if err := accumulateOpenAIMessage(&response, message); err == nil {
-		t.Fatal("expected genuinely malformed JSON to still be reported as an error")
+	accumulateOpenAIMessage(&response, message)
+
+	if len(response.ToolCalls) != 1 {
+		t.Fatalf("expected the call to still show up in ToolCalls, got %+v", response.ToolCalls)
+	}
+	if len(response.ToolCalls[0].Arguments) != 0 {
+		t.Fatalf("expected an empty arguments map for unparseable input, got %+v", response.ToolCalls[0].Arguments)
+	}
+	if _, ok := response.ToolCalls[0].Metadata[ai_model.MetadataParseError].(string); !ok {
+		t.Fatalf("expected parseError metadata to be set, got %+v", response.ToolCalls[0].Metadata)
 	}
 }
