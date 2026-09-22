@@ -9,6 +9,7 @@ import (
 	"github.com/Aliizi83/vohu/internal/platform/auth"
 	"github.com/Aliizi83/vohu/internal/platform/chat"
 	custom_tools "github.com/Aliizi83/vohu/internal/platform/chat/system_tools/custom_tool"
+	"github.com/Aliizi83/vohu/internal/platform/chat_settings"
 	"github.com/Aliizi83/vohu/internal/platform/commandrule"
 	"github.com/Aliizi83/vohu/internal/platform/conversation"
 	"github.com/Aliizi83/vohu/internal/platform/custommodel"
@@ -118,7 +119,8 @@ func main() {
 	authHandler := auth.NewHandler(authService)
 
 	conversationRepo := conversation.NewRepository(db.GetDB())
-	conversationService := conversation.NewService(conversationRepo, hasAccessLevel)
+	chatSettingsRepo := chat_settings.NewRepository(db.GetDB())
+	conversationService := conversation.NewService(conversationRepo, chatSettingsRepo, hasAccessLevel)
 
 	// commandRuleService owns each SSH connection's own command policy —
 	// accept-mode (allow-list) rules stored per connection (table

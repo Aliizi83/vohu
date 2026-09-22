@@ -5,66 +5,34 @@ import (
 	"errors"
 
 	"github.com/Aliizi83/vohu/internal/ai_model"
+	"github.com/Aliizi83/vohu/internal/platform/chat_settings"
 	"github.com/Aliizi83/vohu/internal/platform/shared"
 )
 
 var ErrNotOwner = errors.New("conversation does not belong to this user")
 
 const resourceTypeConversation = "conversation"
-
-// defaultTitle names a conversation created with no title of its own —
-// chat.Handler.SendMessage overwrites it with something derived from the
-// first real message the moment there is one, so this is only ever seen
-// briefly, before that first message.
 const defaultTitle = "New chat"
 
 type Service interface {
 	Create(ctx context.Context, userID uint, req CreateConversationRequest) (*Conversation, error)
-
-	// Get returns shared.ErrNotFound both when the conversation truly
-	// doesn't exist and when it exists but belongs to someone else *and*
-	// the caller holds no resource-level access to it either (see
-	// hasAccessLevel) — a caller has no legitimate reason to distinguish
-	// "not found" from "not yours and not shared with you."
 	Get(ctx context.Context, userID uint, id uint) (*Conversation, error)
 	List(ctx context.Context, userID uint, archived bool, page shared.Pagination) ([]Conversation, int64, error)
-
-	// Update renames and/or archives/unarchives a conversation — see
-	// UpdateConversationRequest. Gated the same way Get is (owner, or a
-	// "write" grant on the conversation itself or its owner as a "user"
-	// resource) rather than requiring "manage," since renaming/archiving
-	// is far less consequential than Delete.
 	Update(ctx context.Context, userID uint, id uint, req UpdateConversationRequest) (*Conversation, error)
-	// Delete permanently removes a conversation and its messages (see
-	// repository.go — messages are deleted explicitly first, there's no DB
-	// foreign key to cascade on). Gated at "manage," matching every other
-	// module's Delete/manage pairing (sshconn, agenttool).
 	Delete(ctx context.Context, userID uint, id uint) error
-
-	// LoadHistory returns a conversation's messages translated into the
-	// shape agent.Agent.Run takes directly.
 	LoadHistory(ctx context.Context, userID uint, conversationID uint) ([]ai_model.Message, error)
-
-	// ListMessages is the UI-facing counterpart to LoadHistory — one page
-	// at a time (page 1 = most recent) rather than the whole conversation,
-	// for a chat view that loads older messages as the user scrolls up
-	// instead of fetching everything up front. LoadHistory is left as-is
-	// for the agent, which always needs the full conversation for context.
 	ListMessages(ctx context.Context, userID uint, conversationID uint, page shared.Pagination) ([]ai_model.Message, int64, error)
-
-	// AppendHistory persists new messages produced by one agent turn —
-	// typically everything Agent.Run returned beyond what LoadHistory
-	// handed it.
 	AppendHistory(ctx context.Context, conversationID uint, messages []ai_model.Message) error
 }
 
 type service struct {
-	repo           Repository
-	hasAccessLevel shared.AccessLevelCheck
+	repo             Repository
+	chatSettingsRepo chat_settings.Repository
+	hasAccessLevel   shared.AccessLevelCheck
 }
 
-func NewService(repo Repository, hasAccessLevel shared.AccessLevelCheck) Service {
-	return &service{repo: repo, hasAccessLevel: hasAccessLevel}
+func NewService(repo Repository, chatSettingsRepo chat_settings.Repository, hasAccessLevel shared.AccessLevelCheck) Service {
+	return &service{repo: repo, chatSettingsRepo: chatSettingsRepo, hasAccessLevel: hasAccessLevel}
 }
 
 func (s *service) Create(ctx context.Context, userID uint, req CreateConversationRequest) (*Conversation, error) {
@@ -82,6 +50,12 @@ func (s *service) Create(ctx context.Context, userID uint, req CreateConversatio
 	}
 
 	if err := s.repo.CreateConversation(ctx, conv); err != nil {
+		return nil, err
+	}
+
+	if err := s.chatSettingsRepo.Create(ctx, &chat_settings.ChatSetting{
+		ConversationID: conv.ID,
+	}); err != nil {
 		return nil, err
 	}
 

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Aliizi83/vohu/internal/ai_model"
+	"github.com/Aliizi83/vohu/internal/platform/chat_settings"
 	"github.com/Aliizi83/vohu/internal/platform/conversation"
 	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"gorm.io/driver/sqlite"
@@ -35,7 +36,7 @@ func allowAccessLevel(ctx context.Context, userID uint, resourceType string, res
 
 func newTestService(t *testing.T) conversation.Service {
 	t.Helper()
-	return conversation.NewService(conversation.NewRepository(setupConversationTestDB(t)), denyAccessLevel)
+	return conversation.NewService(conversation.NewRepository(setupConversationTestDB(t)), chat_settings.NewRepository(setupConversationTestDB(t)), denyAccessLevel)
 }
 
 func TestCreate_ThenGet_SucceedsForOwner(t *testing.T) {
@@ -76,7 +77,7 @@ func TestGet_DeniesNonOwnerWithNoResourceAccessAsNotFound(t *testing.T) {
 }
 
 func TestGet_AllowsNonOwnerWithResourceAccess(t *testing.T) {
-	service := conversation.NewService(conversation.NewRepository(setupConversationTestDB(t)), allowAccessLevel)
+	service := conversation.NewService(conversation.NewRepository(setupConversationTestDB(t)), chat_settings.NewRepository(setupConversationTestDB(t)), allowAccessLevel)
 	ctx := context.Background()
 
 	conv, err := service.Create(ctx, 1, conversation.CreateConversationRequest{
@@ -109,7 +110,7 @@ func TestGet_AllowsNonOwnerViaAccessToOwnerAsUserResource(t *testing.T) {
 		}
 		return false, nil // nothing granted directly on the conversation itself
 	}
-	service := conversation.NewService(conversation.NewRepository(setupConversationTestDB(t)), check)
+	service := conversation.NewService(conversation.NewRepository(setupConversationTestDB(t)), chat_settings.NewRepository(setupConversationTestDB(t)), check)
 	ctx := context.Background()
 
 	conv, err := service.Create(ctx, 1, conversation.CreateConversationRequest{
@@ -305,7 +306,7 @@ func TestListMessages_DeniesNonOwnerWithNoResourceAccess(t *testing.T) {
 }
 
 func TestListMessages_AllowsNonOwnerWithResourceAccess(t *testing.T) {
-	service := conversation.NewService(conversation.NewRepository(setupConversationTestDB(t)), allowAccessLevel)
+	service := conversation.NewService(conversation.NewRepository(setupConversationTestDB(t)), chat_settings.NewRepository(setupConversationTestDB(t)), allowAccessLevel)
 	ctx := context.Background()
 
 	conv, err := service.Create(ctx, 1, conversation.CreateConversationRequest{
