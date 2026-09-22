@@ -12,27 +12,13 @@ type Repository interface {
 	FindConversationByID(ctx context.Context, id uint) (*Conversation, error)
 	ListConversationsByUser(ctx context.Context, userID uint, archived bool, page shared.Pagination) ([]Conversation, int64, error)
 	UpdateConversation(ctx context.Context, c *Conversation) error
-	// DeleteConversation removes a conversation's messages first, then the
-	// conversation itself — there's no DB foreign key between them to
-	// cascade on (Message.ConversationID is a plain column, not a gorm
-	// foreign key, same decoupling-by-convention every module already
-	// follows for cross-entity references).
 	DeleteConversation(ctx context.Context, id uint) error
-
 	AppendMessages(ctx context.Context, rows []Message) error
 	ListMessages(ctx context.Context, conversationID uint) ([]Message, error)
-
-	// ListMessagesPage is the UI-facing counterpart to ListMessages — that
-	// one always reads the whole conversation for the agent's own context
-	// (LoadHistory), this one reads one page at a time for display. Page 1
-	// is the most recent messages; higher page numbers reach further back.
 	ListMessagesPage(ctx context.Context, conversationID uint, page shared.Pagination) ([]Message, int64, error)
+	WithTx(tx *gorm.DB) Repository
 }
 
-// gormRepository holds a generic repository for Conversation's plain CRUD
-// and hand-writes everything message-related, since messages are always
-// scoped to (and ordered within) one conversation rather than accessed by
-// their own ID.
 type gormRepository struct {
 	db            *gorm.DB
 	conversations *shared.GenericRepository[Conversation]
@@ -96,6 +82,10 @@ func (r *gormRepository) DeleteConversation(ctx context.Context, id uint) error 
 		return err
 	}
 	return r.conversations.Delete(ctx, id)
+}
+
+func (r *gormRepository) WithTx(tx *gorm.DB) Repository {
+	return NewRepository(tx)
 }
 
 func (r *gormRepository) AppendMessages(ctx context.Context, rows []Message) error {

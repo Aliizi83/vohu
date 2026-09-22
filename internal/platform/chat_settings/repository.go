@@ -12,6 +12,7 @@ type Repository interface {
 	Create(ctx context.Context, s *ChatSetting) error
 	FindByConversationID(ctx context.Context, conversationID uint) (*ChatSetting, error)
 	Update(ctx context.Context, s *ChatSetting) error
+	WithTx(tx *gorm.DB) Repository
 }
 
 type gormRepository struct {
@@ -44,4 +45,8 @@ func (r *gormRepository) FindByConversationID(ctx context.Context, conversationI
 
 func (r *gormRepository) Update(ctx context.Context, s *ChatSetting) error {
 	return r.generic.Update(ctx, s)
+}
+
+func (r *gormRepository) WithTx(tx *gorm.DB) Repository {
+	return NewRepository(tx)
 }

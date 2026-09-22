@@ -120,7 +120,7 @@ func main() {
 
 	conversationRepo := conversation.NewRepository(db.GetDB())
 	chatSettingsRepo := chat_settings.NewRepository(db.GetDB())
-	conversationService := conversation.NewService(conversationRepo, chatSettingsRepo, hasAccessLevel)
+	conversationService := conversation.NewService(db.GetDB(), conversationRepo, chatSettingsRepo, hasAccessLevel)
 
 	// commandRuleService owns each SSH connection's own command policy —
 	// accept-mode (allow-list) rules stored per connection (table

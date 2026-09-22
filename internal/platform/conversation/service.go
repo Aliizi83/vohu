@@ -7,6 +7,7 @@ import (
 	"github.com/Aliizi83/vohu/internal/ai_model"
 	"github.com/Aliizi83/vohu/internal/platform/chat_settings"
 	"github.com/Aliizi83/vohu/internal/platform/shared"
+	"gorm.io/gorm"
 )
 
 var ErrNotOwner = errors.New("conversation does not belong to this user")
@@ -26,13 +27,14 @@ type Service interface {
 }
 
 type service struct {
+	db               *gorm.DB
 	repo             Repository
 	chatSettingsRepo chat_settings.Repository
 	hasAccessLevel   shared.AccessLevelCheck
 }
 
-func NewService(repo Repository, chatSettingsRepo chat_settings.Repository, hasAccessLevel shared.AccessLevelCheck) Service {
-	return &service{repo: repo, chatSettingsRepo: chatSettingsRepo, hasAccessLevel: hasAccessLevel}
+func NewService(db *gorm.DB, repo Repository, chatSettingsRepo chat_settings.Repository, hasAccessLevel shared.AccessLevelCheck) Service {
+	return &service{db: db, repo: repo, chatSettingsRepo: chatSettingsRepo, hasAccessLevel: hasAccessLevel}
 }
 
 func (s *service) Create(ctx context.Context, userID uint, req CreateConversationRequest) (*Conversation, error) {
@@ -49,13 +51,19 @@ func (s *service) Create(ctx context.Context, userID uint, req CreateConversatio
 		CustomModelID: req.CustomModelID,
 	}
 
-	if err := s.repo.CreateConversation(ctx, conv); err != nil {
-		return nil, err
-	}
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		txRepo := s.repo.WithTx(tx)
+		txChatSettingsRepo := s.chatSettingsRepo.WithTx(tx)
 
-	if err := s.chatSettingsRepo.Create(ctx, &chat_settings.ChatSetting{
-		ConversationID: conv.ID,
-	}); err != nil {
+		if err := txRepo.CreateConversation(ctx, conv); err != nil {
+			return err
+		}
+
+		return txChatSettingsRepo.Create(ctx, &chat_settings.ChatSetting{
+			ConversationID: conv.ID,
+		})
+	})
+	if err != nil {
 		return nil, err
 	}
 

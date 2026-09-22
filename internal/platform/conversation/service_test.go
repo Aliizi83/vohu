@@ -20,7 +20,7 @@ func setupConversationTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("failed to open in-memory sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(&conversation.Conversation{}, &conversation.Message{}); err != nil {
+	if err := db.AutoMigrate(&conversation.Conversation{}, &conversation.Message{}, &chat_settings.ChatSetting{}); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
 	}
 	return db
@@ -36,7 +36,8 @@ func allowAccessLevel(ctx context.Context, userID uint, resourceType string, res
 
 func newTestService(t *testing.T) conversation.Service {
 	t.Helper()
-	return conversation.NewService(conversation.NewRepository(setupConversationTestDB(t)), chat_settings.NewRepository(setupConversationTestDB(t)), denyAccessLevel)
+	db := setupConversationTestDB(t)
+	return conversation.NewService(db, conversation.NewRepository(db), chat_settings.NewRepository(db), denyAccessLevel)
 }
 
 func TestCreate_ThenGet_SucceedsForOwner(t *testing.T) {
@@ -77,7 +78,8 @@ func TestGet_DeniesNonOwnerWithNoResourceAccessAsNotFound(t *testing.T) {
 }
 
 func TestGet_AllowsNonOwnerWithResourceAccess(t *testing.T) {
-	service := conversation.NewService(conversation.NewRepository(setupConversationTestDB(t)), chat_settings.NewRepository(setupConversationTestDB(t)), allowAccessLevel)
+	db := setupConversationTestDB(t)
+	service := conversation.NewService(db, conversation.NewRepository(db), chat_settings.NewRepository(db), allowAccessLevel)
 	ctx := context.Background()
 
 	conv, err := service.Create(ctx, 1, conversation.CreateConversationRequest{
@@ -110,7 +112,8 @@ func TestGet_AllowsNonOwnerViaAccessToOwnerAsUserResource(t *testing.T) {
 		}
 		return false, nil // nothing granted directly on the conversation itself
 	}
-	service := conversation.NewService(conversation.NewRepository(setupConversationTestDB(t)), chat_settings.NewRepository(setupConversationTestDB(t)), check)
+	db := setupConversationTestDB(t)
+	service := conversation.NewService(db, conversation.NewRepository(db), chat_settings.NewRepository(db), check)
 	ctx := context.Background()
 
 	conv, err := service.Create(ctx, 1, conversation.CreateConversationRequest{
@@ -306,7 +309,8 @@ func TestListMessages_DeniesNonOwnerWithNoResourceAccess(t *testing.T) {
 }
 
 func TestListMessages_AllowsNonOwnerWithResourceAccess(t *testing.T) {
-	service := conversation.NewService(conversation.NewRepository(setupConversationTestDB(t)), chat_settings.NewRepository(setupConversationTestDB(t)), allowAccessLevel)
+	db := setupConversationTestDB(t)
+	service := conversation.NewService(db, conversation.NewRepository(db), chat_settings.NewRepository(db), allowAccessLevel)
 	ctx := context.Background()
 
 	conv, err := service.Create(ctx, 1, conversation.CreateConversationRequest{
@@ -531,5 +535,42 @@ func TestUpdate_SwitchingAwayFromCustomModelClearsIt(t *testing.T) {
 	}
 	if updated.CustomModelID != nil {
 		t.Fatalf("expected CustomModelID to be cleared, got %v", updated.CustomModelID)
+	}
+}
+
+type failingChatSettingsRepo struct{}
+
+func (failingChatSettingsRepo) Create(ctx context.Context, s *chat_settings.ChatSetting) error {
+	return errors.New("boom")
+}
+
+func (failingChatSettingsRepo) FindByConversationID(ctx context.Context, conversationID uint) (*chat_settings.ChatSetting, error) {
+	return nil, shared.ErrNotFound
+}
+
+func (failingChatSettingsRepo) Update(ctx context.Context, s *chat_settings.ChatSetting) error {
+	return nil
+}
+
+func (r failingChatSettingsRepo) WithTx(tx *gorm.DB) chat_settings.Repository {
+	return r
+}
+
+func TestCreate_RollsBackConversationWhenChatSettingsInsertFails(t *testing.T) {
+	db := setupConversationTestDB(t)
+	service := conversation.NewService(db, conversation.NewRepository(db), failingChatSettingsRepo{}, allowAccessLevel)
+	ctx := context.Background()
+
+	_, err := service.Create(ctx, 1, conversation.CreateConversationRequest{
+		Title: "x", Provider: "gemini", Model: "m",
+	})
+	if err == nil {
+		t.Fatal("expected Create to fail when the chat_settings insert fails")
+	}
+
+	var count int64
+	db.Model(&conversation.Conversation{}).Count(&count)
+	if count != 0 {
+		t.Fatalf("expected the conversation insert to be rolled back too, found %d rows", count)
 	}
 }
