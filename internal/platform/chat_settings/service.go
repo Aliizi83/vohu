@@ -5,8 +5,8 @@ import (
 )
 
 type UpdateChatSettingRequest struct {
-	DefaultToolIntegration uint
-	DefaultPrompt          string `binding:"max=8000"`
+	MaxToolIntegration uint   `json:"maxToolIntegration" binding:"required,min=1,max=200"`
+	DefaultPrompt      string `json:"defaultPrompt" binding:"max=8000"`
 }
 
 type Service interface {
@@ -36,7 +36,7 @@ func (s *service) Upsert(ctx context.Context, conversationID uint, req UpdateCha
 		return nil, err
 	}
 
-	existing.MaxToolIntegration = req.DefaultToolIntegration
+	existing.MaxToolIntegration = req.MaxToolIntegration
 	existing.DefaultPrompt = req.DefaultPrompt
 	if err := s.repo.Update(ctx, existing); err != nil {
 		return nil, err

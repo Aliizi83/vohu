@@ -125,6 +125,17 @@ func main() {
 	chatSettingsRepo := chat_settings.NewRepository(db.GetDB())
 	conversationService := conversation.NewService(db.GetDB(), conversationRepo, chatSettingsRepo, hasAccessLevel)
 
+	chatSettingsService := chat_settings.NewService(chatSettingsRepo)
+	// chat_settings can't import conversation directly (conversation
+	// already imports chat_settings.Repository, and Go forbids the
+	// reverse), so this closure bridges the two exactly like
+	// hasAccessLevel/grantCreatorAccess above.
+	canAccessConversation := func(ctx context.Context, userID uint, conversationID uint) error {
+		_, err := conversationService.Get(ctx, userID, conversationID)
+		return err
+	}
+	chatSettingsHandler := chat_settings.NewHandler(chatSettingsService, canAccessConversation)
+
 	// commandRuleService owns each SSH connection's own command policy —
 	// accept-mode (allow-list) rules stored per connection (table
 	// ssh_command_rules), replacing what used to be one hardcoded rule set
@@ -192,6 +203,7 @@ func main() {
 	customtool.RegisterRoutes(v1, customToolHandler, authMiddleware, hasAccessLevel)
 	commandrule.RegisterRoutes(v1, commandRuleHandler, authMiddleware)
 	chat.RegisterRoutes(v1, chatHandler, authMiddleware)
+	chat_settings.RegisterRoutes(v1, chatSettingsHandler, authMiddleware)
 	auth.RegisterRoutes(v1, authHandler)
 
 	logger.Info(logging.General, logging.Startup, "starting vohu server", nil)

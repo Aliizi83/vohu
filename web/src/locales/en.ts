@@ -285,6 +285,16 @@ export const en = {
     switchingModel: "Switching...",
     modelChanged: "Model switched",
     modelChangeFailed: "Failed to switch model",
+    chatSettings: "Chat settings",
+    chatSettingsDialogTitle: "Chat settings",
+    chatSettingsDialogDescription: "These settings only apply to this conversation.",
+    maxToolIntegrationLabel: "Max tool calls per turn",
+    maxToolIntegrationDescription: "How many times the agent can call a tool while answering a single message.",
+    defaultPromptLabel: "Extra instructions (optional)",
+    defaultPromptPlaceholder: "e.g. \"Always prefer zsh over bash\"",
+    chatSettingsSaved: "Chat settings saved",
+    chatSettingsSaveFailed: "Failed to save chat settings",
+    chatSettingsLoadFailed: "Failed to load chat settings",
   },
 
   apiKeys: {

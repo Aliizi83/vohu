@@ -103,6 +103,12 @@ export interface ConversationDto {
   archived: boolean
 }
 
+export interface ChatSettingDto {
+  conversationId: number
+  maxToolIntegration: number
+  defaultPrompt: string
+}
+
 export interface ToolCallDto {
   id: string
   name: string
@@ -350,6 +356,12 @@ export const api = {
     remove: (id: number) => request<null>("DELETE", `/conversations/${id}`),
     messages: (id: number, page?: number, pageSize?: number) =>
       request<PagedList<MessageDto>>("GET", `/conversations/${id}/messages`, { query: listQuery(page, pageSize) }),
+  },
+
+  chatSettings: {
+    get: (conversationId: number) => request<ChatSettingDto>("GET", `/conversations/${conversationId}/settings`),
+    update: (conversationId: number, data: { maxToolIntegration: number; defaultPrompt: string }) =>
+      request<ChatSettingDto>("PUT", `/conversations/${conversationId}/settings`, { body: data }),
   },
 
   sshConnections: {

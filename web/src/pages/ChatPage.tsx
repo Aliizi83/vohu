@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react"
-import { ArchiveIcon, ArchiveRestoreIcon, ChevronDownIcon, PencilIcon, Trash2Icon } from "lucide-react"
+import { ArchiveIcon, ArchiveRestoreIcon, ChevronDownIcon, PencilIcon, SettingsIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 import { Markdown } from "@/components/Markdown"
 import { useConfirm } from "@/components/ConfirmDialog"
@@ -36,6 +36,7 @@ import {
   api,
   ApiError,
   streamMessage,
+  type ChatSettingDto,
   type ConversationDto,
   type CustomModelDto,
   type MessageDto,
@@ -99,6 +100,7 @@ export default function ChatPage() {
   const [showArchived, setShowArchived] = useState(false)
   const [renamingId, setRenamingId] = useState<number | null>(null)
   const [renameValue, setRenameValue] = useState("")
+  const [chatSettingsConvId, setChatSettingsConvId] = useState<number | null>(null)
   const [connections, setConnections] = useState<SSHConnectionDto[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [messages, setMessages] = useState<MessageDto[] | null>(null)
@@ -392,6 +394,7 @@ export default function ChatPage() {
   return (
     <div className="flex h-[calc(100vh-3rem)] gap-4">
       {confirmDialog}
+      <ChatSettingsDialog conversationId={chatSettingsConvId} onOpenChange={(open) => !open && setChatSettingsConvId(null)} />
       <aside className="flex w-64 shrink-0 flex-col gap-2 overflow-y-auto rounded-md border p-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-muted-foreground">{t("chat.conversations")}</h2>
@@ -482,6 +485,10 @@ export default function ChatPage() {
               <ContextMenuItem onClick={() => handleArchiveToggle(conv)}>
                 {conv.archived ? <ArchiveRestoreIcon /> : <ArchiveIcon />}
                 {conv.archived ? t("chat.unarchive") : t("chat.archive")}
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => setChatSettingsConvId(conv.id)}>
+                <SettingsIcon />
+                {t("chat.chatSettings")}
               </ContextMenuItem>
               <ContextMenuSeparator />
               <ContextMenuItem variant="destructive" onClick={() => handleDeleteConversation(conv)}>
@@ -983,6 +990,109 @@ function ChangeModelDialog({
           <DialogFooter>
             <Button type="submit" disabled={loading || !resolved || isUnchanged}>
               {loading ? t("chat.switchingModel") : t("chat.switchModel")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// Opened from a conversation's right-click menu rather than a
+// DialogTrigger — conversationId is null (and the dialog closed) until a
+// row is clicked, and each open fetches that conversation's settings
+// fresh rather than keeping stale state around between conversations.
+function ChatSettingsDialog({
+  conversationId,
+  onOpenChange,
+}: {
+  conversationId: number | null
+  onOpenChange: (open: boolean) => void
+}) {
+  const { t } = useLanguage()
+  const [settings, setSettings] = useState<ChatSettingDto | null>(null)
+  const [maxToolIntegration, setMaxToolIntegration] = useState(10)
+  const [defaultPrompt, setDefaultPrompt] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (conversationId === null) {
+      setSettings(null)
+      return
+    }
+    setLoading(true)
+    api.chatSettings
+      .get(conversationId)
+      .then((s) => {
+        setSettings(s)
+        setMaxToolIntegration(s.maxToolIntegration)
+        setDefaultPrompt(s.defaultPrompt)
+      })
+      .catch((err) => {
+        toast.error(err instanceof ApiError ? err.message : t("chat.chatSettingsLoadFailed"))
+        onOpenChange(false)
+      })
+      .finally(() => setLoading(false))
+    // t/onOpenChange intentionally excluded — this should only refetch
+    // when the dialog is opened for a (possibly different) conversation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId])
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    if (conversationId === null) return
+
+    setSaving(true)
+    try {
+      await api.chatSettings.update(conversationId, { maxToolIntegration, defaultPrompt })
+      toast.success(t("chat.chatSettingsSaved"))
+      onOpenChange(false)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("chat.chatSettingsSaveFailed"))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open={conversationId !== null} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <form onSubmit={handleSubmit}>
+          <DialogHeader>
+            <DialogTitle>{t("chat.chatSettingsDialogTitle")}</DialogTitle>
+            <DialogDescription>{t("chat.chatSettingsDialogDescription")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="max-tool-integration">{t("chat.maxToolIntegrationLabel")}</Label>
+              <Input
+                id="max-tool-integration"
+                type="number"
+                min={1}
+                max={200}
+                value={maxToolIntegration}
+                onChange={(e) => setMaxToolIntegration(Number(e.target.value))}
+                disabled={loading}
+              />
+              <p className="text-xs text-muted-foreground">{t("chat.maxToolIntegrationDescription")}</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="default-prompt">{t("chat.defaultPromptLabel")}</Label>
+              <textarea
+                id="default-prompt"
+                value={defaultPrompt}
+                onChange={(e) => setDefaultPrompt(e.target.value)}
+                placeholder={t("chat.defaultPromptPlaceholder")}
+                disabled={loading}
+                rows={4}
+                className="w-full resize-y rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={loading || saving || !settings}>
+              {saving ? t("common.saving") : t("common.save")}
             </Button>
           </DialogFooter>
         </form>

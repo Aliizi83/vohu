@@ -286,6 +286,16 @@ export const fa: Dictionary = {
     switchingModel: "در حال تغییر...",
     modelChanged: "مدل تغییر کرد",
     modelChangeFailed: "تغییر مدل ناموفق بود",
+    chatSettings: "تنظیمات چت",
+    chatSettingsDialogTitle: "تنظیمات چت",
+    chatSettingsDialogDescription: "این تنظیمات فقط روی همین گفتگو اعمال می‌شن.",
+    maxToolIntegrationLabel: "حداکثر تعداد فراخوانی ابزار",
+    maxToolIntegrationDescription: "ایجنت برای پاسخ به هر پیام، حداکثر چند بار می‌تونه از ابزارها استفاده کنه.",
+    defaultPromptLabel: "دستورالعمل اضافه (اختیاری)",
+    defaultPromptPlaceholder: "مثلاً: «همیشه zsh رو به bash ترجیح بده»",
+    chatSettingsSaved: "تنظیمات چت ذخیره شد",
+    chatSettingsSaveFailed: "ذخیره‌ی تنظیمات چت ناموفق بود",
+    chatSettingsLoadFailed: "خطا در بارگذاری تنظیمات چت",
   },
 
   apiKeys: {
