@@ -2,6 +2,7 @@ package conversation
 
 import (
 	"context"
+	"errors"
 
 	"github.com/Aliizi83/vohu/internal/platform/shared"
 	"gorm.io/gorm"
@@ -36,14 +37,19 @@ func (r *gormRepository) CreateConversation(ctx context.Context, c *Conversation
 }
 
 func (r *gormRepository) FindConversationByID(ctx context.Context, id uint) (*Conversation, error) {
-	return r.conversations.FindByID(ctx, id)
+	var conv Conversation
+
+	err := r.db.WithContext(ctx).Preload("Setting").First(&conv, id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, shared.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &conv, nil
 }
 
-// ListConversationsByUser is hand-written rather than going through
-// shared.ApplyDynamicFilter — that helper's FieldFilter only builds
-// string/ILIKE comparisons (it exists for user-supplied filter UIs), not
-// an exact numeric equality on a foreign key that every caller of this
-// method needs unconditionally.
 func (r *gormRepository) ListConversationsByUser(
 	ctx context.Context,
 	userID uint,
@@ -106,12 +112,6 @@ func (r *gormRepository) ListMessages(ctx context.Context, conversationID uint) 
 	return rows, err
 }
 
-// ListMessagesPage fetches the Nth most-recent chunk (page 1 = newest)
-// via ORDER BY id DESC + offset/limit, the same pattern
-// ListConversationsByUser uses, then reverses that chunk back to
-// chronological order — callers want to render a page top-to-bottom like
-// the rest of the conversation, "newest first" is only how pages are
-// numbered, not how a single page reads.
 func (r *gormRepository) ListMessagesPage(
 	ctx context.Context,
 	conversationID uint,
