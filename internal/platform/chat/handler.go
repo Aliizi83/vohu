@@ -82,9 +82,8 @@ func NewHandler(
 //	@Security		BearerAuth
 //	@Router			/conversations [post]
 func (h *Handler) CreateConversation(c *gin.Context) {
-	userID, ok := shared.GetUserID(c)
+	userID, ok := shared.RequireUserID(c)
 	if !ok {
-		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
 		return
 	}
 
@@ -123,9 +122,8 @@ type listConversationsQuery struct {
 //	@Security		BearerAuth
 //	@Router			/conversations [get]
 func (h *Handler) ListConversations(c *gin.Context) {
-	userID, ok := shared.GetUserID(c)
+	userID, ok := shared.RequireUserID(c)
 	if !ok {
-		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
 		return
 	}
 
@@ -169,15 +167,13 @@ func (h *Handler) ListConversations(c *gin.Context) {
 //	@Security		BearerAuth
 //	@Router			/conversations/{id} [put]
 func (h *Handler) UpdateConversation(c *gin.Context) {
-	userID, ok := shared.GetUserID(c)
+	userID, ok := shared.RequireUserID(c)
 	if !ok {
-		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
 		return
 	}
 
-	id, err := shared.ParseIDParam(c)
-	if err != nil {
-		shared.RespondError(c, http.StatusBadRequest, shared.ResultValidationError, errors.New("invalid id"))
+	id, ok := shared.RequireIDParam(c)
+	if !ok {
 		return
 	}
 
@@ -213,15 +209,13 @@ func (h *Handler) UpdateConversation(c *gin.Context) {
 //	@Security		BearerAuth
 //	@Router			/conversations/{id} [delete]
 func (h *Handler) DeleteConversation(c *gin.Context) {
-	userID, ok := shared.GetUserID(c)
+	userID, ok := shared.RequireUserID(c)
 	if !ok {
-		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
 		return
 	}
 
-	id, err := shared.ParseIDParam(c)
-	if err != nil {
-		shared.RespondError(c, http.StatusBadRequest, shared.ResultValidationError, errors.New("invalid id"))
+	id, ok := shared.RequireIDParam(c)
+	if !ok {
 		return
 	}
 
@@ -262,15 +256,13 @@ type listMessagesQuery struct {
 //	@Security		BearerAuth
 //	@Router			/conversations/{id}/messages [get]
 func (h *Handler) GetMessages(c *gin.Context) {
-	userID, ok := shared.GetUserID(c)
+	userID, ok := shared.RequireUserID(c)
 	if !ok {
-		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
 		return
 	}
 
-	id, err := shared.ParseIDParam(c)
-	if err != nil {
-		shared.RespondError(c, http.StatusBadRequest, shared.ResultValidationError, errors.New("invalid id"))
+	id, ok := shared.RequireIDParam(c)
+	if !ok {
 		return
 	}
 
@@ -319,15 +311,13 @@ func (h *Handler) GetMessages(c *gin.Context) {
 //	@Security		BearerAuth
 //	@Router			/conversations/{id}/messages [post]
 func (h *Handler) SendMessage(c *gin.Context) {
-	userID, ok := shared.GetUserID(c)
+	userID, ok := shared.RequireUserID(c)
 	if !ok {
-		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
 		return
 	}
 
-	conversationID, err := shared.ParseIDParam(c)
-	if err != nil {
-		shared.RespondError(c, http.StatusBadRequest, shared.ResultValidationError, errors.New("invalid id"))
+	conversationID, ok := shared.RequireIDParam(c)
+	if !ok {
 		return
 	}
 

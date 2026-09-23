@@ -39,9 +39,8 @@ func mapError(err error) (int, shared.ResultCode) {
 //	@Security		BearerAuth
 //	@Router			/custom-models/me [post]
 func (h *Handler) CreateMine(c *gin.Context) {
-	userID, ok := shared.GetUserID(c)
+	userID, ok := shared.RequireUserID(c)
 	if !ok {
-		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
 		return
 	}
 
@@ -70,9 +69,8 @@ func (h *Handler) CreateMine(c *gin.Context) {
 //	@Security		BearerAuth
 //	@Router			/custom-models/me [get]
 func (h *Handler) ListMine(c *gin.Context) {
-	userID, ok := shared.GetUserID(c)
+	userID, ok := shared.RequireUserID(c)
 	if !ok {
-		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
 		return
 	}
 
@@ -97,15 +95,13 @@ func (h *Handler) ListMine(c *gin.Context) {
 //	@Security		BearerAuth
 //	@Router			/custom-models/me/{id} [delete]
 func (h *Handler) DeleteMine(c *gin.Context) {
-	userID, ok := shared.GetUserID(c)
+	userID, ok := shared.RequireUserID(c)
 	if !ok {
-		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
 		return
 	}
 
-	id, err := shared.ParseIDParam(c)
-	if err != nil {
-		shared.RespondError(c, http.StatusBadRequest, shared.ResultValidationError, errors.New("invalid id"))
+	id, ok := shared.RequireIDParam(c)
+	if !ok {
 		return
 	}
 
@@ -128,9 +124,8 @@ func (h *Handler) DeleteMine(c *gin.Context) {
 //	@Security		BearerAuth
 //	@Router			/custom-models/available [get]
 func (h *Handler) ListAccessible(c *gin.Context) {
-	userID, ok := shared.GetUserID(c)
+	userID, ok := shared.RequireUserID(c)
 	if !ok {
-		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
 		return
 	}
 
@@ -202,9 +197,8 @@ func (h *Handler) ListGlobal(c *gin.Context) {
 //	@Security		BearerAuth
 //	@Router			/custom-models/{id} [delete]
 func (h *Handler) DeleteGlobal(c *gin.Context) {
-	id, err := shared.ParseIDParam(c)
-	if err != nil {
-		shared.RespondError(c, http.StatusBadRequest, shared.ResultValidationError, errors.New("invalid id"))
+	id, ok := shared.RequireIDParam(c)
+	if !ok {
 		return
 	}
 

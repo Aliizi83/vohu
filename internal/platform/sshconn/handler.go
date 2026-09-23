@@ -44,9 +44,8 @@ func mapError(err error) (int, shared.ResultCode) {
 //	@Security		BearerAuth
 //	@Router			/ssh-connections [post]
 func (h *Handler) Create(c *gin.Context) {
-	userID, ok := shared.GetUserID(c)
+	userID, ok := shared.RequireUserID(c)
 	if !ok {
-		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
 		return
 	}
 
@@ -145,9 +144,8 @@ func (h *Handler) Delete(c *gin.Context) {
 //	@Security		BearerAuth
 //	@Router			/ssh-connections [get]
 func (h *Handler) List(c *gin.Context) {
-	userID, ok := shared.GetUserID(c)
+	userID, ok := shared.RequireUserID(c)
 	if !ok {
-		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
 		return
 	}
 

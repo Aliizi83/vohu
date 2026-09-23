@@ -86,9 +86,8 @@ func (h *Handler) Update(c *gin.Context) {
 //	@Security		BearerAuth
 //	@Router			/agent-tools [get]
 func (h *Handler) List(c *gin.Context) {
-	userID, ok := shared.GetUserID(c)
+	userID, ok := shared.RequireUserID(c)
 	if !ok {
-		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
 		return
 	}
 

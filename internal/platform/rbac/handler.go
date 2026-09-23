@@ -154,9 +154,8 @@ func (h *Handler) ListRoles(c *gin.Context) {
 //	@Security		BearerAuth
 //	@Router			/users/{id}/roles [post]
 func (h *Handler) AssignRoleToUser(c *gin.Context) {
-	userID, err := shared.ParseIDParam(c)
-	if err != nil {
-		shared.RespondError(c, http.StatusBadRequest, shared.ResultValidationError, errors.New("invalid id"))
+	userID, ok := shared.RequireIDParam(c)
+	if !ok {
 		return
 	}
 
@@ -197,9 +196,8 @@ func (h *Handler) AssignRoleToUser(c *gin.Context) {
 //	@Security		BearerAuth
 //	@Router			/resource-access [post]
 func (h *Handler) GrantResourceAccess(c *gin.Context) {
-	userID, ok := shared.GetUserID(c)
+	userID, ok := shared.RequireUserID(c)
 	if !ok {
-		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
 		return
 	}
 
@@ -268,15 +266,13 @@ func (h *Handler) ListResourceAccess(c *gin.Context) {
 //	@Security		BearerAuth
 //	@Router			/resource-access/{id} [delete]
 func (h *Handler) RevokeResourceAccess(c *gin.Context) {
-	userID, ok := shared.GetUserID(c)
+	userID, ok := shared.RequireUserID(c)
 	if !ok {
-		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
 		return
 	}
 
-	id, err := shared.ParseIDParam(c)
-	if err != nil {
-		shared.RespondError(c, http.StatusBadRequest, shared.ResultValidationError, errors.New("invalid id"))
+	id, ok := shared.RequireIDParam(c)
+	if !ok {
 		return
 	}
 
@@ -318,9 +314,8 @@ func (h *Handler) RevokeResourceAccess(c *gin.Context) {
 //	@Security		BearerAuth
 //	@Router			/me/access [get]
 func (h *Handler) GetMyAccess(c *gin.Context) {
-	userID, ok := shared.GetUserID(c)
+	userID, ok := shared.RequireUserID(c)
 	if !ok {
-		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
 		return
 	}
 

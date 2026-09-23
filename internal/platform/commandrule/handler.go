@@ -52,9 +52,8 @@ func mapError(err error) (int, shared.ResultCode) {
 //	@Security		BearerAuth
 //	@Router			/command-rules [post]
 func (h *Handler) Create(c *gin.Context) {
-	userID, ok := shared.GetUserID(c)
+	userID, ok := shared.RequireUserID(c)
 	if !ok {
-		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
 		return
 	}
 
@@ -106,9 +105,8 @@ type listQuery struct {
 //	@Security		BearerAuth
 //	@Router			/command-rules [get]
 func (h *Handler) List(c *gin.Context) {
-	userID, ok := shared.GetUserID(c)
+	userID, ok := shared.RequireUserID(c)
 	if !ok {
-		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
 		return
 	}
 
@@ -163,15 +161,13 @@ func (h *Handler) List(c *gin.Context) {
 //	@Security		BearerAuth
 //	@Router			/command-rules/{id} [put]
 func (h *Handler) Update(c *gin.Context) {
-	userID, ok := shared.GetUserID(c)
+	userID, ok := shared.RequireUserID(c)
 	if !ok {
-		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
 		return
 	}
 
-	id, err := shared.ParseIDParam(c)
-	if err != nil {
-		shared.RespondError(c, http.StatusBadRequest, shared.ResultValidationError, errors.New("invalid id"))
+	id, ok := shared.RequireIDParam(c)
+	if !ok {
 		return
 	}
 
@@ -223,15 +219,13 @@ func (h *Handler) Update(c *gin.Context) {
 //	@Security		BearerAuth
 //	@Router			/command-rules/{id} [delete]
 func (h *Handler) Delete(c *gin.Context) {
-	userID, ok := shared.GetUserID(c)
+	userID, ok := shared.RequireUserID(c)
 	if !ok {
-		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
 		return
 	}
 
-	id, err := shared.ParseIDParam(c)
-	if err != nil {
-		shared.RespondError(c, http.StatusBadRequest, shared.ResultValidationError, errors.New("invalid id"))
+	id, ok := shared.RequireIDParam(c)
+	if !ok {
 		return
 	}
 

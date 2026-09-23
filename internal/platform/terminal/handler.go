@@ -39,15 +39,13 @@ func NewHandler(tickets *TicketStore, sshconns sshconn.Service, logger logging.L
 //	@Security		BearerAuth
 //	@Router			/ssh-connections/{id}/terminal-ticket [post]
 func (h *Handler) IssueTicket(c *gin.Context) {
-	userID, ok := shared.GetUserID(c)
+	userID, ok := shared.RequireUserID(c)
 	if !ok {
-		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
 		return
 	}
 
-	connectionID, err := shared.ParseIDParam(c)
-	if err != nil {
-		shared.RespondError(c, http.StatusBadRequest, shared.ResultValidationError, errors.New("invalid id"))
+	connectionID, ok := shared.RequireIDParam(c)
+	if !ok {
 		return
 	}
 
@@ -61,9 +59,6 @@ func (h *Handler) IssueTicket(c *gin.Context) {
 }
 
 var upgrader = websocket.Upgrader{
-	// The frontend always talks to this same origin (proxied in dev,
-	// same-origin in prod) — nothing here ever needs a cross-origin
-	// WebSocket, so there's no CORS allow-list to maintain.
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
@@ -80,9 +75,8 @@ var upgrader = websocket.Upgrader{
 //	@Failure		400		{object}	shared.BaseResponse
 //	@Router			/ssh-connections/{id}/terminal-ws [get]
 func (h *Handler) ServeWS(c *gin.Context) {
-	connectionID, err := shared.ParseIDParam(c)
-	if err != nil {
-		shared.RespondError(c, http.StatusBadRequest, shared.ResultValidationError, errors.New("invalid id"))
+	connectionID, ok := shared.RequireIDParam(c)
+	if !ok {
 		return
 	}
 

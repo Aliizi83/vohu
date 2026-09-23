@@ -9,13 +9,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// The five handlers below mirror sample-golang-project's
-// api/handlers/base_generic_crud.go (Create/Update/Delete/GetById/
-// GetByFilter), rebuilt on this project's BaseResponse instead of their
-// helpers package. mapErr is supplied per call site (rather than a global
-// error->status table) so this package never has to import a module's
-// sentinel errors just to know how to respond to them.
-
 type ErrorMapper func(error) (status int, code ResultCode)
 
 func CreateHandler[TRequest, TInput, TOutput, TResponse any](
@@ -48,9 +41,8 @@ func UpdateHandler[TRequest, TInput, TOutput, TResponse any](
 	update func(ctx context.Context, id uint, input TInput) (TOutput, error),
 	mapErr ErrorMapper,
 ) {
-	id, err := ParseIDParam(c)
-	if err != nil {
-		RespondError(c, http.StatusBadRequest, ResultValidationError, errors.New("invalid id"))
+	id, ok := RequireIDParam(c)
+	if !ok {
 		return
 	}
 
@@ -76,9 +68,8 @@ func GetByIDHandler[TOutput, TResponse any](
 	getByID func(ctx context.Context, id uint) (TOutput, error),
 	mapErr ErrorMapper,
 ) {
-	id, err := ParseIDParam(c)
-	if err != nil {
-		RespondError(c, http.StatusBadRequest, ResultValidationError, errors.New("invalid id"))
+	id, ok := RequireIDParam(c)
+	if !ok {
 		return
 	}
 
@@ -97,9 +88,8 @@ func DeleteHandler(
 	del func(ctx context.Context, id uint) error,
 	mapErr ErrorMapper,
 ) {
-	id, err := ParseIDParam(c)
-	if err != nil {
-		RespondError(c, http.StatusBadRequest, ResultValidationError, errors.New("invalid id"))
+	id, ok := RequireIDParam(c)
+	if !ok {
 		return
 	}
 
@@ -112,23 +102,12 @@ func DeleteHandler(
 	RespondSuccess(c, http.StatusOK, nil)
 }
 
-// listQuery is what ListHandler and ParseListQuery bind from the query
-// string — GET requests can't carry a JSON body (the fetch spec rejects a
-// body on GET/HEAD outright, so a browser client couldn't call this
-// endpoint at all if it required one). Pagination binds as plain query
-// params; DynamicFilter — a map, awkward to flatten into query-string
-// form tags — travels as a single JSON-encoded "filter" param instead.
 type listQuery struct {
 	PageNumber int    `form:"pageNumber"`
 	PageSize   int    `form:"pageSize"`
 	Filter     string `form:"filter"`
 }
 
-// ParseListQuery is ListHandler's query-parsing half, exposed on its own
-// for handlers that can't use the fully generic ListHandler — e.g. one
-// that has to thread the authenticated caller's ID into the service call
-// (sshconn's List, which filters differently per caller) rather than just
-// forwarding filter/page straight through.
 func ParseListQuery(c *gin.Context) (Pagination, DynamicFilter, error) {
 	var q listQuery
 	if err := c.ShouldBindQuery(&q); err != nil {
@@ -170,10 +149,6 @@ func ListHandler[TOutput, TResponse any](
 	RespondSuccess(c, http.StatusOK, NewPagedList(responses, total, page))
 }
 
-// Identity is a trivial mapper for CreateHandler/UpdateHandler's
-// requestMapper/responseMapper params when a module's API-level DTO
-// already *is* what the service takes/returns — no separate api-dto vs
-// service-dto split like sample-golang-project has.
 func Identity[T any](v T) T {
 	return v
 }

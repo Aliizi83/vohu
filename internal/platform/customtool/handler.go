@@ -42,9 +42,8 @@ func mapError(err error) (int, shared.ResultCode) {
 // @Security		BearerAuth
 // @Router			/custom-tools [post]
 func (h *Handler) Create(c *gin.Context) {
-	userID, ok := shared.GetUserID(c)
+	userID, ok := shared.RequireUserID(c)
 	if !ok {
-		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
 		return
 	}
 
@@ -130,9 +129,8 @@ func (h *Handler) Delete(c *gin.Context) {
 // @Security		BearerAuth
 // @Router			/custom-tools [get]
 func (h *Handler) List(c *gin.Context) {
-	userID, ok := shared.GetUserID(c)
+	userID, ok := shared.RequireUserID(c)
 	if !ok {
-		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
 		return
 	}
 
@@ -222,15 +220,13 @@ func ParseGoErrors(raw string) []SourceDiagnostic {
 // @Security		BearerAuth
 // @Router			/custom-tools/{id}/versions [post]
 func (h *Handler) CreateVersion(c *gin.Context) {
-	userID, ok := shared.GetUserID(c)
+	userID, ok := shared.RequireUserID(c)
 	if !ok {
-		shared.AbortWithError(c, http.StatusUnauthorized, shared.ResultAuthError, errors.New("unauthenticated"))
 		return
 	}
 
-	toolID, err := shared.ParseIDParam(c)
-	if err != nil {
-		shared.RespondError(c, http.StatusBadRequest, shared.ResultValidationError, errors.New("invalid id"))
+	toolID, ok := shared.RequireIDParam(c)
+	if !ok {
 		return
 	}
 
@@ -263,9 +259,8 @@ func (h *Handler) CreateVersion(c *gin.Context) {
 // @Security		BearerAuth
 // @Router			/custom-tools/{id}/versions [get]
 func (h *Handler) ListVersions(c *gin.Context) {
-	toolID, err := shared.ParseIDParam(c)
-	if err != nil {
-		shared.RespondError(c, http.StatusBadRequest, shared.ResultValidationError, errors.New("invalid id"))
+	toolID, ok := shared.RequireIDParam(c)
+	if !ok {
 		return
 	}
 
