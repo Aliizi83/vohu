@@ -24,13 +24,13 @@ type Agent struct {
 	maxToolIterations int
 }
 
-func New(llm ai_model.LLM, registry *tools.Registry, model string, systemPrompt string) *Agent {
+func New(llm ai_model.LLM, registry *tools.Registry, model string, systemPrompt string, maxToolIterations int) *Agent {
 	return &Agent{
 		llm:               llm,
 		registry:          registry,
 		model:             model,
 		systemPrompt:      systemPrompt,
-		maxToolIterations: DefaultMaxToolIterations,
+		maxToolIterations: maxToolIterations,
 	}
 }
 

@@ -5,7 +5,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Aliizi83/vohu/internal/agent"
 	"github.com/Aliizi83/vohu/internal/ai_model"
 	"github.com/Aliizi83/vohu/internal/tools"
 )
@@ -40,9 +39,13 @@ Your "sourceCode" must be a complete, self-contained Go "package main" file:
 
 If your source doesn't compile, create_custom_tool comes back with success=false and a list of {line, column, message} diagnostics instead of anything being saved — fix the code and call it again.`
 
-func buildSystemPrompt(registry *tools.Registry) string {
+func buildSystemPrompt(registry *tools.Registry, customPrompt string, maxToolIterations int) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, agentIntroTemplate, agent.DefaultMaxToolIterations)
+	fmt.Fprintf(&b, agentIntroTemplate, maxToolIterations)
+	if customPrompt != "" {
+		b.WriteString("\n")
+		b.WriteString(customPrompt)
+	}
 
 	definitions := registry.Definitions()
 	if len(definitions) > 0 {

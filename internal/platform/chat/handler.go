@@ -346,6 +346,7 @@ func (h *Handler) SendMessage(c *gin.Context) {
 		shared.RespondError(c, http.StatusInternalServerError, shared.ResultInternalError, err)
 		return
 	}
+	convSetting := conv.Setting
 
 	llm, err := buildLLM(c.Request.Context(), h.providerKeys, h.customModels, userID, conv.Provider, conv.CustomModelID)
 	if err != nil {
@@ -369,7 +370,7 @@ func (h *Handler) SendMessage(c *gin.Context) {
 		return
 	}
 
-	vohuAgent := agent.New(llm, registry, conv.Model, buildSystemPrompt(registry))
+	vohuAgent := agent.New(llm, registry, conv.Model, buildSystemPrompt(registry, convSetting.DefaultPrompt, int(convSetting.MaxToolIntegration)), int(convSetting.MaxToolIntegration))
 
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
@@ -404,12 +405,6 @@ func (h *Handler) SendMessage(c *gin.Context) {
 		return
 	}
 
-	// A conversation is created with no title (see
-	// conversation.CreateConversationRequest's doc comment) — the first
-	// message that actually lands is the first point there's anything
-	// meaningful to name it after. Best-effort: a failed rename doesn't
-	// invalidate an otherwise-successful turn, so its error is dropped
-	// rather than surfaced as an "error" event.
 	if len(history) == 0 {
 		title := deriveTitle(req.Content)
 		if _, err := h.conversations.Update(c.Request.Context(), userID, conversationID, conversation.UpdateConversationRequest{Title: title}); err == nil {
@@ -424,14 +419,8 @@ func (h *Handler) SendMessage(c *gin.Context) {
 	writeSSE("done", responses)
 }
 
-// maxDerivedTitleLength keeps a derived title readable in a sidebar
-// row — well under Conversation.Title's own 255-char column limit.
 const maxDerivedTitleLength = 60
 
-// deriveTitle turns a user's first message into a short conversation
-// title — the same "picks a name for you" convention ChatGPT and similar
-// products use, since asking upfront for a title on a conversation that
-// doesn't have any messages yet just adds friction for no benefit.
 func deriveTitle(content string) string {
 	collapsed := strings.Join(strings.Fields(content), " ")
 	if collapsed == "" {
