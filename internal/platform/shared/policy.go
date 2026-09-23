@@ -58,6 +58,40 @@ func RequireAccessLevelOnParam(check AccessLevelCheck, resourceType string, leve
 	}
 }
 
+// RequireCustomCheckOnParam is RequireAccessLevelOnParam's counterpart for
+// a resource whose access rule isn't a plain RBAC grant — e.g. a
+// conversation, where "may this caller touch it" also means "are they the
+// owner" and cascades through their role, not just a direct resource
+// grant (see conversation.Service.canAccess). check is expected to return
+// ErrNotFound for a denial (same 404-not-403 reasoning as
+// RequireAccessLevelOnParam) and any other error for a real failure.
+func RequireCustomCheckOnParam(check func(ctx context.Context, userID uint, resourceID uint) error) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, ok := GetUserID(c)
+		if !ok {
+			AbortWithError(c, http.StatusUnauthorized, ResultAuthError, errors.New("unauthenticated"))
+			return
+		}
+
+		resourceID, err := ParseIDParam(c)
+		if err != nil {
+			AbortWithError(c, http.StatusBadRequest, ResultValidationError, errors.New("invalid id"))
+			return
+		}
+
+		if err := check(c.Request.Context(), userID, resourceID); err != nil {
+			if errors.Is(err, ErrNotFound) {
+				AbortWithError(c, http.StatusNotFound, ResultNotFoundError, err)
+				return
+			}
+			AbortWithError(c, http.StatusInternalServerError, ResultInternalError, errors.New("internal error"))
+			return
+		}
+
+		c.Next()
+	}
+}
+
 // RequireAccessLevelWildcard builds Gin middleware for routes that don't
 // operate on one existing resource (POST create, GET list) — checked
 // against WildcardResourceID instead of a URL param. There's no specific

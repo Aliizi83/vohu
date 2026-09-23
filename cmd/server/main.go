@@ -134,7 +134,7 @@ func main() {
 		_, err := conversationService.Get(ctx, userID, conversationID)
 		return err
 	}
-	chatSettingsHandler := chat_settings.NewHandler(chatSettingsService, canAccessConversation)
+	chatSettingsHandler := chat_settings.NewHandler(chatSettingsService)
 
 	// commandRuleService owns each SSH connection's own command policy —
 	// accept-mode (allow-list) rules stored per connection (table
@@ -203,7 +203,7 @@ func main() {
 	customtool.RegisterRoutes(v1, customToolHandler, authMiddleware, hasAccessLevel)
 	commandrule.RegisterRoutes(v1, commandRuleHandler, authMiddleware)
 	chat.RegisterRoutes(v1, chatHandler, authMiddleware)
-	chat_settings.RegisterRoutes(v1, chatSettingsHandler, authMiddleware)
+	chat_settings.RegisterRoutes(v1, chatSettingsHandler, authMiddleware, canAccessConversation)
 	auth.RegisterRoutes(v1, authHandler)
 
 	logger.Info(logging.General, logging.Startup, "starting vohu server", nil)
