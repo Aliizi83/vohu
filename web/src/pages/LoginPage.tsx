@@ -41,9 +41,9 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-muted/30 p-4">
-      <Logo className="size-14" />
-      <Card className="w-full max-w-sm">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 p-4">
+      <Logo className="size-14 drop-shadow-sm" />
+      <Card className="w-full max-w-sm shadow-2xl">
         <CardHeader>
           <CardTitle>{t("login.title")}</CardTitle>
           <CardDescription>{t("login.subtitle")}</CardDescription>

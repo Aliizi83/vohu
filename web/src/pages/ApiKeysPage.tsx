@@ -218,14 +218,14 @@ function ProviderKeyTable({
         <p className="text-sm text-muted-foreground">{description}</p>
       </div>
 
-      <div className="rounded-md border">
+      <div className="glass-panel">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>{t("apiKeys.columnProvider")}</TableHead>
               <TableHead>{t("apiKeys.columnStatus")}</TableHead>
               <TableHead>{t("apiKeys.columnBaseUrlWorkspace")}</TableHead>
-              <TableHead className="text-end">{t("common.actions")}</TableHead>
+              <TableHead>{t("common.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -404,14 +404,14 @@ function CustomModelSection({
         <AddCustomModelDialog suggestions={suggestions} onCreate={onCreate} />
       </div>
 
-      <div className="rounded-md border">
+      <div className="glass-panel">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>{t("apiKeys.columnName")}</TableHead>
               <TableHead>{t("apiKeys.columnModelName")}</TableHead>
               <TableHead>{t("apiKeys.columnBaseUrlWorkspace")}</TableHead>
-              <TableHead className="text-end">{t("common.actions")}</TableHead>
+              <TableHead>{t("common.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -437,7 +437,7 @@ function CustomModelSection({
                 <TableCell className="font-medium">{model.name}</TableCell>
                 <TableCell className="text-muted-foreground">{model.modelName}</TableCell>
                 <TableCell className="text-muted-foreground">{model.baseUrl}</TableCell>
-                <TableCell className="text-end">
+                <TableCell>
                   <Button variant="destructive" size="sm" onClick={() => handleRemove(model)}>
                     {t("apiKeys.remove")}
                   </Button>

@@ -31,6 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { useAccess } from "@/lib/access"
 import { useLanguage } from "@/lib/i18n"
 import {
   api,
@@ -73,6 +74,7 @@ const EFFECT_KEYS: Record<ResourceEffect, string> = {
 
 export default function ResourceAccessPage() {
   const { t } = useLanguage()
+  const { hasLevelOnResource } = useAccess()
   const { confirm, confirmDialog } = useConfirm()
   const [grants, setGrants] = useState<ResourceAccessDto[] | null>(null)
   const [users, setUsers] = useState<UserDto[]>([])
@@ -190,7 +192,7 @@ export default function ResourceAccessPage() {
         allLabel={t("common.allFilter")}
       />
 
-      <div className="rounded-md border">
+      <div className="glass-panel">
         <Table>
           <TableHeader>
             <TableRow>
@@ -199,7 +201,7 @@ export default function ResourceAccessPage() {
               <TableHead>{t("resourceAccess.columnResourceId")}</TableHead>
               <TableHead>{t("resourceAccess.columnLevel")}</TableHead>
               <TableHead>{t("resourceAccess.columnEffect")}</TableHead>
-              <TableHead className="text-end">{t("common.actions")}</TableHead>
+              <TableHead>{t("common.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -223,6 +225,7 @@ export default function ResourceAccessPage() {
             {grants?.map((grant) => {
               const connection =
                 grant.resourceType === RESOURCE_TYPE_SSH_CONNECTION ? connectionsByID.get(grant.resourceId) : undefined
+              const resourceLabel = connection ? `${connection.name} (#${grant.resourceId})` : `#${grant.resourceId}`
               return (
                 <TableRow key={grant.id}>
                   <TableCell className="font-medium">
@@ -232,9 +235,7 @@ export default function ResourceAccessPage() {
                     </span>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{grant.resourceType}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {connection ? `${connection.name} (#${grant.resourceId})` : `#${grant.resourceId}`}
-                  </TableCell>
+                  <TableCell className="text-muted-foreground">{resourceLabel}</TableCell>
                   <TableCell>
                     <Badge>{t(LEVEL_KEYS[grant.level])}</Badge>
                   </TableCell>
@@ -243,10 +244,20 @@ export default function ResourceAccessPage() {
                       {t(EFFECT_KEYS[grant.effect])}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-end">
-                    <Button variant="destructive" size="sm" onClick={() => handleRevoke(grant)}>
-                      {t("resourceAccess.revoke")}
-                    </Button>
+                  <TableCell className="space-x-2 rtl:space-x-reverse">
+                    {hasLevelOnResource(grant.resourceType, grant.resourceId, "manage") && (
+                      <>
+                        <EditGrantDialog
+                          grant={grant}
+                          granteeLabel={granteeLabel(grant)}
+                          resourceLabel={resourceLabel}
+                          onUpdated={load}
+                        />
+                        <Button variant="destructive" size="sm" onClick={() => handleRevoke(grant)}>
+                          {t("resourceAccess.revoke")}
+                        </Button>
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               )
@@ -465,6 +476,121 @@ function GrantDialog({
           <DialogFooter>
             <Button type="submit" disabled={loading || !granteeId || !resourceId}>
               {loading ? t("resourceAccess.granting") : t("resourceAccess.grant")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// EditGrantDialog changes an existing grant's level/effect — grantee and
+// resource are shown read-only since they're what identify this row, not
+// fields of it (see createDialogDescription: granting again for the same
+// pair is already how "edit" works on the backend — this just reuses that
+// same POST /resource-access upsert with the row's own identifying
+// fields, rather than adding a separate PUT endpoint for it).
+function EditGrantDialog({
+  grant,
+  granteeLabel,
+  resourceLabel,
+  onUpdated,
+}: {
+  grant: ResourceAccessDto
+  granteeLabel: string
+  resourceLabel: string
+  onUpdated: () => void
+}) {
+  const { t } = useLanguage()
+  const [open, setOpen] = useState(false)
+  const [level, setLevel] = useState<AccessLevel>(grant.level)
+  const [effect, setEffect] = useState<ResourceEffect>(grant.effect)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    setLevel(grant.level)
+    setEffect(grant.effect)
+  }, [open, grant.level, grant.effect])
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      await api.resourceAccess.grant({
+        granteeType: grant.granteeType,
+        granteeId: grant.granteeId,
+        resourceType: grant.resourceType,
+        resourceId: grant.resourceId,
+        level,
+        effect,
+      })
+      toast.success(t("resourceAccess.updated"))
+      setOpen(false)
+      onUpdated()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("resourceAccess.updateFailed"))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger render={<Button variant="outline" size="sm">{t("resourceAccess.edit")}</Button>} />
+      <DialogContent>
+        <form onSubmit={handleSubmit}>
+          <DialogHeader>
+            <DialogTitle>{t("resourceAccess.editDialogTitle")}</DialogTitle>
+            <DialogDescription>{t("resourceAccess.editDialogDescription")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>{t("resourceAccess.granteeLabel")}</Label>
+              <p className="text-sm text-muted-foreground">
+                {granteeLabel} ({t(grant.granteeType === "role" ? "resourceAccess.granteeRole" : "resourceAccess.granteeUser")})
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>{t("resourceAccess.resourceTypeLabel")}</Label>
+              <p className="text-sm text-muted-foreground">
+                {grant.resourceType} — {resourceLabel}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>{t("resourceAccess.levelLabel")}</Label>
+              <Select value={level} onValueChange={(value) => setLevel((value as AccessLevel) ?? "read")}>
+                <SelectTrigger className="w-full">
+                  <SelectValue>{(value: string) => t(LEVEL_KEYS[value as AccessLevel])}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(LEVEL_KEYS) as AccessLevel[]).map((lvl) => (
+                    <SelectItem key={lvl} value={lvl}>
+                      {t(LEVEL_KEYS[lvl])}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>{t("resourceAccess.effectLabel")}</Label>
+              <Select value={effect} onValueChange={(value) => setEffect((value as ResourceEffect) ?? "accepted")}>
+                <SelectTrigger className="w-full">
+                  <SelectValue>{(value: string) => t(EFFECT_KEYS[value as ResourceEffect])}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(EFFECT_KEYS) as ResourceEffect[]).map((eff) => (
+                    <SelectItem key={eff} value={eff}>
+                      {t(EFFECT_KEYS[eff])}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={loading}>
+              {loading ? t("common.saving") : t("common.save")}
             </Button>
           </DialogFooter>
         </form>

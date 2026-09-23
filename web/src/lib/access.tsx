@@ -6,6 +6,7 @@ interface AccessContextValue {
   loading: boolean
   resourceAccess: MyAccessDto["resourceAccess"]
   hasLevel: (resourceType: string, level: AccessLevel) => boolean
+  hasLevelOnResource: (resourceType: string, resourceId: number, level: AccessLevel) => boolean
 }
 
 const AccessContext = createContext<AccessContextValue | null>(null)
@@ -53,8 +54,26 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     return levelSatisfies(access?.levels[resourceType], level)
   }
 
+  // hasLevel alone only sees a *wildcard* grant (one that applies to
+  // every resource of a type — see MyAccessDto's doc comment). A grant
+  // scoped to one specific row (e.g. "manage" on ssh_connection #5, not
+  // every connection) never shows up there, so a per-row action (open
+  // terminal, edit, delete on *that* row) needs to also check
+  // resourceAccess itself. A "prohibited" row is an explicit carve-out
+  // and wins over any "accepted" one for the same exact resource — same
+  // precedence as rbac.Service.findGrant on the backend, simplified
+  // since this is only a display decision (the backend enforces the
+  // real boundary independently regardless of what this reports).
+  function hasLevelOnResource(resourceType: string, resourceId: number, level: AccessLevel) {
+    if (hasLevel(resourceType, level)) return true
+
+    const rows = resourceAccess.filter((r) => r.resourceType === resourceType && r.resourceId === resourceId)
+    if (rows.some((r) => r.effect === "prohibited")) return false
+    return rows.some((r) => r.effect === "accepted" && levelSatisfies(r.level, level))
+  }
+
   return (
-    <AccessContext.Provider value={{ loading, resourceAccess, hasLevel }}>
+    <AccessContext.Provider value={{ loading, resourceAccess, hasLevel, hasLevelOnResource }}>
       {children}
     </AccessContext.Provider>
   )

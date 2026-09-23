@@ -18,7 +18,7 @@ import { api, ApiError, type AgentToolDto } from "@/lib/api"
 
 export default function AgentToolsPage() {
   const { t } = useLanguage()
-  const { hasLevel } = useAccess()
+  const { hasLevelOnResource } = useAccess()
   const [agentTools, setAgentTools] = useState<AgentToolDto[] | null>(null)
 
   const filterDefs = useMemo<FilterFieldDef[]>(
@@ -90,7 +90,7 @@ export default function AgentToolsPage() {
         allLabel={t("common.allFilter")}
       />
 
-      <div className="rounded-md border">
+      <div className="glass-panel">
         <Table>
           <TableHeader>
             <TableRow>
@@ -98,7 +98,7 @@ export default function AgentToolsPage() {
               <TableHead>{t("agentTools.columnDescription")}</TableHead>
               <TableHead>{t("agentTools.columnStatus")}</TableHead>
               <TableHead>{t("agentTools.columnVisibility")}</TableHead>
-              <TableHead className="text-end">{t("common.actions")}</TableHead>
+              <TableHead>{t("common.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -133,8 +133,8 @@ export default function AgentToolsPage() {
                     {tool.visibility === "public" ? t("agentTools.visibilityPublic") : t("agentTools.visibilityPrivate")}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-end">
-                  {hasLevel("agent_tool", "manage") && (
+                <TableCell>
+                  {hasLevelOnResource("agent_tool", tool.id, "manage") && (
                     <Button variant="outline" size="sm" onClick={() => handleToggleVisibility(tool)}>
                       {tool.visibility === "public" ? t("agentTools.makePrivate") : t("agentTools.makePublic")}
                     </Button>

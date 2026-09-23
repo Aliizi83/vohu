@@ -54,7 +54,7 @@ export default function Layout() {
 
   return (
     <div className="flex min-h-screen">
-      <aside className="flex w-60 flex-col gap-1 border-e bg-card p-4">
+      <aside className="relative z-10 flex w-60 flex-col gap-1 border-e border-white/55 bg-sidebar p-4 backdrop-blur-2xl backdrop-saturate-150 dark:border-white/10">
         <div className="mb-4 flex items-center gap-2 px-2">
           <Logo className="size-8 shrink-0" />
           <div>
@@ -68,9 +68,9 @@ export default function Layout() {
             key={to}
             to={to}
             className={({ isActive }) =>
-              `flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${
+              `flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition-colors ${
                 isActive
-                  ? "bg-accent text-accent-foreground"
+                  ? "bg-accent text-accent-foreground shadow-sm"
                   : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
               }`
             }

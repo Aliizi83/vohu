@@ -48,7 +48,7 @@ const CodeEditor = lazy(() => import("@/components/CodeEditor").then((m) => ({ d
 
 export default function CustomToolsPage() {
   const { t } = useLanguage()
-  const { hasLevel } = useAccess()
+  const { hasLevel, hasLevelOnResource } = useAccess()
   const { confirm, confirmDialog } = useConfirm()
   const [tools, setTools] = useState<CustomToolDto[] | null>(null)
 
@@ -121,14 +121,14 @@ export default function CustomToolsPage() {
         allLabel={t("common.allFilter")}
       />
 
-      <div className="rounded-md border">
+      <div className="glass-panel">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>{t("customTools.columnName")}</TableHead>
               <TableHead>{t("customTools.columnDescription")}</TableHead>
               <TableHead>{t("customTools.columnVisibility")}</TableHead>
-              <TableHead className="text-end">{t("common.actions")}</TableHead>
+              <TableHead>{t("common.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -158,9 +158,9 @@ export default function CustomToolsPage() {
                     {tool.visibility === "public" ? t("customTools.visibilityPublic") : t("customTools.visibilityPrivate")}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-end space-x-2 rtl:space-x-reverse">
+                <TableCell className="space-x-2 rtl:space-x-reverse">
                   <VersionsDialog tool={tool} />
-                  {hasLevel("custom_tool", "manage") && (
+                  {hasLevelOnResource("custom_tool", tool.id, "manage") && (
                     <Button variant="destructive" size="sm" onClick={() => handleDelete(tool)}>
                       {t("common.delete")}
                     </Button>
@@ -307,7 +307,7 @@ function VersionsDialog({ tool }: { tool: CustomToolDto }) {
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="max-h-64 overflow-y-auto rounded-md border">
+          <div className="max-h-64 overflow-y-auto glass-panel">
             <Table>
               <TableHeader>
                 <TableRow>

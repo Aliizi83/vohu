@@ -391,6 +391,12 @@ export const en = {
     grant: "Grant",
     granted: "Access granted",
     grantFailed: "Failed to grant access",
+    edit: "Edit",
+    editDialogTitle: "Edit resource grant",
+    editDialogDescription:
+      "Only the level and effect can change here — grantee and resource are what identify this grant, not fields of it. Revoke and create a new one to point it somewhere else.",
+    updated: "Grant updated",
+    updateFailed: "Failed to update grant",
   },
 }
 

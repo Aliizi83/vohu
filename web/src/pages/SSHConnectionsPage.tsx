@@ -32,7 +32,7 @@ import { api, ApiError, type CommandRuleDto, type SSHConnectionDto } from "@/lib
 
 export default function SSHConnectionsPage() {
   const { t } = useLanguage()
-  const { hasLevel } = useAccess()
+  const { hasLevel, hasLevelOnResource } = useAccess()
   const { confirm, confirmDialog } = useConfirm()
   const [connections, setConnections] = useState<SSHConnectionDto[] | null>(null)
 
@@ -94,7 +94,7 @@ export default function SSHConnectionsPage() {
         allLabel={t("common.allFilter")}
       />
 
-      <div className="rounded-md border">
+      <div className="glass-panel">
         <Table>
           <TableHeader>
             <TableRow>
@@ -102,7 +102,7 @@ export default function SSHConnectionsPage() {
               <TableHead>{t("sshConnections.columnName")}</TableHead>
               <TableHead>{t("sshConnections.columnHost")}</TableHead>
               <TableHead>{t("sshConnections.columnUsername")}</TableHead>
-              <TableHead className="text-end">{t("common.actions")}</TableHead>
+              <TableHead>{t("common.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -131,29 +131,31 @@ export default function SSHConnectionsPage() {
                   {conn.host}:{conn.port}
                 </TableCell>
                 <TableCell>{conn.username}</TableCell>
-                <TableCell className="text-end space-x-2 rtl:space-x-reverse">
-                  {hasLevel("ssh_connection", "write") && (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        nativeButton={false}
-                        render={<Link to={`/ssh-connections/${conn.id}/terminal`} />}
-                      >
-                        <TerminalIcon />
-                        {t("sshConnections.openTerminal")}
-                      </Button>
-                      <EditConnectionDialog connection={conn} onUpdated={load} />
-                    </>
-                  )}
-                  {hasLevel("ssh_connection", "manage") && (
-                    <>
-                      <CommandRulesDialog connection={conn} onConnectionUpdated={load} />
-                      <Button variant="destructive" size="sm" onClick={() => handleDelete(conn)}>
-                        {t("common.delete")}
-                      </Button>
-                    </>
-                  )}
+                <TableCell>
+                  <div className="flex items-center justify-center gap-2">
+                    {hasLevelOnResource("ssh_connection", conn.id, "write") && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          nativeButton={false}
+                          render={<Link to={`/ssh-connections/${conn.id}/terminal`} />}
+                        >
+                          <TerminalIcon />
+                          {t("sshConnections.openTerminal")}
+                        </Button>
+                        <EditConnectionDialog connection={conn} onUpdated={load} />
+                      </>
+                    )}
+                    {hasLevelOnResource("ssh_connection", conn.id, "manage") && (
+                      <>
+                        <CommandRulesDialog connection={conn} onConnectionUpdated={load} />
+                        <Button variant="destructive" size="sm" onClick={() => handleDelete(conn)}>
+                          {t("common.delete")}
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -472,7 +474,7 @@ function CommandRulesDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+          <div className="flex items-center justify-between gap-4 glass-panel p-3">
             <div>
               <div className="text-sm font-medium">{t("commandRules.policyModeLabel")}</div>
               <div className="text-xs text-muted-foreground">
@@ -492,14 +494,14 @@ function CommandRulesDialog({
             </Badge>
           </div>
 
-          <div className="rounded-md border">
+          <div className="glass-panel">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>{t("commandRules.columnProgram")}</TableHead>
                   <TableHead>{t("commandRules.columnArgs")}</TableHead>
                   <TableHead>{t("commandRules.columnStatus")}</TableHead>
-                  <TableHead className="text-end">{t("common.actions")}</TableHead>
+                  <TableHead>{t("common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -537,7 +539,7 @@ function CommandRulesDialog({
                         {rule.allowed ? t("commandRules.allow") : t("commandRules.deny")}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-end">
+                    <TableCell>
                       <Button variant="ghost" size="sm" onClick={() => handleDelete(rule)}>
                         {t("common.delete")}
                       </Button>

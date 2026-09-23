@@ -84,12 +84,12 @@ export default function RolesPage() {
         allLabel={t("common.allFilter")}
       />
 
-      <div className="rounded-md border">
+      <div className="glass-panel">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>{t("roles.columnName")}</TableHead>
-              <TableHead className="text-end">{t("common.actions")}</TableHead>
+              <TableHead>{t("common.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

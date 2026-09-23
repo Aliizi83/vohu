@@ -122,14 +122,14 @@ export default function UsersPage() {
         allLabel={t("common.allFilter")}
       />
 
-      <div className="rounded-md border">
+      <div className="glass-panel">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>{t("users.columnUsername")}</TableHead>
               <TableHead>{t("users.columnEmail")}</TableHead>
               <TableHead>{t("users.columnStatus")}</TableHead>
-              <TableHead className="text-end">{t("common.actions")}</TableHead>
+              <TableHead>{t("common.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

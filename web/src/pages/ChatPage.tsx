@@ -395,7 +395,7 @@ export default function ChatPage() {
     <div className="flex h-[calc(100vh-3rem)] gap-4">
       {confirmDialog}
       <ChatSettingsDialog conversationId={chatSettingsConvId} onOpenChange={(open) => !open && setChatSettingsConvId(null)} />
-      <aside className="flex w-64 shrink-0 flex-col gap-2 overflow-y-auto rounded-md border p-3">
+      <aside className="flex w-64 shrink-0 flex-col gap-2 overflow-y-auto glass-panel p-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-muted-foreground">{t("chat.conversations")}</h2>
           {!showArchived && (
@@ -445,7 +445,7 @@ export default function ChatPage() {
                       setRenamingId(null)
                     }
                   }}
-                  className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                 />
               ) : (
                 <button
@@ -513,7 +513,7 @@ export default function ChatPage() {
         )}
       </aside>
 
-      <section className="flex flex-1 flex-col rounded-md border">
+      <section className="flex flex-1 flex-col glass-panel">
         {!selectedConversation ? (
           <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
             {conversations === null ? t("chat.loading") : t("chat.selectPrompt")}
@@ -642,7 +642,7 @@ const MessageBubble = memo(function MessageBubble({ message, pending }: { messag
 
   if (message.role === "tool") {
     return (
-      <div className="space-y-1 rounded-md border bg-muted/50 px-3 py-2 text-xs">
+      <div className="space-y-1 glass-panel bg-muted/50 px-3 py-2 text-xs">
         {message.toolResults?.map((result, i) => {
           const formatted = formatToolResult(result.result)
           const showOutput = formatted && formatted !== result.error
@@ -695,7 +695,7 @@ function LiveToolCallBubble({ toolCall }: { toolCall: LiveToolCall }) {
   const showOutput = result && formatted && formatted !== result.error
 
   return (
-    <div className="max-w-[75%] space-y-1 rounded-md border bg-muted/50 px-3 py-2 text-xs">
+    <div className="max-w-[75%] space-y-1 glass-panel bg-muted/50 px-3 py-2 text-xs">
       <div className="flex items-center gap-1.5">
         <span className="font-medium">{call.name}</span>
         {!result && <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary" />}
@@ -964,7 +964,7 @@ function ChangeModelDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
-          <button className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground hover:border-foreground/30 hover:text-foreground">
+          <button className="inline-flex items-center gap-1 glass-panel px-2 py-1 text-xs text-muted-foreground hover:border-foreground/30 hover:text-foreground">
             {conversation.provider} · {conversation.model}
             <ChevronDownIcon className="size-3" />
           </button>
